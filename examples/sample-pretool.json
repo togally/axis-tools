@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "PreToolUse",
+  "session_id": "sess-demo-001",
+  "turn_id": "turn-demo-001",
+  "cwd": "/home/jasperWei/orbit/orbit-hub",
+  "tool_name": "Read",
+  "tool_use_id": "tool-demo-001",
+  "permission_mode": "default",
+  "transcript_path": "/tmp/codex-transcript.jsonl"
+}

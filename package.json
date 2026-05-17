@@ -1,0 +1,19 @@
+{
+  "name": "orbit-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "orbit-tools": "./dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --loader ts-node/esm src/cli.ts",
+    "test:sample": "npm run build && node dist/cli.js codex-hook ingest --file examples/sample-pretool.json && node dist/cli.js codex-hook ingest --file examples/sample-posttool.json && node dist/cli.js codex-status current --repo /home/jasperWei/orbit/orbit-hub --json && node dist/cli.js codex-status tail --repo /home/jasperWei/orbit/orbit-hub --limit 5 && node dist/cli.js codex-status summary --repo /home/jasperWei/orbit/orbit-hub"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}

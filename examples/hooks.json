@@ -1,0 +1,108 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Search",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|Patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Shell|Command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Search|Write|Edit|Patch|Bash|Shell|Command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "orbit-tools codex-hook ingest"
+          }
+        ]
+      }
+    ]
+  }
+}
