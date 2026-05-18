@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
@@ -65,10 +65,10 @@ await withTempDir(async (dir) => {
     'http://127.0.0.1:3000',
     '--mcp-url',
     'http://127.0.0.1:3000/api/mcp',
-    '--product-line-id',
-    'pl_123',
-    '--project-id',
-    'proj_456',
+    '--product-line-uuid',
+    '8f938fdc-f2be-44d6-8c48-91bc9156836d',
+    '--project-uuid',
+    '71533d74-80e3-4e7e-adbb-69c42a25db0c',
     '--owner',
     'office-hours',
   ], { env: { HOME: home } });
@@ -76,12 +76,48 @@ await withTempDir(async (dir) => {
   const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
   assert.equal(project.backendUrl, 'http://127.0.0.1:3000');
   assert.equal(project.mcpUrl, 'http://127.0.0.1:3000/api/mcp');
-  assert.equal(project.productLineId, 'pl_123');
-  assert.equal(project.projectId, 'proj_456');
+  assert.equal(project.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
+  assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
+  assert.equal(project.productLineId, undefined);
+  assert.equal(project.projectId, undefined);
   assert.equal(project.owner, 'office-hours');
 
   const show = await run(['project', 'show', '--repo', repo, '--json'], { env: { HOME: home } });
   assert.deepEqual(JSON.parse(show.stdout), project);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const home = path.join(dir, 'home');
+  const orbitDir = path.join(repo, '.orbit');
+  await mkdir(orbitDir, { recursive: true });
+  await writeFile(path.join(repo, '.orbit', 'project.json'), JSON.stringify({
+    backendUrl: 'http://127.0.0.1:3000',
+    mcpUrl: 'http://127.0.0.1:3000/api/mcp',
+    productLineId: 'pl_legacy',
+    projectId: 'proj_legacy',
+    owner: 'legacy-owner',
+    repo,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }, null, 2));
+
+  await run([
+    'project',
+    'bind',
+    '--repo',
+    repo,
+    '--product-line-uuid',
+    '0c9c796d-5bd6-4cce-ac7e-95ac0ddf71b9',
+    '--project-uuid',
+    '0e2e0978-c4b4-4acf-8fd9-b9fa31e00a7b',
+  ], { env: { HOME: home } });
+
+  const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
+  assert.equal(project.productLineUuid, '0c9c796d-5bd6-4cce-ac7e-95ac0ddf71b9');
+  assert.equal(project.projectUuid, '0e2e0978-c4b4-4acf-8fd9-b9fa31e00a7b');
+  assert.equal(project.productLineId, 'pl_legacy');
+  assert.equal(project.projectId, 'proj_legacy');
+  assert.equal(project.owner, 'legacy-owner');
 });
 
 await withTempDir(async (dir) => {

@@ -10,14 +10,15 @@ Use this skill when the repo has an Orbit project binding in `.orbit/project.jso
 ## Required Context
 
 1. Run `orbit-tools project show --json` from the target repo.
-2. Confirm the binding has `backendUrl`, `mcpUrl`, `productLineId`, `projectId`, and `owner`.
-3. Use the configured Orbit MCP server for Orbit DB mutations. Do not edit Orbit DB files directly.
+2. Confirm the binding has `backendUrl`, `mcpUrl`, `productLineUuid`, `projectUuid`, and `owner`.
+3. If legacy `productLineId` or `projectId` fields are present, preserve them for compatibility but prefer UUID fields for new Orbit association.
+4. Use the configured Orbit MCP server for Orbit DB mutations. Do not edit Orbit DB files directly.
 
 ## OfficeHours Intake
 
 When an OfficeHours discussion produces actionable work:
 
-1. Submit the discussion summary to Orbit DB under the bound `productLineId` and `projectId`.
+1. Submit the discussion summary to Orbit DB under the bound `productLineUuid` and `projectUuid`.
 2. Preserve the original discussion link, participants, owner, and date when available.
 3. Split the discussion into requirement items. Each item should have a title, description, source discussion, acceptance criteria, and type.
 4. Use these item types: `requirement`, `BUG`, `improvement`.
@@ -28,11 +29,11 @@ When an OfficeHours discussion produces actionable work:
 For implementation work:
 
 1. Pick from the requirement, BUG, or improvement pool for the bound project.
-2. Claim the item in Orbit DB before starting development.
-3. Mark the item `started` with the branch or worktree path.
+2. Claim the item in Orbit DB before starting development by calling `orbit_work_item_lifecycle` with `action: "claim"`.
+3. Mark the item as started by calling `orbit_work_item_lifecycle` with `action: "start"` and keep the branch or worktree path in the work note/writeback record when that API is available.
 4. Implement in the repo that owns the binding.
 5. Push the development branch when requested by the user or by the team workflow.
-6. Mark the item `complete` only after verification has run and the branch or commit is available.
+6. Mark the item complete with `orbit_work_item_lifecycle` and `action: "complete"` only after verification has run and the branch or commit is available.
 7. Include the commit hash, verification command, and result in the completion note.
 
 ## Status Rules
@@ -55,7 +56,7 @@ orbit-tools mcp install --backend-url <url> --mcp-url <url>/api/mcp
 Bind the current repo to a product-line project:
 
 ```bash
-orbit-tools project bind --product-line-id <id> --project-id <id> --owner <owner>
+orbit-tools project bind --product-line-uuid <uuid> --project-uuid <uuid> --owner <owner>
 ```
 
 Show the active binding:
@@ -63,3 +64,14 @@ Show the active binding:
 ```bash
 orbit-tools project show --json
 ```
+
+## MCP WorkItem Lifecycle
+
+`orbit-tools` does not implement lifecycle CLI commands. Use the configured Orbit MCP server tools:
+
+- List pools: `orbit_work_items_list` with `{ "projectId": "<projectUuid>", "pool": "requirement" }`, `{ "projectId": "<projectUuid>", "pool": "bug" }`, or `{ "projectId": "<projectUuid>", "pool": "improvement" }`.
+- Claim / 认领: `orbit_work_item_lifecycle` with `{ "workItemId": "<workItemId>", "action": "claim", "owner": "<owner>" }`.
+- Develop / 开发: `orbit_work_item_lifecycle` with `{ "workItemId": "<workItemId>", "action": "start", "owner": "<owner>" }`.
+- Fix / 修复: use the same `claim` then `start` flow for a BUG-pool item and preserve repro/fix evidence in the writeback note when available.
+- Complete / 完成: `orbit_work_item_lifecycle` with `{ "workItemId": "<workItemId>", "action": "complete", "owner": "<owner>" }`.
+- Push/writeback / 回写: push the requested branch or commit, then record commit hash, verification command, and result through the Orbit Hub MCP/API writeback capability currently exposed by the server. If no separate writeback tool is listed by MCP discovery, include that evidence in the completion note or handoff message.

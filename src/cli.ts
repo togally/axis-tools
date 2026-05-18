@@ -64,15 +64,17 @@ interface LatestState {
 interface ProjectBinding {
   backendUrl: string;
   mcpUrl: string;
-  productLineId: string | null;
-  projectId: string | null;
+  productLineUuid?: string | null;
+  projectUuid?: string | null;
+  productLineId?: string | null;
+  projectId?: string | null;
   owner: string | null;
   repo: string;
   updatedAt: string;
 }
 
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind [--repo <path>] --product-line-id <id> --project-id <id> [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -606,30 +608,36 @@ async function bindProject(): Promise<void> {
   const existing = await readProjectBinding(repoPath);
   const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
   const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
+  const productLineUuid = getArg('--product-line-uuid') ?? existing?.productLineUuid ?? null;
+  const projectUuid = getArg('--project-uuid') ?? existing?.projectUuid ?? null;
   const productLineId = getArg('--product-line-id') ?? existing?.productLineId ?? null;
   const projectId = getArg('--project-id') ?? existing?.projectId ?? null;
   const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
 
-  if (!productLineId || !projectId) {
-    console.error('project bind requires --product-line-id and --project-id');
+  if ((!productLineUuid || !projectUuid) && (!productLineId || !projectId)) {
+    console.error('project bind requires --product-line-uuid and --project-uuid');
     process.exit(1);
   }
 
   const binding: ProjectBinding = {
     backendUrl,
     mcpUrl,
-    productLineId,
-    projectId,
+    productLineUuid,
+    projectUuid,
     owner,
     repo: repoPath,
     updatedAt: new Date().toISOString(),
   };
+  if (productLineId) binding.productLineId = productLineId;
+  if (projectId) binding.projectId = projectId;
 
   ensureDir(orbitDir(repoPath));
   await writeFile(projectConfigPath(repoPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
   await writeGlobalOrbitConfig({
     backendUrl,
     mcpUrl,
+    productLineUuid,
+    projectUuid,
     productLineId,
     projectId,
     owner,
@@ -655,8 +663,12 @@ async function showProject(): Promise<void> {
   console.log(`repo: ${binding.repo}`);
   console.log(`backendUrl: ${binding.backendUrl}`);
   console.log(`mcpUrl: ${binding.mcpUrl}`);
-  console.log(`productLineId: ${binding.productLineId ?? '-'}`);
-  console.log(`projectId: ${binding.projectId ?? '-'}`);
+  console.log(`productLineUuid: ${binding.productLineUuid ?? '-'}`);
+  console.log(`projectUuid: ${binding.projectUuid ?? '-'}`);
+  if (binding.productLineId || binding.projectId) {
+    console.log(`productLineId: ${binding.productLineId ?? '-'}`);
+    console.log(`projectId: ${binding.projectId ?? '-'}`);
+  }
   console.log(`owner: ${binding.owner ?? '-'}`);
   console.log(`updatedAt: ${binding.updatedAt}`);
 }

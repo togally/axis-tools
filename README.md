@@ -18,7 +18,7 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
 - `orbit-tools project bind`
-  - 把当前 repo 绑定到产品线下的项目
+  - 用产品线 UUID 和项目 UUID 把当前 repo 绑定到 Orbit Hub 项目
   - 写入 `<repo>/.orbit/project.json`
 - `orbit-tools project show`
   - 查看当前 repo 的 Orbit 绑定
@@ -76,21 +76,71 @@ orbit-tools mcp install \
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
 
-把 repo 绑定到产品线下项目：
+把 repo 绑定到 Orbit Hub 的产品线和项目。新绑定优先使用 UUID：
 
 ```bash
 orbit-tools project bind \
   --repo /path/to/repo \
-  --product-line-id <product-line-id> \
-  --project-id <project-id> \
+  --product-line-uuid <product-line-uuid> \
+  --project-uuid <project-uuid> \
   --owner <owner>
 ```
 
-绑定会写入 `/path/to/repo/.orbit/project.json`，字段包括 `backendUrl`、`mcpUrl`、`productLineId`、`projectId`、`owner`、`repo`、`updatedAt`。查看绑定：
+绑定会写入 `/path/to/repo/.orbit/project.json`，字段包括 `backendUrl`、`mcpUrl`、`productLineUuid`、`projectUuid`、`owner`、`repo`、`updatedAt`。如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
+
+示例：
+
+```bash
+orbit-tools project bind \
+  --repo /home/jasperWei/orbit/orbit-tools \
+  --backend-url http://127.0.0.1:18081 \
+  --mcp-url http://127.0.0.1:18181/mcp \
+  --product-line-uuid 8f938fdc-f2be-44d6-8c48-91bc9156836d \
+  --project-uuid 71533d74-80e3-4e7e-adbb-69c42a25db0c \
+  --owner jasper
+```
+
+查看绑定：
 
 ```bash
 orbit-tools project show --repo /path/to/repo
 orbit-tools project show --repo /path/to/repo --json
+```
+
+## WorkItem 生命周期
+
+`orbit-tools` 目前只负责本地 CLI、Hermes MCP 配置和 repo 绑定；没有实现 `claim/start/complete` 这类生命周期 CLI 子命令。模型或 CLI 侧应通过已配置的 Orbit MCP server 调用 Orbit Hub 工具，或直接调用 Orbit Hub backend API。
+
+MCP 工具：
+
+- `orbit_work_items_list`: 列出项目池。参数：`{ "projectId": "<projectUuid>", "pool": "requirement|bug|improvement" }`
+- `orbit_work_item_lifecycle`: 更新 WorkItem 生命周期。参数：`{ "workItemId": "<workItemId>", "action": "claim|assign|start|complete", "owner": "<owner>" }`
+
+推荐流程：
+
+1. 列池：分别调用 `orbit_work_items_list`，pool 为 `requirement`、`bug`、`improvement`。
+2. 认领：对选中的 WorkItem 调用 `orbit_work_item_lifecycle`，`action: "claim"`。
+3. 开发：开始需求/改进开发时调用 `orbit_work_item_lifecycle`，`action: "start"`。
+4. 修复：BUG 池同样先 `claim` 再 `start`，并在说明里保留复现与修复证据。
+5. 完成：验证通过后调用 `orbit_work_item_lifecycle`，`action: "complete"`。
+6. 回写：在完成备注或关联记录里写回 branch/commit、验证命令和结果；当前 `orbit_work_item_lifecycle` 工具负责状态流转，详细 notes/writeback 能力以 Orbit Hub 当前 MCP/API 暴露为准。
+
+对应 backend API：
+
+```bash
+curl -sS 'http://127.0.0.1:18081/api/projects/<projectUuid>/work-items?pool=bug'
+
+curl -sS -X POST 'http://127.0.0.1:18081/api/work-items/<workItemId>/claim' \
+  -H 'content-type: application/json' \
+  -d '{"owner":"codex-agent"}'
+
+curl -sS -X POST 'http://127.0.0.1:18081/api/work-items/<workItemId>/start' \
+  -H 'content-type: application/json' \
+  -d '{"owner":"codex-agent"}'
+
+curl -sS -X POST 'http://127.0.0.1:18081/api/work-items/<workItemId>/complete' \
+  -H 'content-type: application/json' \
+  -d '{"owner":"codex-agent"}'
 ```
 
 ## 本地自测
