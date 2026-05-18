@@ -18,7 +18,7 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
 - `orbit-tools project bind`
-  - 用产品线 UUID 和项目 UUID 把当前 repo 绑定到 Orbit Hub 项目
+  - 交互式选择产品线，再选择该产品线下的项目，把当前 repo 绑定到 Orbit Hub 项目
   - 写入 `<repo>/.orbit/project.json`
 - `orbit-tools project show`
   - 查看当前 repo 的 Orbit 绑定
@@ -76,7 +76,18 @@ orbit-tools mcp install \
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
 
-把 repo 绑定到 Orbit Hub 的产品线和项目。新绑定优先使用 UUID：
+把 repo 绑定到 Orbit Hub 的产品线和项目。推荐使用交互式两步流程：先选产品线，再选该产品线下的项目。
+
+```bash
+orbit-tools project bind \
+  --interactive \
+  --repo /path/to/repo \
+  --owner <owner>
+```
+
+CLI 会从 `--backend-url` 或 `ORBIT_BACKEND_URL` 指向的 backend 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。默认 backend 是 `http://127.0.0.1:3000`，默认 MCP URL 是 `<backend-url>/api/mcp`。
+
+可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
 
 ```bash
 orbit-tools project bind \
@@ -89,6 +100,17 @@ orbit-tools project bind \
 绑定会写入 `/path/to/repo/.orbit/project.json`，字段包括 `backendUrl`、`mcpUrl`、`productLineUuid`、`projectUuid`、`owner`、`repo`、`updatedAt`。如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
 示例：
+
+```bash
+orbit-tools project bind \
+  --interactive \
+  --repo /home/jasperWei/orbit/orbit-tools \
+  --backend-url http://127.0.0.1:18081 \
+  --mcp-url http://127.0.0.1:18181/mcp \
+  --owner jasper
+```
+
+高级 UUID 示例：
 
 ```bash
 orbit-tools project bind \

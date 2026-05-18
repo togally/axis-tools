@@ -56,8 +56,10 @@ orbit-tools mcp install --backend-url <url> --mcp-url <url>/api/mcp
 Bind the current repo to a product-line project:
 
 ```bash
-orbit-tools project bind --product-line-uuid <uuid> --project-uuid <uuid> --owner <owner>
+orbit-tools project bind --interactive --owner <owner>
 ```
+
+For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly instead of `--interactive`.
 
 Show the active binding:
 

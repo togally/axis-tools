@@ -4,6 +4,7 @@ import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
+import { createInterface } from 'node:readline/promises';
 
 type Json = Record<string, unknown>;
 type Status = 'running' | 'blocked' | 'stopped' | 'idle';
@@ -73,8 +74,39 @@ interface ProjectBinding {
   updatedAt: string;
 }
 
+interface OrbitProductLine {
+  id: string;
+  uuid: string | null;
+  name: string;
+  summary?: string | null;
+  status?: string | null;
+}
+
+interface OrbitProjectModule {
+  id: string;
+  uuid: string | null;
+  productId?: string | null;
+  projectId?: string | null;
+  name: string;
+  summary?: string | null;
+  status?: string | null;
+  repoPath?: string | null;
+  githubRepo?: string | null;
+  sourceRepo?: string | null;
+}
+
+interface OrbitProductDetail {
+  product: OrbitProductLine;
+  modules: OrbitProjectModule[];
+}
+
+interface PromptSession {
+  question(prompt: string): Promise<string>;
+  close(): void;
+}
+
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -603,16 +635,238 @@ async function installMcp(): Promise<void> {
   console.log(JSON.stringify({ ok: true, repo: repoPath, config: configPath, server: serverName, backendUrl, mcpUrl }, null, 2));
 }
 
+function normalizeBackendUrl(backendUrl: string): string {
+  return backendUrl.replace(/\/$/, '');
+}
+
+function isJson(value: unknown): value is Json {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asProductLine(value: unknown): OrbitProductLine | null {
+  if (!isJson(value)) return null;
+  const id = safeString(value.id);
+  const name = safeString(value.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    uuid: safeString(value.uuid),
+    name,
+    summary: safeString(value.summary),
+    status: safeString(value.status),
+  };
+}
+
+function asProjectModule(value: unknown): OrbitProjectModule | null {
+  if (!isJson(value)) return null;
+  const id = safeString(value.id);
+  const name = safeString(value.name);
+  if (!id || !name) return null;
+  return {
+    id,
+    uuid: safeString(value.uuid),
+    productId: safeString(value.productId),
+    projectId: safeString(value.projectId),
+    name,
+    summary: safeString(value.summary),
+    status: safeString(value.status),
+    repoPath: safeString(value.repoPath),
+    githubRepo: safeString(value.githubRepo),
+    sourceRepo: safeString(value.sourceRepo),
+  };
+}
+
+function asProductDetail(value: unknown): OrbitProductDetail | null {
+  if (!isJson(value)) return null;
+  const product = asProductLine(value.product);
+  if (!product) return null;
+  const rawModules = Array.isArray(value.modules) ? value.modules : [];
+  return {
+    product,
+    modules: rawModules.map(asProjectModule).filter((module): module is OrbitProjectModule => Boolean(module)),
+  };
+}
+
+async function fetchOrbitJson(backendUrl: string, routePath: string): Promise<unknown> {
+  const url = `${normalizeBackendUrl(backendUrl)}${routePath}`;
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Orbit Hub backend returned HTTP ${response.status} for ${url}`);
+  }
+
+  try {
+    return await response.json() as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Orbit Hub backend returned invalid JSON for ${url}: ${message}`);
+  }
+}
+
+async function fetchProductLines(backendUrl: string): Promise<OrbitProductDetail[]> {
+  const payload = await fetchOrbitJson(backendUrl, '/api/products');
+  if (!isJson(payload) || !Array.isArray(payload.products)) {
+    throw new Error('Orbit Hub backend response for /api/products did not include a products array');
+  }
+  const products = payload.products.map(asProductDetail).filter((entry): entry is OrbitProductDetail => Boolean(entry));
+  if (products.length === 0) {
+    throw new Error(`No product lines found in Orbit Hub at ${normalizeBackendUrl(backendUrl)}. Create a product line first.`);
+  }
+  return products;
+}
+
+async function fetchProductDetail(backendUrl: string, productLineId: string): Promise<OrbitProductDetail> {
+  const payload = await fetchOrbitJson(backendUrl, `/api/products/${encodeURIComponent(productLineId)}`);
+  const detail = asProductDetail(payload);
+  if (!detail) {
+    throw new Error(`Orbit Hub backend response for product line ${productLineId} did not include product/modules data`);
+  }
+  if (detail.modules.length === 0) {
+    throw new Error(`No projects found under product line "${detail.product.name}". Create a project in that product line first.`);
+  }
+  return detail;
+}
+
+function describeProductLine(product: OrbitProductLine): string {
+  const parts = [product.name];
+  if (product.status) parts.push(`[${product.status}]`);
+  if (product.summary) parts.push(`- ${product.summary}`);
+  return parts.join(' ');
+}
+
+function describeProject(module: OrbitProjectModule): string {
+  const parts = [module.name];
+  if (module.status) parts.push(`[${module.status}]`);
+  const repo = module.githubRepo ?? module.sourceRepo ?? module.repoPath;
+  if (repo) parts.push(`- ${repo}`);
+  return parts.join(' ');
+}
+
+async function createPromptSession(): Promise<PromptSession> {
+  if (process.stdin.isTTY) {
+    return createInterface({ input: process.stdin, output: process.stdout });
+  }
+
+  let input = '';
+  for await (const chunk of process.stdin) {
+    input += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+  }
+  const answers = input.split(/\r?\n/);
+
+  return {
+    async question(prompt: string): Promise<string> {
+      process.stdout.write(prompt);
+      const answer = answers.shift();
+      if (answer === undefined) {
+        throw new Error('No input received for interactive project bind selection');
+      }
+      process.stdout.write(`${answer}\n`);
+      return answer;
+    },
+    close(): void {},
+  };
+}
+
+async function promptSelect<T>(
+  prompt: PromptSession,
+  title: string,
+  items: T[],
+  describe: (item: T) => string,
+): Promise<T> {
+  console.log(title);
+  items.forEach((item, index) => {
+    console.log(`  ${index + 1}. ${describe(item)}`);
+  });
+
+  while (true) {
+    const answer = (await prompt.question('Enter number: ')).trim();
+    const selected = Number.parseInt(answer, 10);
+    if (Number.isInteger(selected) && selected >= 1 && selected <= items.length) {
+      return items[selected - 1];
+    }
+    console.log(`Please enter a number from 1 to ${items.length}.`);
+  }
+}
+
+async function writeProjectBinding(repoPath: string, binding: ProjectBinding): Promise<void> {
+  ensureDir(orbitDir(repoPath));
+  await writeFile(projectConfigPath(repoPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
+  await writeGlobalOrbitConfig({
+    backendUrl: binding.backendUrl,
+    mcpUrl: binding.mcpUrl,
+    productLineUuid: binding.productLineUuid,
+    projectUuid: binding.projectUuid,
+    productLineId: binding.productLineId,
+    projectId: binding.projectId,
+    owner: binding.owner,
+    lastRepo: repoPath,
+  });
+}
+
+async function bindProjectInteractively(repoPath: string, backendUrl: string, mcpUrl: string, owner: string | null): Promise<void> {
+  const productLines = await fetchProductLines(backendUrl);
+  const prompt = await createPromptSession();
+  let productDetail!: OrbitProductDetail;
+  let selectedProject!: OrbitProjectModule;
+  try {
+    const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
+    productDetail = await fetchProductDetail(backendUrl, selectedProduct.id);
+    selectedProject = await promptSelect(prompt, 'Select project:', productDetail.modules, describeProject);
+  } finally {
+    prompt.close();
+  }
+
+  if (!productDetail.product.uuid) {
+    throw new Error(`Selected product line "${productDetail.product.name}" does not include product.uuid from the backend`);
+  }
+  if (!selectedProject.uuid) {
+    throw new Error(`Selected project "${selectedProject.name}" does not include module.uuid from the backend`);
+  }
+
+  const binding: ProjectBinding = {
+    backendUrl,
+    mcpUrl,
+    productLineUuid: productDetail.product.uuid,
+    projectUuid: selectedProject.uuid,
+    productLineId: productDetail.product.id,
+    projectId: selectedProject.projectId ?? selectedProject.id,
+    owner,
+    repo: repoPath,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeProjectBinding(repoPath, binding);
+  console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
+}
+
 async function bindProject(): Promise<void> {
   const repoPath = resolveRepoArg();
   const existing = await readProjectBinding(repoPath);
   const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
   const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
+  const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
+
+  if (hasFlag('--interactive')) {
+    try {
+      await bindProjectInteractively(repoPath, backendUrl, mcpUrl, owner);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(message);
+      process.exit(1);
+    }
+    return;
+  }
+
   const productLineUuid = getArg('--product-line-uuid') ?? existing?.productLineUuid ?? null;
   const projectUuid = getArg('--project-uuid') ?? existing?.projectUuid ?? null;
   const productLineId = getArg('--product-line-id') ?? existing?.productLineId ?? null;
   const projectId = getArg('--project-id') ?? existing?.projectId ?? null;
-  const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
 
   if ((!productLineUuid || !projectUuid) && (!productLineId || !projectId)) {
     console.error('project bind requires --product-line-uuid and --project-uuid');
@@ -631,18 +885,7 @@ async function bindProject(): Promise<void> {
   if (productLineId) binding.productLineId = productLineId;
   if (projectId) binding.projectId = projectId;
 
-  ensureDir(orbitDir(repoPath));
-  await writeFile(projectConfigPath(repoPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
-  await writeGlobalOrbitConfig({
-    backendUrl,
-    mcpUrl,
-    productLineUuid,
-    projectUuid,
-    productLineId,
-    projectId,
-    owner,
-    lastRepo: repoPath,
-  });
+  await writeProjectBinding(repoPath, binding);
 
   console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
 }
