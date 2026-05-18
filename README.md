@@ -17,9 +17,11 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
 - `orbit-tools mcp install`
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
-- `orbit-tools project bind`
-  - 交互式选择产品线，再选择该产品线下的项目，把当前 repo 绑定到 Orbit Hub 项目
+- `orbit-tools setup`
+  - 完整交互式初始化当前 repo：登录 Orbit Hub、选择产品线、选择项目、选择 Agent，并安装 orbit-tools skill
   - 写入 `<repo>/.orbit/project.json`
+- `orbit-tools project bind`
+  - 高级非交互式绑定命令，保留给自动化脚本使用
 - `orbit-tools project show`
   - 查看当前 repo 的 Orbit 绑定
 
@@ -76,18 +78,17 @@ orbit-tools mcp install \
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
 
-把 repo 绑定到 Orbit Hub 的产品线和项目。推荐使用交互式两步流程：先选产品线，再选该产品线下的项目。
+把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools setup`：先输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。
 
 ```bash
-orbit-tools project bind \
-  --interactive \
+orbit-tools setup \
   --repo /path/to/repo \
   --owner <owner>
 ```
 
 CLI 会从 `--backend-url` 或 `ORBIT_BACKEND_URL` 指向的 backend 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。当前对外交互式绑定使用与控制台相同的共享 Orbit Hub backend：`http://117.72.14.134:18081`。本地开发不传参数时仍回落到本机 backend，默认 MCP URL 是 `<backend-url>/api/mcp`，避免测试和本地调试依赖外网。
 
-临时无登录模式：当前共享 backend 不要求登录，会列出其中已有的全部产品线和项目；后续登录上线后，产品线和项目会按账号自动收敛范围，CLI 侧无需改变绑定流程。
+Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器总是把本仓库的 `skills/orbit-workflow/SKILL.md` 复制到稳定路径 `~/.orbit/skills/orbit-workflow/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/orbit-workflow/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/orbit-workflow/SKILL.md`。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空或覆盖其他技能目录。
 
 可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
 
@@ -99,13 +100,12 @@ orbit-tools project bind \
   --owner <owner>
 ```
 
-绑定会写入 `/path/to/repo/.orbit/project.json`，字段包括 `backendUrl`、`mcpUrl`、`productLineUuid`、`projectUuid`、`owner`、`repo`、`updatedAt`。如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
+绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools setup` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
 示例：
 
 ```bash
-orbit-tools project bind \
-  --interactive \
+orbit-tools setup \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://117.72.14.134:18081 \
   --owner jasper
@@ -125,8 +125,7 @@ orbit-tools project bind \
 本地开发示例：
 
 ```bash
-orbit-tools project bind \
-  --interactive \
+orbit-tools setup \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://127.0.0.1:18081 \
   --owner jasper

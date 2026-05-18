@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { appendFile, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 
 type Json = Record<string, unknown>;
 type Status = 'running' | 'blocked' | 'stopped' | 'idle';
@@ -65,13 +66,38 @@ interface LatestState {
 interface ProjectBinding {
   backendUrl: string;
   mcpUrl: string;
+  token?: string | null;
+  key?: string | null;
+  session?: string | null;
+  account?: string | null;
+  user?: OrbitUser | null;
   productLineUuid?: string | null;
   projectUuid?: string | null;
   productLineId?: string | null;
   projectId?: string | null;
+  productLineName?: string | null;
+  projectName?: string | null;
   owner: string | null;
   repo: string;
+  selectedAgent?: AgentChoice | null;
+  skillPath?: string | null;
+  agentSkillPath?: string | null;
   updatedAt: string;
+}
+
+type AgentChoice = 'codex' | 'claude-code' | 'none';
+
+interface OrbitUser {
+  id?: string | null;
+  account?: string | null;
+  name?: string | null;
+}
+
+interface OrbitLoginSession {
+  token: string;
+  key: string;
+  session?: string | null;
+  user: OrbitUser;
 }
 
 interface OrbitProductLine {
@@ -106,7 +132,7 @@ interface PromptSession {
 }
 
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  setup [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -155,8 +181,28 @@ function projectConfigPath(repoPath: string): string {
   return path.join(orbitDir(repoPath), 'project.json');
 }
 
+function cliPackageRoot(): string {
+  const cliFile = fileURLToPath(import.meta.url);
+  const cliDir = path.dirname(cliFile);
+  return path.basename(cliDir) === 'dist' ? path.dirname(cliDir) : process.cwd();
+}
+
 function globalOrbitConfigPath(): string {
   return path.join(homeDir(), '.orbit', 'config.json');
+}
+
+function stableOrbitSkillPath(): string {
+  return path.join(homeDir(), '.orbit', 'skills', 'orbit-workflow', 'SKILL.md');
+}
+
+function bundledOrbitSkillPath(): string {
+  return path.join(cliPackageRoot(), 'skills', 'orbit-workflow', 'SKILL.md');
+}
+
+function agentSkillPath(agent: AgentChoice): string | null {
+  if (agent === 'codex') return path.join(homeDir(), '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
+  if (agent === 'claude-code') return path.join(homeDir(), '.claude', 'skills', 'orbit-workflow', 'SKILL.md');
+  return null;
 }
 
 function defaultHermesConfigPath(): string {
@@ -643,6 +689,28 @@ function isJson(value: unknown): value is Json {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function asOrbitUser(value: unknown, account: string): OrbitUser {
+  if (!isJson(value)) return { account, name: account };
+  return {
+    id: safeString(value.id),
+    account: safeString(value.account) ?? account,
+    name: safeString(value.name) ?? safeString(value.account) ?? account,
+  };
+}
+
+function asLoginSession(value: unknown, account: string): OrbitLoginSession | null {
+  if (!isJson(value)) return null;
+  const token = safeString(value.token);
+  const key = safeString(value.key);
+  if (!token || !key) return null;
+  return {
+    token,
+    key,
+    session: safeString(value.session),
+    user: asOrbitUser(value.user, account),
+  };
+}
+
 function asProductLine(value: unknown): OrbitProductLine | null {
   if (!isJson(value)) return null;
   const id = safeString(value.id);
@@ -687,11 +755,13 @@ function asProductDetail(value: unknown): OrbitProductDetail | null {
   };
 }
 
-async function fetchOrbitJson(backendUrl: string, routePath: string): Promise<unknown> {
+async function fetchOrbitJson(backendUrl: string, routePath: string, token?: string | null): Promise<unknown> {
   const url = `${normalizeBackendUrl(backendUrl)}${routePath}`;
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, {
+      headers: token ? { authorization: `Bearer ${token}` } : undefined,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
@@ -709,8 +779,46 @@ async function fetchOrbitJson(backendUrl: string, routePath: string): Promise<un
   }
 }
 
-async function fetchProductLines(backendUrl: string): Promise<OrbitProductDetail[]> {
-  const payload = await fetchOrbitJson(backendUrl, '/api/products');
+async function postOrbitJson(backendUrl: string, routePath: string, body: Json, token?: string | null): Promise<unknown> {
+  const url = `${normalizeBackendUrl(backendUrl)}${routePath}`;
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
+  }
+
+  if (!response.ok) {
+    throw new Error(`Orbit Hub backend returned HTTP ${response.status} for ${url}`);
+  }
+
+  try {
+    return await response.json() as unknown;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Orbit Hub backend returned invalid JSON for ${url}: ${message}`);
+  }
+}
+
+async function loginOrbitHub(backendUrl: string, account: string, password: string): Promise<OrbitLoginSession> {
+  const payload = await postOrbitJson(backendUrl, '/api/login', { account, password });
+  const session = asLoginSession(payload, account);
+  if (!session) {
+    throw new Error('Orbit Hub backend response for /api/login did not include token/key/user data');
+  }
+  return session;
+}
+
+async function fetchProductLines(backendUrl: string, token?: string | null): Promise<OrbitProductDetail[]> {
+  const payload = await fetchOrbitJson(backendUrl, '/api/products', token);
   if (!isJson(payload) || !Array.isArray(payload.products)) {
     throw new Error('Orbit Hub backend response for /api/products did not include a products array');
   }
@@ -721,8 +829,8 @@ async function fetchProductLines(backendUrl: string): Promise<OrbitProductDetail
   return products;
 }
 
-async function fetchProductDetail(backendUrl: string, productLineId: string): Promise<OrbitProductDetail> {
-  const payload = await fetchOrbitJson(backendUrl, `/api/products/${encodeURIComponent(productLineId)}`);
+async function fetchProductDetail(backendUrl: string, productLineId: string, token?: string | null): Promise<OrbitProductDetail> {
+  const payload = await fetchOrbitJson(backendUrl, `/api/products/${encodeURIComponent(productLineId)}`, token);
   const detail = asProductDetail(payload);
   if (!detail) {
     throw new Error(`Orbit Hub backend response for product line ${productLineId} did not include product/modules data`);
@@ -800,46 +908,173 @@ async function writeProjectBinding(repoPath: string, binding: ProjectBinding): P
   await writeGlobalOrbitConfig({
     backendUrl: binding.backendUrl,
     mcpUrl: binding.mcpUrl,
+    token: binding.token,
+    key: binding.key,
+    session: binding.session,
+    account: binding.account,
+    user: binding.user,
     productLineUuid: binding.productLineUuid,
     projectUuid: binding.projectUuid,
     productLineId: binding.productLineId,
     projectId: binding.projectId,
+    productLineName: binding.productLineName,
+    projectName: binding.projectName,
     owner: binding.owner,
+    selectedAgent: binding.selectedAgent,
+    skillPath: binding.skillPath,
+    agentSkillPath: binding.agentSkillPath,
     lastRepo: repoPath,
   });
 }
 
+async function promptProjectSelection(
+  prompt: PromptSession,
+  backendUrl: string,
+  token?: string | null,
+): Promise<{ productDetail: OrbitProductDetail; selectedProject: OrbitProjectModule }> {
+  const productLines = await fetchProductLines(backendUrl, token);
+  const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
+  const productDetail = await fetchProductDetail(backendUrl, selectedProduct.id, token);
+  const selectedProject = await promptSelect(prompt, 'Select project:', productDetail.modules, describeProject);
+  return { productDetail, selectedProject };
+}
+
+function buildProjectBinding(values: {
+  repoPath: string;
+  backendUrl: string;
+  mcpUrl: string;
+  owner: string | null;
+  productDetail: OrbitProductDetail;
+  selectedProject: OrbitProjectModule;
+  login?: OrbitLoginSession | null;
+  account?: string | null;
+  selectedAgent?: AgentChoice | null;
+  skillPath?: string | null;
+  agentSkillPath?: string | null;
+}): ProjectBinding {
+  if (!values.productDetail.product.uuid) {
+    throw new Error(`Selected product line "${values.productDetail.product.name}" does not include product.uuid from the backend`);
+  }
+  if (!values.selectedProject.uuid) {
+    throw new Error(`Selected project "${values.selectedProject.name}" does not include module.uuid from the backend`);
+  }
+
+  return {
+    backendUrl: values.backendUrl,
+    mcpUrl: values.mcpUrl,
+    token: values.login?.token,
+    key: values.login?.key,
+    session: values.login?.session,
+    account: values.account ?? values.login?.user.account ?? null,
+    user: values.login?.user ?? null,
+    productLineUuid: values.productDetail.product.uuid,
+    projectUuid: values.selectedProject.uuid,
+    productLineId: values.productDetail.product.id,
+    projectId: values.selectedProject.projectId ?? values.selectedProject.id,
+    productLineName: values.productDetail.product.name,
+    projectName: values.selectedProject.name,
+    owner: values.owner,
+    repo: values.repoPath,
+    selectedAgent: values.selectedAgent,
+    skillPath: values.skillPath,
+    agentSkillPath: values.agentSkillPath,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 async function bindProjectInteractively(repoPath: string, backendUrl: string, mcpUrl: string, owner: string | null): Promise<void> {
-  const productLines = await fetchProductLines(backendUrl);
   const prompt = await createPromptSession();
   let productDetail!: OrbitProductDetail;
   let selectedProject!: OrbitProjectModule;
   try {
-    const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
-    productDetail = await fetchProductDetail(backendUrl, selectedProduct.id);
-    selectedProject = await promptSelect(prompt, 'Select project:', productDetail.modules, describeProject);
+    ({ productDetail, selectedProject } = await promptProjectSelection(prompt, backendUrl));
   } finally {
     prompt.close();
   }
 
-  if (!productDetail.product.uuid) {
-    throw new Error(`Selected product line "${productDetail.product.name}" does not include product.uuid from the backend`);
-  }
-  if (!selectedProject.uuid) {
-    throw new Error(`Selected project "${selectedProject.name}" does not include module.uuid from the backend`);
-  }
-
-  const binding: ProjectBinding = {
+  const binding = buildProjectBinding({
+    repoPath,
     backendUrl,
     mcpUrl,
-    productLineUuid: productDetail.product.uuid,
-    projectUuid: selectedProject.uuid,
-    productLineId: productDetail.product.id,
-    projectId: selectedProject.projectId ?? selectedProject.id,
     owner,
-    repo: repoPath,
-    updatedAt: new Date().toISOString(),
-  };
+    productDetail,
+    selectedProject,
+  });
+
+  await writeProjectBinding(repoPath, binding);
+  console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
+}
+
+async function installOrbitSkill(agent: AgentChoice): Promise<{ skillPath: string; agentSkillPath: string | null }> {
+  const source = bundledOrbitSkillPath();
+  if (!existsSync(source)) {
+    throw new Error(`Orbit skill source not found at ${source}`);
+  }
+
+  const skillPath = stableOrbitSkillPath();
+  ensureDir(path.dirname(skillPath));
+  await copyFile(source, skillPath);
+
+  const target = agentSkillPath(agent);
+  if (target) {
+    ensureDir(path.dirname(target));
+    await copyFile(source, target);
+  }
+
+  return { skillPath, agentSkillPath: target };
+}
+
+async function promptAgent(prompt: PromptSession): Promise<AgentChoice> {
+  const choices: { id: AgentChoice; label: string }[] = [
+    { id: 'codex', label: 'Codex' },
+    { id: 'claude-code', label: 'Claude Code/cc' },
+    { id: 'none', label: 'None' },
+  ];
+  const selected = await promptSelect(prompt, 'Select agent:', choices, (choice) => choice.label);
+  return selected.id;
+}
+
+async function setupRepo(): Promise<void> {
+  const repoPath = resolveRepoArg();
+  const existing = await readProjectBinding(repoPath);
+  const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
+  const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
+  const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
+
+  const prompt = await createPromptSession();
+  let account = '';
+  let password = '';
+  let login!: OrbitLoginSession;
+  let productDetail!: OrbitProductDetail;
+  let selectedProject!: OrbitProjectModule;
+  let selectedAgent!: AgentChoice;
+  try {
+    account = (await prompt.question('Orbit account: ')).trim();
+    password = (await prompt.question('Orbit password: ')).trim();
+    if (!account || !password) {
+      throw new Error('Orbit account and password are required');
+    }
+    login = await loginOrbitHub(backendUrl, account, password);
+    ({ productDetail, selectedProject } = await promptProjectSelection(prompt, backendUrl, login.token));
+    selectedAgent = await promptAgent(prompt);
+  } finally {
+    prompt.close();
+  }
+
+  const install = await installOrbitSkill(selectedAgent);
+  const binding = buildProjectBinding({
+    repoPath,
+    backendUrl,
+    mcpUrl,
+    owner,
+    productDetail,
+    selectedProject,
+    login,
+    account,
+    selectedAgent,
+    skillPath: install.skillPath,
+    agentSkillPath: install.agentSkillPath,
+  });
 
   await writeProjectBinding(repoPath, binding);
   console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
@@ -921,6 +1156,11 @@ async function main(): Promise<void> {
   if (!group) {
     printUsage();
     process.exit(0);
+  }
+
+  if (group === 'setup') {
+    await setupRepo();
+    return;
   }
 
   if (group === 'codex-hook' && command === 'ingest') {

@@ -110,6 +110,31 @@ async function withProductServer(fn) {
       res.end(JSON.stringify(catalog));
       return;
     }
+    if (req.method === 'POST' && req.url === '/api/login') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString('utf8');
+      });
+      req.on('end', () => {
+        const payload = JSON.parse(body);
+        if (!payload.account || !payload.password) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'account and password are required' }));
+          return;
+        }
+        res.end(JSON.stringify({
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          session: 'orbit-dev-session',
+          user: {
+            id: 'orbit-dev-user',
+            account: payload.account,
+            name: payload.account,
+          },
+        }));
+      });
+      return;
+    }
     if (req.method === 'GET' && req.url === '/api/products/pl_2') {
       res.end(JSON.stringify({ ...catalog.products[1], runtime: catalog.runtime }));
       return;
@@ -213,6 +238,53 @@ await withTempDir(async (dir) => {
     assert.equal(project.productLineId, 'pl_2');
     assert.equal(project.projectId, 'proj_1');
     assert.equal(project.owner, 'interactive-owner');
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const repo = path.join(dir, 'repo');
+    const home = path.join(dir, 'home');
+
+    const result = await runInteractive([
+      'setup',
+      '--repo',
+      repo,
+      '--backend-url',
+      backendUrl,
+      '--owner',
+      'setup-owner',
+    ], 'jasper\nsecret\n2\n1\n1\n', { env: { HOME: home } });
+
+    assert.match(result.stdout, /Orbit account/);
+    assert.match(result.stdout, /Select product line/);
+    assert.match(result.stdout, /Select project/);
+    assert.match(result.stdout, /Select agent/);
+
+    const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(project.backendUrl, backendUrl);
+    assert.equal(project.mcpUrl, `${backendUrl}/api/mcp`);
+    assert.equal(project.token, 'orbit-dev-token');
+    assert.equal(project.key, 'orbit-dev-key');
+    assert.equal(project.account, 'jasper');
+    assert.equal(project.user.id, 'orbit-dev-user');
+    assert.equal(project.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
+    assert.equal(project.productLineId, 'pl_2');
+    assert.equal(project.productLineName, 'Hermes');
+    assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
+    assert.equal(project.projectId, 'proj_1');
+    assert.equal(project.projectName, 'Hermes Console');
+    assert.equal(project.owner, 'setup-owner');
+    assert.equal(project.selectedAgent, 'codex');
+    assert.equal(project.skillPath, path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'));
+    assert.equal(project.agentSkillPath, path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md'));
+    assert.match(await readFile(project.skillPath, 'utf8'), /Orbit/);
+    assert.match(await readFile(project.agentSkillPath, 'utf8'), /Orbit/);
+
+    const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(globalConfig.selectedAgent, 'codex');
+    assert.equal(globalConfig.skillPath, project.skillPath);
+    assert.equal(globalConfig.agentSkillPath, project.agentSkillPath);
   });
 });
 
