@@ -50,14 +50,16 @@ For implementation work:
 Install Orbit MCP into Hermes:
 
 ```bash
-orbit-tools mcp install --backend-url <url> --mcp-url <url>/api/mcp
+orbit-tools mcp install --backend-url http://117.72.14.134:18081 --mcp-url http://117.72.14.134:18081/api/mcp
 ```
 
 Bind the current repo to a product-line project:
 
 ```bash
-orbit-tools project bind --interactive --owner <owner>
+orbit-tools project bind --interactive --backend-url http://117.72.14.134:18081 --owner <owner>
 ```
+
+Current temporary no-login mode lists all product lines and projects available from the shared Orbit Hub backend. Future login/account scoping should filter that list automatically without changing the product-line-first, project-second CLI flow. For local development only, override the backend with `--backend-url http://127.0.0.1:18081` or `ORBIT_BACKEND_URL`.
 
 For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly instead of `--interactive`.
 

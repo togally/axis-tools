@@ -70,8 +70,8 @@ orbit-tools codex-status current --repo /home/jasperWei/orbit/orbit-hub
 
 ```bash
 orbit-tools mcp install \
-  --backend-url http://127.0.0.1:3000 \
-  --mcp-url http://127.0.0.1:3000/api/mcp
+  --backend-url http://117.72.14.134:18081 \
+  --mcp-url http://117.72.14.134:18081/api/mcp
 ```
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
@@ -85,7 +85,9 @@ orbit-tools project bind \
   --owner <owner>
 ```
 
-CLI 会从 `--backend-url` 或 `ORBIT_BACKEND_URL` 指向的 backend 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。默认 backend 是 `http://127.0.0.1:3000`，默认 MCP URL 是 `<backend-url>/api/mcp`。
+CLI 会从 `--backend-url` 或 `ORBIT_BACKEND_URL` 指向的 backend 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。当前对外交互式绑定使用与控制台相同的共享 Orbit Hub backend：`http://117.72.14.134:18081`。本地开发不传参数时仍回落到本机 backend，默认 MCP URL 是 `<backend-url>/api/mcp`，避免测试和本地调试依赖外网。
+
+临时无登录模式：当前共享 backend 不要求登录，会列出其中已有的全部产品线和项目；后续登录上线后，产品线和项目会按账号自动收敛范围，CLI 侧无需改变绑定流程。
 
 可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
 
@@ -105,8 +107,7 @@ orbit-tools project bind \
 orbit-tools project bind \
   --interactive \
   --repo /home/jasperWei/orbit/orbit-tools \
-  --backend-url http://127.0.0.1:18081 \
-  --mcp-url http://127.0.0.1:18181/mcp \
+  --backend-url http://117.72.14.134:18081 \
   --owner jasper
 ```
 
@@ -115,10 +116,19 @@ orbit-tools project bind \
 ```bash
 orbit-tools project bind \
   --repo /home/jasperWei/orbit/orbit-tools \
-  --backend-url http://127.0.0.1:18081 \
-  --mcp-url http://127.0.0.1:18181/mcp \
+  --backend-url http://117.72.14.134:18081 \
   --product-line-uuid 8f938fdc-f2be-44d6-8c48-91bc9156836d \
   --project-uuid 71533d74-80e3-4e7e-adbb-69c42a25db0c \
+  --owner jasper
+```
+
+本地开发示例：
+
+```bash
+orbit-tools project bind \
+  --interactive \
+  --repo /home/jasperWei/orbit/orbit-tools \
+  --backend-url http://127.0.0.1:18081 \
   --owner jasper
 ```
 
@@ -150,17 +160,17 @@ MCP 工具：
 对应 backend API：
 
 ```bash
-curl -sS 'http://127.0.0.1:18081/api/projects/<projectUuid>/work-items?pool=bug'
+curl -sS 'http://117.72.14.134:18081/api/projects/<projectUuid>/work-items?pool=bug'
 
-curl -sS -X POST 'http://127.0.0.1:18081/api/work-items/<workItemId>/claim' \
+curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/claim' \
   -H 'content-type: application/json' \
   -d '{"owner":"codex-agent"}'
 
-curl -sS -X POST 'http://127.0.0.1:18081/api/work-items/<workItemId>/start' \
+curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/start' \
   -H 'content-type: application/json' \
   -d '{"owner":"codex-agent"}'
 
-curl -sS -X POST 'http://127.0.0.1:18081/api/work-items/<workItemId>/complete' \
+curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/complete' \
   -H 'content-type: application/json' \
   -d '{"owner":"codex-agent"}'
 ```
