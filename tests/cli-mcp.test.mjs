@@ -152,6 +152,12 @@ async function withProductServer(fn) {
   }
 }
 
+{
+  const usage = await run([]);
+  assert.match(usage.stdout, /  init \[--repo <path>\]/);
+  assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
+}
+
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
   const home = path.join(dir, 'home');
@@ -247,13 +253,13 @@ await withTempDir(async (dir) => {
     const home = path.join(dir, 'home');
 
     const result = await runInteractive([
-      'setup',
+      'init',
       '--repo',
       repo,
       '--backend-url',
       backendUrl,
       '--owner',
-      'setup-owner',
+      'init-owner',
     ], 'jasper\nsecret\n2\n1\n1\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Orbit account/);
@@ -274,7 +280,7 @@ await withTempDir(async (dir) => {
     assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
     assert.equal(project.projectId, 'proj_1');
     assert.equal(project.projectName, 'Hermes Console');
-    assert.equal(project.owner, 'setup-owner');
+    assert.equal(project.owner, 'init-owner');
     assert.equal(project.selectedAgent, 'codex');
     assert.equal(project.skillPath, path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'));
     assert.equal(project.agentSkillPath, path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md'));

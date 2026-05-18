@@ -17,7 +17,7 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
 - `orbit-tools mcp install`
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
-- `orbit-tools setup`
+- `orbit-tools init`
   - 完整交互式初始化当前 repo：登录 Orbit Hub、选择产品线、选择项目、选择 Agent，并安装 orbit-tools skill
   - 写入 `<repo>/.orbit/project.json`
 - `orbit-tools project bind`
@@ -78,10 +78,10 @@ orbit-tools mcp install \
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
 
-把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools setup`：先输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。
+把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools init`：先输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。`orbit-tools setup` 仅作为旧脚本兼容别名保留。
 
 ```bash
-orbit-tools setup \
+orbit-tools init \
   --repo /path/to/repo \
   --owner <owner>
 ```
@@ -100,12 +100,12 @@ orbit-tools project bind \
   --owner <owner>
 ```
 
-绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools setup` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
+绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools init` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
 示例：
 
 ```bash
-orbit-tools setup \
+orbit-tools init \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://117.72.14.134:18081 \
   --owner jasper
@@ -125,7 +125,7 @@ orbit-tools project bind \
 本地开发示例：
 
 ```bash
-orbit-tools setup \
+orbit-tools init \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://127.0.0.1:18081 \
   --owner jasper
