@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { appendFile, copyFile, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
@@ -85,6 +85,24 @@ interface ProjectBinding {
   updatedAt: string;
 }
 
+interface ProductLineBinding {
+  backendUrl: string;
+  mcpUrl: string;
+  token: string;
+  key: string;
+  session?: string | null;
+  account: string | null;
+  user: OrbitUser | null;
+  productLineUuid: string | null;
+  productLineId: string;
+  productLineName: string;
+  rootPath: string;
+  selectedAgent?: AgentChoice | null;
+  skillPath?: string | null;
+  agentSkillPath?: string | null;
+  updatedAt: string;
+}
+
 type AgentChoice = 'codex' | 'claude-code' | 'none';
 
 interface OrbitUser {
@@ -131,8 +149,14 @@ interface PromptSession {
   close(): void;
 }
 
+interface ProjectCandidate {
+  name: string;
+  path: string;
+  markers: string[];
+}
+
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -179,6 +203,10 @@ function orbitDir(repoPath: string): string {
 
 function projectConfigPath(repoPath: string): string {
   return path.join(orbitDir(repoPath), 'project.json');
+}
+
+function productLineConfigPath(rootPath: string): string {
+  return path.join(orbitDir(rootPath), 'product-line.json');
 }
 
 function cliPackageRoot(): string {
@@ -829,13 +857,13 @@ async function fetchProductLines(backendUrl: string, token?: string | null): Pro
   return products;
 }
 
-async function fetchProductDetail(backendUrl: string, productLineId: string, token?: string | null): Promise<OrbitProductDetail> {
+async function fetchProductDetail(backendUrl: string, productLineId: string, token?: string | null, options: { allowEmptyProjects?: boolean } = {}): Promise<OrbitProductDetail> {
   const payload = await fetchOrbitJson(backendUrl, `/api/products/${encodeURIComponent(productLineId)}`, token);
   const detail = asProductDetail(payload);
   if (!detail) {
     throw new Error(`Orbit Hub backend response for product line ${productLineId} did not include product/modules data`);
   }
-  if (detail.modules.length === 0) {
+  if (!options.allowEmptyProjects && detail.modules.length === 0) {
     throw new Error(`No projects found under product line "${detail.product.name}". Create a project in that product line first.`);
   }
   return detail;
@@ -899,6 +927,31 @@ async function promptSelect<T>(
       return items[selected - 1];
     }
     console.log(`Please enter a number from 1 to ${items.length}.`);
+  }
+}
+
+async function promptProjectOrSkip(
+  prompt: PromptSession,
+  title: string,
+  projects: OrbitProjectModule[],
+): Promise<OrbitProjectModule | null> {
+  console.log(title);
+  projects.forEach((project, index) => {
+    console.log(`  ${index + 1}. ${describeProject(project)}`);
+  });
+  const skipNumber = projects.length + 1;
+  console.log(`  ${skipNumber}. Skip`);
+
+  while (true) {
+    const answer = (await prompt.question('Enter number: ')).trim();
+    const selected = Number.parseInt(answer, 10);
+    if (Number.isInteger(selected) && selected >= 1 && selected <= projects.length) {
+      return projects[selected - 1];
+    }
+    if (selected === skipNumber) {
+      return null;
+    }
+    console.log(`Please enter a number from 1 to ${skipNumber}.`);
   }
 }
 
@@ -980,6 +1033,114 @@ function buildProjectBinding(values: {
     agentSkillPath: values.agentSkillPath,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function parseAgentArg(value: string | null): AgentChoice | null {
+  if (!value) return null;
+  if (value === 'codex' || value === 'claude-code' || value === 'none') return value;
+  throw new Error('--agent must be one of: codex, claude-code, none');
+}
+
+function buildProductLineBinding(values: {
+  rootPath: string;
+  backendUrl: string;
+  mcpUrl: string;
+  productDetail: OrbitProductDetail;
+  login: OrbitLoginSession;
+  account: string;
+  selectedAgent?: AgentChoice | null;
+  skillPath?: string | null;
+  agentSkillPath?: string | null;
+}): ProductLineBinding {
+  if (!values.productDetail.product.uuid) {
+    throw new Error(`Selected product line "${values.productDetail.product.name}" does not include product.uuid from the backend`);
+  }
+
+  return {
+    backendUrl: values.backendUrl,
+    mcpUrl: values.mcpUrl,
+    token: values.login.token,
+    key: values.login.key,
+    session: values.login.session,
+    account: values.account,
+    user: values.login.user,
+    productLineUuid: values.productDetail.product.uuid,
+    productLineId: values.productDetail.product.id,
+    productLineName: values.productDetail.product.name,
+    rootPath: values.rootPath,
+    selectedAgent: values.selectedAgent,
+    skillPath: values.skillPath,
+    agentSkillPath: values.agentSkillPath,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+async function writeProductLineBinding(rootPath: string, binding: ProductLineBinding): Promise<void> {
+  ensureDir(orbitDir(rootPath));
+  await writeFile(productLineConfigPath(rootPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
+  await writeGlobalOrbitConfig({
+    backendUrl: binding.backendUrl,
+    mcpUrl: binding.mcpUrl,
+    token: binding.token,
+    key: binding.key,
+    session: binding.session,
+    account: binding.account,
+    user: binding.user,
+    productLineUuid: binding.productLineUuid,
+    productLineId: binding.productLineId,
+    productLineName: binding.productLineName,
+    selectedAgent: binding.selectedAgent,
+    skillPath: binding.skillPath,
+    agentSkillPath: binding.agentSkillPath,
+    lastProductLineRoot: rootPath,
+  });
+}
+
+async function detectProjectMarkers(candidatePath: string): Promise<string[]> {
+  const markers = [
+    'package.json',
+    'pnpm-lock.yaml',
+    'yarn.lock',
+    'package-lock.json',
+    'tsconfig.json',
+    'pyproject.toml',
+    'requirements.txt',
+    'Cargo.toml',
+    'go.mod',
+    'composer.json',
+    'pom.xml',
+    'build.gradle',
+    'settings.gradle',
+    'README.md',
+  ];
+  const found: string[] = [];
+  for (const marker of markers) {
+    if (existsSync(path.join(candidatePath, marker))) {
+      found.push(marker);
+    }
+  }
+  return found;
+}
+
+async function scanProjectCandidates(rootPath: string): Promise<ProjectCandidate[]> {
+  const excluded = new Set(['.git', 'node_modules', 'dist', 'build', 'cache']);
+  const entries = await readdir(rootPath, { withFileTypes: true });
+  const candidates: ProjectCandidate[] = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith('.') || excluded.has(entry.name)) continue;
+    const candidatePath = path.join(rootPath, entry.name);
+    candidates.push({
+      name: entry.name,
+      path: candidatePath,
+      markers: await detectProjectMarkers(candidatePath),
+    });
+  }
+  return candidates.sort((left, right) => left.name.localeCompare(right.name));
+}
+
+function describeCandidate(candidate: ProjectCandidate): string {
+  return `${candidate.name} (${candidate.markers.length > 0 ? candidate.markers.join(', ') : 'plain folder'})`;
 }
 
 async function bindProjectInteractively(repoPath: string, backendUrl: string, mcpUrl: string, owner: string | null): Promise<void> {
@@ -1080,6 +1241,85 @@ async function setupRepo(): Promise<void> {
   console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
 }
 
+async function setupProductLineRoot(): Promise<void> {
+  const rootPath = resolveRepoArg();
+  const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
+  const mcpUrl = getArg('--mcp-url') ?? defaultMcpUrl(backendUrl);
+  const owner = getArg('--owner') ?? process.env.USER ?? null;
+  const selectedAgent = parseAgentArg(getArg('--agent'));
+
+  const prompt = await createPromptSession();
+  let account = '';
+  let login!: OrbitLoginSession;
+  let productDetail!: OrbitProductDetail;
+  const bound: string[] = [];
+  const skipped: string[] = [];
+  try {
+    account = (await prompt.question('Orbit account: ')).trim();
+    const password = (await prompt.question('Orbit password: ')).trim();
+    if (!account || !password) {
+      throw new Error('Orbit account and password are required');
+    }
+    login = await loginOrbitHub(backendUrl, account, password);
+
+    const productLines = await fetchProductLines(backendUrl, login.token);
+    const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
+    productDetail = await fetchProductDetail(backendUrl, selectedProduct.id, login.token, { allowEmptyProjects: true });
+
+    const install = selectedAgent ? await installOrbitSkill(selectedAgent) : { skillPath: null, agentSkillPath: null };
+      const rootBinding = buildProductLineBinding({
+        rootPath,
+        backendUrl,
+        mcpUrl,
+        productDetail,
+        login,
+        account,
+        selectedAgent: selectedAgent ?? undefined,
+        skillPath: install.skillPath ?? undefined,
+        agentSkillPath: install.agentSkillPath ?? undefined,
+    });
+    await writeProductLineBinding(rootPath, rootBinding);
+
+    const candidates = await scanProjectCandidates(rootPath);
+    for (const candidate of candidates) {
+      const selectedProject = await promptProjectOrSkip(
+        prompt,
+        `Bind ${describeCandidate(candidate)} as a project under ${productDetail.product.name}?`,
+        productDetail.modules,
+      );
+      if (!selectedProject) {
+        skipped.push(candidate.path);
+        continue;
+      }
+
+      const binding = buildProjectBinding({
+        repoPath: candidate.path,
+        backendUrl,
+        mcpUrl,
+        owner,
+        productDetail,
+        selectedProject,
+        login,
+        account,
+        selectedAgent: selectedAgent ?? undefined,
+        skillPath: install.skillPath ?? undefined,
+        agentSkillPath: install.agentSkillPath ?? undefined,
+      });
+      await writeProjectBinding(candidate.path, binding);
+      bound.push(projectConfigPath(candidate.path));
+    }
+  } finally {
+    prompt.close();
+  }
+
+  console.log('Summary:');
+  console.log(`  root config: ${productLineConfigPath(rootPath)}`);
+  console.log(`  bound: ${bound.length}`);
+  bound.forEach((configPath) => console.log(`    ${configPath}`));
+  console.log(`  skipped: ${skipped.length}`);
+  skipped.forEach((folderPath) => console.log(`    ${folderPath}`));
+}
+
 async function bindProject(): Promise<void> {
   const repoPath = resolveRepoArg();
   const existing = await readProjectBinding(repoPath);
@@ -1160,6 +1400,11 @@ async function main(): Promise<void> {
 
   if (group === 'init' || group === 'setup') {
     await setupRepo();
+    return;
+  }
+
+  if (group === 'init-product-line') {
+    await setupProductLineRoot();
     return;
   }
 

@@ -20,6 +20,10 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
 - `orbit-tools init`
   - 完整交互式初始化当前 repo：登录 Orbit Hub、选择产品线、选择项目、选择 Agent，并安装 orbit-tools skill
   - 写入 `<repo>/.orbit/project.json`
+- `orbit-tools init-product-line`
+  - 从产品线根目录运行：登录 Orbit Hub、选择产品线、扫描当前根目录下一层子目录
+  - 对每个子目录逐个选择绑定到该产品线下的项目，或明确 skip
+  - 写入根目录 `.orbit/product-line.json`，并为已绑定子目录写入 `<child>/.orbit/project.json`
 - `orbit-tools project bind`
   - 高级非交互式绑定命令，保留给自动化脚本使用
 - `orbit-tools project show`
@@ -101,6 +105,19 @@ orbit-tools project bind \
 ```
 
 绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools init` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
+
+产品线根目录可以用 `orbit-tools init-product-line` 一次绑定多个子项目。默认从当前目录运行，也可用 `--repo <root-path>` 指定产品线根目录。CLI 会登录同一个 Orbit Hub backend，读取产品线列表，选择产品线后写入 `<root>/.orbit/product-line.json`，字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`rootPath`、`updatedAt`。
+
+随后 CLI 扫描根目录的直接子目录作为候选项目，排除隐藏目录、`.git`、`node_modules`、`dist`、`build`、`cache`。有 `package.json`、`tsconfig.json`、`pyproject.toml`、`go.mod`、`Cargo.toml` 等标记的目录会显示对应 marker；没有 marker 的目录仍会出现，并标记为 `plain folder`。每个候选目录都会依次提示：选择该产品线下的一个项目完成绑定，或显式选择 `Skip` 后继续下一个目录。
+
+```bash
+cd /home/team/orbit/product-line-root
+orbit-tools init-product-line \
+  --backend-url http://117.72.14.134:18081 \
+  --owner jasper
+```
+
+已绑定的子目录会写入 `<child>/.orbit/project.json`，字段与 `orbit-tools init` 的项目绑定一致，包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、选中的产品线、选中的项目、`repo`、`owner`、`updatedAt`。默认不会为每个子目录要求 Agent 选择或安装 skill；只有显式传 `--agent codex`、`--agent claude-code` 或 `--agent none` 时，才会按 `init` 的逻辑复制 `skills/orbit-workflow/SKILL.md`，并在根配置和子项目配置里记录 `selectedAgent`、`skillPath`、`agentSkillPath`。命令末尾会打印 summary，包括 bound 数量、skipped 数量和写入的 config path。
 
 示例：
 

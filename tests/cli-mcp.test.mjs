@@ -295,6 +295,64 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'product-root');
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(root, 'console'), { recursive: true });
+    await writeFile(path.join(root, 'console', 'package.json'), JSON.stringify({ name: 'console' }, null, 2));
+    await mkdir(path.join(root, 'notes'), { recursive: true });
+    await mkdir(path.join(root, '.hidden'), { recursive: true });
+    await mkdir(path.join(root, 'node_modules'), { recursive: true });
+
+    const result = await runInteractive([
+      'init-product-line',
+      '--repo',
+      root,
+      '--backend-url',
+      backendUrl,
+      '--owner',
+      'product-owner',
+    ], 'jasper\nsecret\n2\n1\n2\n', { env: { HOME: home } });
+
+    assert.match(result.stdout, /Select product line/);
+    assert.match(result.stdout, /console \(package.json\)/);
+    assert.match(result.stdout, /notes \(plain folder\)/);
+    assert.doesNotMatch(result.stdout, /\.hidden/);
+    assert.doesNotMatch(result.stdout, /node_modules/);
+    assert.match(result.stdout, /Summary:/);
+    assert.match(result.stdout, /bound: 1/);
+    assert.match(result.stdout, /skipped: 1/);
+
+    const rootConfigPath = path.join(root, '.orbit', 'product-line.json');
+    const rootConfig = JSON.parse(await readFile(rootConfigPath, 'utf8'));
+    assert.equal(rootConfig.backendUrl, backendUrl);
+    assert.equal(rootConfig.mcpUrl, `${backendUrl}/api/mcp`);
+    assert.equal(rootConfig.token, 'orbit-dev-token');
+    assert.equal(rootConfig.key, 'orbit-dev-key');
+    assert.equal(rootConfig.account, 'jasper');
+    assert.equal(rootConfig.user.id, 'orbit-dev-user');
+    assert.equal(rootConfig.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
+    assert.equal(rootConfig.productLineId, 'pl_2');
+    assert.equal(rootConfig.productLineName, 'Hermes');
+    assert.equal(rootConfig.rootPath, root);
+
+    const consoleProject = JSON.parse(await readFile(path.join(root, 'console', '.orbit', 'project.json'), 'utf8'));
+    assert.equal(consoleProject.backendUrl, backendUrl);
+    assert.equal(consoleProject.token, 'orbit-dev-token');
+    assert.equal(consoleProject.key, 'orbit-dev-key');
+    assert.equal(consoleProject.account, 'jasper');
+    assert.equal(consoleProject.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
+    assert.equal(consoleProject.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
+    assert.equal(consoleProject.projectName, 'Hermes Console');
+    assert.equal(consoleProject.repo, path.join(root, 'console'));
+    assert.equal(consoleProject.owner, 'product-owner');
+    assert.equal(consoleProject.selectedAgent, undefined);
+    assert.equal(consoleProject.skillPath, undefined);
+    await assert.rejects(readFile(path.join(root, 'notes', '.orbit', 'project.json'), 'utf8'));
+  });
+});
+
+await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
   const home = path.join(dir, 'home');
   const orbitDir = path.join(repo, '.orbit');
