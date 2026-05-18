@@ -155,6 +155,7 @@ async function withProductServer(fn) {
 {
   const usage = await run([]);
   assert.match(usage.stdout, /  init \[--repo <path>\]/);
+  assert.match(usage.stdout, /  init-product-line \[--root <path>\]/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
 }
 
@@ -306,7 +307,7 @@ await withTempDir(async (dir) => {
 
     const result = await runInteractive([
       'init-product-line',
-      '--repo',
+      '--root',
       root,
       '--backend-url',
       backendUrl,
@@ -349,6 +350,25 @@ await withTempDir(async (dir) => {
     assert.equal(consoleProject.selectedAgent, undefined);
     assert.equal(consoleProject.skillPath, undefined);
     await assert.rejects(readFile(path.join(root, 'notes', '.orbit', 'project.json'), 'utf8'));
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'product-root');
+    const home = path.join(dir, 'home');
+    await mkdir(root, { recursive: true });
+
+    await runInteractive([
+      'init-product-line',
+      '--repo',
+      root,
+      '--backend-url',
+      backendUrl,
+    ], 'jasper\nsecret\n2\n', { env: { HOME: home } });
+
+    const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
+    assert.equal(rootConfig.rootPath, root);
   });
 });
 

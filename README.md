@@ -106,13 +106,14 @@ orbit-tools project bind \
 
 绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools init` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
-产品线根目录可以用 `orbit-tools init-product-line` 一次绑定多个子项目。默认从当前目录运行，也可用 `--repo <root-path>` 指定产品线根目录。CLI 会登录同一个 Orbit Hub backend，读取产品线列表，选择产品线后写入 `<root>/.orbit/product-line.json`，字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`rootPath`、`updatedAt`。
+产品线根目录可以用 `orbit-tools init-product-line` 一次绑定多个子项目。默认从当前目录运行，也可用 `--root <root-path>` 指定产品线根目录。CLI 会登录同一个 Orbit Hub backend，读取产品线列表，选择产品线后写入 `<root>/.orbit/product-line.json`，字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`rootPath`、`updatedAt`。
 
 随后 CLI 扫描根目录的直接子目录作为候选项目，排除隐藏目录、`.git`、`node_modules`、`dist`、`build`、`cache`。有 `package.json`、`tsconfig.json`、`pyproject.toml`、`go.mod`、`Cargo.toml` 等标记的目录会显示对应 marker；没有 marker 的目录仍会出现，并标记为 `plain folder`。每个候选目录都会依次提示：选择该产品线下的一个项目完成绑定，或显式选择 `Skip` 后继续下一个目录。
 
 ```bash
 cd /home/team/orbit/product-line-root
 orbit-tools init-product-line \
+  --root /home/team/orbit/product-line-root \
   --backend-url http://117.72.14.134:18081 \
   --owner jasper
 ```

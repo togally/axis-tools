@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 function printUsage() {
-    console.log(`orbit-tools\n\nCommands:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+    console.log(`orbit-tools\n\nCommands:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -38,6 +38,9 @@ function defaultMcpUrl(backendUrl) {
 }
 function resolveRepoArg() {
     return path.resolve(getArg('--repo') ?? process.cwd());
+}
+function resolveProductLineRootArg() {
+    return path.resolve(getArg('--root') ?? getArg('--repo') ?? process.cwd());
 }
 function orbitDir(repoPath) {
     return path.join(repoPath, '.orbit');
@@ -993,7 +996,7 @@ async function setupRepo() {
     console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
 }
 async function setupProductLineRoot() {
-    const rootPath = resolveRepoArg();
+    const rootPath = resolveProductLineRootArg();
     const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
     const mcpUrl = getArg('--mcp-url') ?? defaultMcpUrl(backendUrl);
     const owner = getArg('--owner') ?? process.env.USER ?? null;

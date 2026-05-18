@@ -66,10 +66,10 @@ For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly
 Initialize a product-line root that contains several child project folders:
 
 ```bash
-orbit-tools init-product-line --backend-url http://117.72.14.134:18081 --owner <owner>
+orbit-tools init-product-line --root <root-path> --backend-url http://117.72.14.134:18081 --owner <owner>
 ```
 
-Run this from the product-line root, or pass `--repo <root-path>`. The command logs in with the same Orbit Hub account/password mock flow as `orbit-tools init`, writes `<root>/.orbit/product-line.json`, scans immediate child directories, and prompts for each child in sequence. Choose one project from the selected product line to bind that folder, or choose `Skip` explicitly and continue. Hidden directories, `.git`, `node_modules`, `dist`, `build`, and `cache` are ignored; unrecognized folders are still offered as `plain folder`.
+Run this from the product-line root, or pass `--root <root-path>`. The command logs in with the same Orbit Hub account/password mock flow as `orbit-tools init`, writes `<root>/.orbit/product-line.json`, scans immediate child directories, and prompts for each child in sequence. Choose one project from the selected product line to bind that folder, or choose `Skip` explicitly and continue. Hidden directories, `.git`, `node_modules`, `dist`, `build`, and `cache` are ignored; unrecognized folders are still offered as `plain folder`.
 
 `init-product-line` writes `<child>/.orbit/project.json` only for folders you bind. It does not ask for an agent or install the workflow skill per folder unless `--agent codex`, `--agent claude-code`, or `--agent none` is supplied; when supplied, it copies the skill the same way as `orbit-tools init` and records the selected agent paths in both root and child configs.
 
