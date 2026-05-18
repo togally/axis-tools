@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { spawn } from 'node:child_process';
 function printUsage() {
-    console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n`);
+    console.log(`orbit-tools\n\nCommands:\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind [--repo <path>] --product-line-id <id> --project-id <id> [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -24,6 +24,116 @@ function safeString(value) {
 }
 function ensureDir(dir) {
     mkdirSync(dir, { recursive: true });
+}
+function homeDir() {
+    return process.env.HOME ?? process.cwd();
+}
+function defaultBackendUrl() {
+    return process.env.ORBIT_BACKEND_URL ?? 'http://127.0.0.1:3000';
+}
+function defaultMcpUrl(backendUrl) {
+    return process.env.ORBIT_MCP_URL ?? `${backendUrl.replace(/\/$/, '')}/api/mcp`;
+}
+function resolveRepoArg() {
+    return path.resolve(getArg('--repo') ?? process.cwd());
+}
+function orbitDir(repoPath) {
+    return path.join(repoPath, '.orbit');
+}
+function projectConfigPath(repoPath) {
+    return path.join(orbitDir(repoPath), 'project.json');
+}
+function globalOrbitConfigPath() {
+    return path.join(homeDir(), '.orbit', 'config.json');
+}
+function defaultHermesConfigPath() {
+    return path.join(homeDir(), '.hermes', 'config.yaml');
+}
+async function readJsonFile(filePath, fallback) {
+    try {
+        return JSON.parse(await readFile(filePath, 'utf8'));
+    }
+    catch {
+        return fallback;
+    }
+}
+function yamlQuote(value) {
+    return JSON.stringify(value);
+}
+function buildHermesOrbitYaml(serverName, backendUrl, mcpUrl) {
+    return [
+        `  ${serverName}:`,
+        '    enabled: true',
+        '    transport: http',
+        `    url: ${yamlQuote(mcpUrl)}`,
+        '    headers:',
+        `      x-orbit-backend-url: ${yamlQuote(backendUrl)}`,
+    ];
+}
+function upsertHermesYaml(content, serverName, backendUrl, mcpUrl) {
+    const lines = content.split('\n');
+    if (lines.at(-1) === '')
+        lines.pop();
+    const block = buildHermesOrbitYaml(serverName, backendUrl, mcpUrl);
+    const mcpIndex = lines.findIndex((line) => /^mcp_servers:\s*$/.test(line));
+    if (mcpIndex === -1) {
+        return ['mcp_servers:', ...block, '', ...lines].join('\n').replace(/\n*$/, '\n');
+    }
+    let insertAt = mcpIndex + 1;
+    let blockEnd = insertAt;
+    while (blockEnd < lines.length && (lines[blockEnd].startsWith(' ') || lines[blockEnd].trim() === '')) {
+        blockEnd++;
+    }
+    const nextLines = [];
+    for (let index = 0; index < lines.length; index++) {
+        if (index > mcpIndex && index < blockEnd && lines[index] === `  ${serverName}:`) {
+            index++;
+            while (index < blockEnd && (lines[index].startsWith('    ') || lines[index].trim() === '')) {
+                index++;
+            }
+            index--;
+            continue;
+        }
+        nextLines.push(lines[index]);
+    }
+    insertAt = nextLines.findIndex((line) => /^mcp_servers:\s*$/.test(line)) + 1;
+    nextLines.splice(insertAt, 0, ...block);
+    return nextLines.join('\n').replace(/\n*$/, '\n');
+}
+async function installHermesMcp(configPath, serverName, backendUrl, mcpUrl) {
+    ensureDir(path.dirname(configPath));
+    const isJson = configPath.endsWith('.json');
+    if (isJson) {
+        const config = await readJsonFile(configPath, {});
+        const mcpServers = typeof config.mcp_servers === 'object' && config.mcp_servers !== null ? config.mcp_servers : {};
+        mcpServers[serverName] = {
+            enabled: true,
+            transport: 'http',
+            url: mcpUrl,
+            headers: {
+                'x-orbit-backend-url': backendUrl,
+            },
+        };
+        config.mcp_servers = mcpServers;
+        await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+        return;
+    }
+    const current = existsSync(configPath) ? await readFile(configPath, 'utf8') : '';
+    await writeFile(configPath, upsertHermesYaml(current, serverName, backendUrl, mcpUrl), 'utf8');
+}
+async function writeGlobalOrbitConfig(values) {
+    const filePath = globalOrbitConfigPath();
+    ensureDir(path.dirname(filePath));
+    const current = await readJsonFile(filePath, {});
+    await writeFile(filePath, `${JSON.stringify({ ...current, ...values, updatedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+}
+async function readProjectBinding(repoPath) {
+    try {
+        return JSON.parse(await readFile(projectConfigPath(repoPath), 'utf8'));
+    }
+    catch {
+        return null;
+    }
 }
 function inferPhase(eventName, toolName) {
     if (eventName === 'SessionStart')
@@ -372,6 +482,73 @@ async function runCodexOnce() {
     if (exitCode !== 0)
         process.exit(exitCode);
 }
+async function installMcp() {
+    const repoPath = resolveRepoArg();
+    const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
+    const mcpUrl = getArg('--mcp-url') ?? defaultMcpUrl(backendUrl);
+    const configPath = path.resolve(getArg('--config') ?? defaultHermesConfigPath());
+    const serverName = getArg('--server-name') ?? 'orbit';
+    await installHermesMcp(configPath, serverName, backendUrl, mcpUrl);
+    await writeGlobalOrbitConfig({
+        backendUrl,
+        mcpUrl,
+        hermesConfigPath: configPath,
+        mcpServerName: serverName,
+    });
+    console.log(JSON.stringify({ ok: true, repo: repoPath, config: configPath, server: serverName, backendUrl, mcpUrl }, null, 2));
+}
+async function bindProject() {
+    const repoPath = resolveRepoArg();
+    const existing = await readProjectBinding(repoPath);
+    const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
+    const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
+    const productLineId = getArg('--product-line-id') ?? existing?.productLineId ?? null;
+    const projectId = getArg('--project-id') ?? existing?.projectId ?? null;
+    const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
+    if (!productLineId || !projectId) {
+        console.error('project bind requires --product-line-id and --project-id');
+        process.exit(1);
+    }
+    const binding = {
+        backendUrl,
+        mcpUrl,
+        productLineId,
+        projectId,
+        owner,
+        repo: repoPath,
+        updatedAt: new Date().toISOString(),
+    };
+    ensureDir(orbitDir(repoPath));
+    await writeFile(projectConfigPath(repoPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
+    await writeGlobalOrbitConfig({
+        backendUrl,
+        mcpUrl,
+        productLineId,
+        projectId,
+        owner,
+        lastRepo: repoPath,
+    });
+    console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
+}
+async function showProject() {
+    const repoPath = resolveRepoArg();
+    const binding = await readProjectBinding(repoPath);
+    if (!binding) {
+        console.error(`No Orbit project binding found at ${projectConfigPath(repoPath)}`);
+        process.exit(1);
+    }
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(binding, null, 2));
+        return;
+    }
+    console.log(`repo: ${binding.repo}`);
+    console.log(`backendUrl: ${binding.backendUrl}`);
+    console.log(`mcpUrl: ${binding.mcpUrl}`);
+    console.log(`productLineId: ${binding.productLineId ?? '-'}`);
+    console.log(`projectId: ${binding.projectId ?? '-'}`);
+    console.log(`owner: ${binding.owner ?? '-'}`);
+    console.log(`updatedAt: ${binding.updatedAt}`);
+}
 async function main() {
     const [, , group, command] = process.argv;
     if (!group) {
@@ -396,6 +573,18 @@ async function main() {
     }
     if (group === 'codex-run' && command === 'once') {
         await runCodexOnce();
+        return;
+    }
+    if (group === 'mcp' && command === 'install') {
+        await installMcp();
+        return;
+    }
+    if (group === 'project' && command === 'bind') {
+        await bindProject();
+        return;
+    }
+    if (group === 'project' && command === 'show') {
+        await showProject();
         return;
     }
     printUsage();
