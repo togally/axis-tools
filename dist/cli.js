@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 function printUsage() {
-    console.log(`orbit-tools\n\nCommands:\n  init\n  init-product-line\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nAdvanced init overrides:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`orbit-tools\n\nCommands:\n  init\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nAdvanced init overrides:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--login] [--force-login]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>] [--login] [--force-login]\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -60,17 +60,20 @@ function cliPackageRoot() {
 function globalOrbitConfigPath() {
     return path.join(homeDir(), '.orbit', 'config.json');
 }
-function stableOrbitSkillPath() {
-    return path.join(homeDir(), '.orbit', 'skills', 'orbit-workflow', 'SKILL.md');
+function stableOrbitSkillPath(skillName = 'orbit-workflow') {
+    return path.join(homeDir(), '.orbit', 'skills', skillName, 'SKILL.md');
 }
-function bundledOrbitSkillPath() {
-    return path.join(cliPackageRoot(), 'skills', 'orbit-workflow', 'SKILL.md');
+function bundledSkillsDir() {
+    return path.join(cliPackageRoot(), 'skills');
 }
-function agentSkillPath(agent) {
+function bundledOrbitSkillPath(skillName = 'orbit-workflow') {
+    return path.join(bundledSkillsDir(), skillName, 'SKILL.md');
+}
+function agentSkillPath(agent, skillName = 'orbit-workflow') {
     if (agent === 'codex')
-        return path.join(homeDir(), '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
+        return path.join(homeDir(), '.codex', 'skills', skillName, 'SKILL.md');
     if (agent === 'claude-code')
-        return path.join(homeDir(), '.claude', 'skills', 'orbit-workflow', 'SKILL.md');
+        return path.join(homeDir(), '.claude', 'skills', skillName, 'SKILL.md');
     return null;
 }
 function defaultHermesConfigPath() {
@@ -83,6 +86,9 @@ async function readJsonFile(filePath, fallback) {
     catch {
         return fallback;
     }
+}
+async function readGlobalOrbitConfig() {
+    return readJsonFile(globalOrbitConfigPath(), {});
 }
 function yamlQuote(value) {
     return JSON.stringify(value);
@@ -151,7 +157,7 @@ async function installHermesMcp(configPath, serverName, backendUrl, mcpUrl) {
 async function writeGlobalOrbitConfig(values) {
     const filePath = globalOrbitConfigPath();
     ensureDir(path.dirname(filePath));
-    const current = await readJsonFile(filePath, {});
+    const current = await readGlobalOrbitConfig();
     await writeFile(filePath, `${JSON.stringify({ ...current, ...values, updatedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
 }
 async function readProjectBinding(repoPath) {
@@ -553,6 +559,81 @@ function asLoginSession(value, account) {
         user: asOrbitUser(value.user, account),
     };
 }
+function asCachedLoginSession(value) {
+    if (!isJson(value))
+        return null;
+    const backendUrl = safeString(value.backendUrl);
+    const account = safeString(value.account);
+    const token = safeString(value.token);
+    const key = safeString(value.key);
+    if (!backendUrl || !account || !token || !key)
+        return null;
+    return {
+        backendUrl,
+        mcpUrl: safeString(value.mcpUrl),
+        account,
+        token,
+        key,
+        session: safeString(value.session),
+        user: asOrbitUser(value.user, account),
+        updatedAt: safeString(value.updatedAt) ?? new Date(0).toISOString(),
+    };
+}
+function globalSessions(config) {
+    return isJson(config.sessions) ? config.sessions : {};
+}
+async function cachedLoginSession(backendUrl) {
+    const config = await readGlobalOrbitConfig();
+    return asCachedLoginSession(globalSessions(config)[normalizeBackendUrl(backendUrl)]);
+}
+async function writeGlobalOrbitConfigObject(config) {
+    const filePath = globalOrbitConfigPath();
+    ensureDir(path.dirname(filePath));
+    await writeFile(filePath, `${JSON.stringify({ ...config, updatedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+}
+async function saveLoginSession(backendUrl, mcpUrl, account, login) {
+    const normalizedBackendUrl = normalizeBackendUrl(backendUrl);
+    const cached = {
+        backendUrl: normalizedBackendUrl,
+        mcpUrl,
+        account,
+        token: login.token,
+        key: login.key,
+        session: login.session,
+        user: login.user,
+        updatedAt: new Date().toISOString(),
+    };
+    const config = await readGlobalOrbitConfig();
+    config.sessions = {
+        ...globalSessions(config),
+        [normalizedBackendUrl]: cached,
+    };
+    config.backendUrl = normalizedBackendUrl;
+    config.mcpUrl = mcpUrl;
+    config.token = cached.token;
+    config.key = cached.key;
+    config.session = cached.session;
+    config.account = cached.account;
+    config.user = cached.user;
+    await writeGlobalOrbitConfigObject(config);
+    return cached;
+}
+async function acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin) {
+    if (!forceLogin) {
+        const cached = await cachedLoginSession(backendUrl);
+        if (cached) {
+            return { login: cached, account: cached.account, fromCache: true };
+        }
+    }
+    const account = (await prompt.question('Orbit account: ')).trim();
+    const password = (await prompt.question('Orbit password: ')).trim();
+    if (!account || !password) {
+        throw new Error('Orbit account and password are required');
+    }
+    const login = await loginOrbitHub(backendUrl, account, password);
+    const cached = await saveLoginSession(backendUrl, mcpUrl, account, login);
+    return { login: cached, account, fromCache: false };
+}
 function asProductLine(value) {
     if (!isJson(value))
         return null;
@@ -851,6 +932,8 @@ function parseAgentArg(value) {
         return null;
     if (value === 'codex' || value === 'claude-code' || value === 'none')
         return value;
+    if (value === 'cc')
+        return 'claude-code';
     throw new Error('--agent must be one of: codex, claude-code, none');
 }
 function buildProductLineBinding(values) {
@@ -962,20 +1045,75 @@ async function bindProjectInteractively(repoPath, backendUrl, mcpUrl, owner) {
     await writeProjectBinding(repoPath, binding);
     console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
 }
-async function installOrbitSkill(agent) {
-    const source = bundledOrbitSkillPath();
-    if (!existsSync(source)) {
-        throw new Error(`Orbit skill source not found at ${source}`);
+async function packagedSkillNames() {
+    const dir = bundledSkillsDir();
+    const entries = await readdir(dir, { withFileTypes: true });
+    const names = [];
+    for (const entry of entries) {
+        if (!entry.isDirectory())
+            continue;
+        if (existsSync(bundledOrbitSkillPath(entry.name))) {
+            names.push(entry.name);
+        }
     }
-    const skillPath = stableOrbitSkillPath();
-    ensureDir(path.dirname(skillPath));
-    await copyFile(source, skillPath);
-    const target = agentSkillPath(agent);
-    if (target) {
-        ensureDir(path.dirname(target));
-        await copyFile(source, target);
+    return names.sort();
+}
+async function copySkillIfAllowed(source, target, force) {
+    ensureDir(path.dirname(target));
+    const sourceText = await readFile(source, 'utf8');
+    if (existsSync(target)) {
+        const targetText = await readFile(target, 'utf8');
+        if (targetText === sourceText)
+            return 'identical';
+        if (!force) {
+            throw new Error(`Refusing to overwrite modified skill at ${target}. Re-run with --force to replace it.`);
+        }
     }
-    return { skillPath, agentSkillPath: target };
+    await copyFile(source, target);
+    return 'copied';
+}
+function installAgentsForChoice(agent) {
+    if (agent === 'all')
+        return ['codex', 'claude-code'];
+    return [agent];
+}
+function parseInstallAgentArg(value) {
+    if (!value || value === 'all')
+        return 'all';
+    if (value === 'codex')
+        return 'codex';
+    if (value === 'claude-code' || value === 'cc')
+        return 'claude-code';
+    throw new Error('--agent must be one of: codex, claude-code, cc, all');
+}
+async function installPackagedSkills(agent, force) {
+    const skillNames = await packagedSkillNames();
+    if (skillNames.length === 0) {
+        throw new Error(`No packaged skills found under ${bundledSkillsDir()}`);
+    }
+    const agents = agent === 'none' ? [] : installAgentsForChoice(agent);
+    const installed = [];
+    for (const skillName of skillNames) {
+        const source = bundledOrbitSkillPath(skillName);
+        const stableTarget = stableOrbitSkillPath(skillName);
+        installed.push({ skill: skillName, target: stableTarget, status: await copySkillIfAllowed(source, stableTarget, force) });
+        for (const selectedAgent of agents) {
+            const target = agentSkillPath(selectedAgent, skillName);
+            if (!target)
+                continue;
+            installed.push({ skill: skillName, target, status: await copySkillIfAllowed(source, target, force) });
+        }
+    }
+    return {
+        skillPath: stableOrbitSkillPath('orbit-workflow'),
+        agentSkillPath: agent === 'none' || agent === 'all' ? null : agentSkillPath(agent, 'orbit-workflow'),
+        installed,
+    };
+}
+async function installSkillsCommand() {
+    const agent = parseInstallAgentArg(getArg('--agent'));
+    const install = await installPackagedSkills(agent, hasFlag('--force'));
+    console.log(JSON.stringify({ ok: true, agent, installed: install.installed }, null, 2));
 }
 async function promptAgent(prompt) {
     const choices = [
@@ -992,20 +1130,15 @@ async function setupRepo() {
     const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
     const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
     const ownerArg = getArg('--owner');
+    const forceLogin = hasFlag('--login') || hasFlag('--force-login');
     const prompt = await createPromptSession();
     let account = '';
-    let password = '';
     let login;
     let productDetail;
     let selectedProject;
     let selectedAgent;
     try {
-        account = (await prompt.question('Orbit account: ')).trim();
-        password = (await prompt.question('Orbit password: ')).trim();
-        if (!account || !password) {
-            throw new Error('Orbit account and password are required');
-        }
-        login = await loginOrbitHub(backendUrl, account, password);
+        ({ login, account } = await acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin));
         ({ productDetail, selectedProject } = await promptProjectSelection(prompt, backendUrl, login.token));
         selectedAgent = await promptAgent(prompt);
     }
@@ -1013,7 +1146,7 @@ async function setupRepo() {
         prompt.close();
     }
     const owner = ownerArg ?? login.user.account ?? account;
-    const install = await installOrbitSkill(selectedAgent);
+    const install = await installPackagedSkills(selectedAgent, true);
     const binding = buildProjectBinding({
         repoPath,
         backendUrl,
@@ -1036,6 +1169,7 @@ async function setupProductLineRoot() {
     const mcpUrl = getArg('--mcp-url') ?? defaultMcpUrl(backendUrl);
     const ownerArg = getArg('--owner');
     const selectedAgent = parseAgentArg(getArg('--agent'));
+    const forceLogin = hasFlag('--login') || hasFlag('--force-login');
     const prompt = await createPromptSession();
     let account = '';
     let login;
@@ -1043,17 +1177,12 @@ async function setupProductLineRoot() {
     const bound = [];
     const skipped = [];
     try {
-        account = (await prompt.question('Orbit account: ')).trim();
-        const password = (await prompt.question('Orbit password: ')).trim();
-        if (!account || !password) {
-            throw new Error('Orbit account and password are required');
-        }
-        login = await loginOrbitHub(backendUrl, account, password);
+        ({ login, account } = await acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin));
         const owner = ownerArg ?? login.user.account ?? account;
         const productLines = await fetchProductLines(backendUrl, login.token);
         const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
         productDetail = await fetchProductDetail(backendUrl, selectedProduct.id, login.token, { allowEmptyProjects: true });
-        const install = selectedAgent ? await installOrbitSkill(selectedAgent) : { skillPath: null, agentSkillPath: null };
+        const install = selectedAgent ? await installPackagedSkills(selectedAgent, true) : { skillPath: null, agentSkillPath: null };
         const rootBinding = buildProductLineBinding({
             rootPath,
             backendUrl,
@@ -1141,6 +1270,29 @@ async function bindProject() {
     await writeProjectBinding(repoPath, binding);
     console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
 }
+async function logoutOrbit() {
+    const backendUrl = getArg('--backend-url');
+    const config = await readGlobalOrbitConfig();
+    const sessions = globalSessions(config);
+    let cleared;
+    if (backendUrl) {
+        const normalizedBackendUrl = normalizeBackendUrl(backendUrl);
+        cleared = Object.prototype.hasOwnProperty.call(sessions, normalizedBackendUrl) ? [normalizedBackendUrl] : [];
+        delete sessions[normalizedBackendUrl];
+        config.sessions = sessions;
+    }
+    else {
+        cleared = Object.keys(sessions);
+        config.sessions = {};
+    }
+    delete config.token;
+    delete config.key;
+    delete config.session;
+    delete config.account;
+    delete config.user;
+    await writeGlobalOrbitConfigObject(config);
+    console.log(JSON.stringify({ ok: true, cleared }, null, 2));
+}
 async function showProject() {
     const repoPath = resolveRepoArg();
     const binding = await readProjectBinding(repoPath);
@@ -1176,6 +1328,14 @@ async function main() {
     }
     if (group === 'init-product-line') {
         await setupProductLineRoot();
+        return;
+    }
+    if (group === 'install') {
+        await installSkillsCommand();
+        return;
+    }
+    if (group === 'logout') {
+        await logoutOrbit();
         return;
     }
     if (group === 'codex-hook' && command === 'ingest') {

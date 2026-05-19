@@ -19,11 +19,16 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
   - 同步保存 `~/.orbit/config.json`
 - `orbit-tools init`
   - 完整交互式初始化当前 repo：登录 Orbit Hub、选择产品线、选择项目、选择 Agent，并安装 orbit-tools skill
+  - 同一 `backendUrl` 的登录会缓存到 `~/.orbit/config.json`，后续初始化默认复用 session
   - 写入 `<repo>/.orbit/project.json`
 - `orbit-tools init-product-line`
   - 从产品线根目录运行：登录 Orbit Hub、选择产品线、扫描当前根目录下一层子目录
   - 对每个子目录逐个选择绑定到该产品线下的项目，或明确 skip
   - 写入根目录 `.orbit/product-line.json`，并为已绑定子目录写入 `<child>/.orbit/project.json`
+- `orbit-tools install`
+  - 安装本包 `skills/*/SKILL.md` 到 `~/.orbit/skills`，并按 `--agent` 同步到 Codex / Claude Code skill 目录
+- `orbit-tools logout`
+  - 清理 `~/.orbit/config.json` 中缓存的登录 token/session
 - `orbit-tools project bind`
   - 高级非交互式绑定命令，保留给自动化脚本使用
 - `orbit-tools project show`
@@ -38,7 +43,9 @@ orbit-tools/
 │   ├── sample-pretool.json
 │   └── sample-posttool.json
 ├── skills/
-│   └── orbit-workflow/
+│   ├── orbit-workflow/
+│   │   └── SKILL.md
+│   └── orbit-office-hours/
 │       └── SKILL.md
 ├── src/
 │   └── cli.ts
@@ -82,7 +89,7 @@ orbit-tools mcp install \
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
 
-把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools init`：先输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。`orbit-tools setup` 仅作为旧脚本兼容别名保留。
+把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools init`：首次针对某个 `backendUrl` 运行时输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。登录成功后 session 会按 `backendUrl` 缓存到 `~/.orbit/config.json`，后续 `init` / `init-product-line` 使用同一个 backend 时会直接复用，不再提示账号密码。传 `--login` 或 `--force-login` 可强制重新登录。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。`orbit-tools setup` 仅作为旧脚本兼容别名保留。
 
 ```bash
 orbit-tools init
@@ -90,7 +97,25 @@ orbit-tools init
 
 CLI 默认绑定当前目录，owner 默认使用登录的 Orbit 账号。它会从共享 Orbit Hub backend `http://117.72.14.134:18081` 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。默认 MCP URL 是 `<backend-url>/api/mcp`。`--backend-url` 和 `ORBIT_BACKEND_URL` 仍可覆盖 backend，本地开发和测试请显式传本机地址。
 
-Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器总是把本仓库的 `skills/orbit-workflow/SKILL.md` 复制到稳定路径 `~/.orbit/skills/orbit-workflow/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/orbit-workflow/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/orbit-workflow/SKILL.md`。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空或覆盖其他技能目录。
+Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器会把本仓库的所有 `skills/*/SKILL.md` 复制到稳定路径 `~/.orbit/skills/<skill>/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/<skill>/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/<skill>/SKILL.md`。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空其他技能目录。
+
+也可以单独安装技能：
+
+```bash
+orbit-tools install --agent all
+orbit-tools install --agent codex
+orbit-tools install --agent claude-code
+orbit-tools install --agent cc
+```
+
+`orbit-tools install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。
+
+清理缓存登录：
+
+```bash
+orbit-tools logout
+orbit-tools logout --backend-url http://117.72.14.134:18081
+```
 
 可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
 
@@ -104,7 +129,7 @@ orbit-tools project bind \
 
 绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools init` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
-产品线根目录可以用 `orbit-tools init-product-line` 一次绑定多个子项目。默认从当前目录运行，也可用 `--root <root-path>` 指定产品线根目录。CLI 会登录同一个 Orbit Hub backend，读取产品线列表，选择产品线后写入 `<root>/.orbit/product-line.json`，字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`rootPath`、`updatedAt`。
+产品线根目录可以用 `orbit-tools init-product-line` 一次绑定多个子项目。默认从当前目录运行，也可用 `--root <root-path>` 指定产品线根目录。CLI 会复用同一 backend 的缓存登录；没有缓存时才提示账号密码。读取产品线列表，选择产品线后写入 `<root>/.orbit/product-line.json`，字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`rootPath`、`updatedAt`。
 
 随后 CLI 扫描根目录的直接子目录作为候选项目，排除隐藏目录、`.git`、`node_modules`、`dist`、`build`、`cache`。有 `package.json`、`tsconfig.json`、`pyproject.toml`、`go.mod`、`Cargo.toml` 等标记的目录会显示对应 marker；没有 marker 的目录仍会出现，并标记为 `plain folder`。每个候选目录都会依次提示：选择该产品线下的一个项目完成绑定，或显式选择 `Skip` 后继续下一个目录。
 
@@ -113,7 +138,7 @@ cd /home/team/orbit/product-line-root
 orbit-tools init-product-line
 ```
 
-已绑定的子目录会写入 `<child>/.orbit/project.json`，字段与 `orbit-tools init` 的项目绑定一致，包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、选中的产品线、选中的项目、`repo`、`owner`、`updatedAt`。默认不会为每个子目录要求 Agent 选择或安装 skill；只有显式传 `--agent codex`、`--agent claude-code` 或 `--agent none` 时，才会按 `init` 的逻辑复制 `skills/orbit-workflow/SKILL.md`，并在根配置和子项目配置里记录 `selectedAgent`、`skillPath`、`agentSkillPath`。命令末尾会打印 summary，包括 bound 数量、skipped 数量和写入的 config path。
+已绑定的子目录会写入 `<child>/.orbit/project.json`，字段与 `orbit-tools init` 的项目绑定一致，包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、选中的产品线、选中的项目、`repo`、`owner`、`updatedAt`。默认不会为每个子目录要求 Agent 选择或安装 skill；只有显式传 `--agent codex`、`--agent claude-code`、`--agent cc` 或 `--agent none` 时，才会按 `init` 的逻辑复制全部 packaged skills，并在根配置和子项目配置里记录 `selectedAgent`、`skillPath`、`agentSkillPath`。命令末尾会打印 summary，包括 bound 数量、skipped 数量和写入的 config path。
 
 示例：
 

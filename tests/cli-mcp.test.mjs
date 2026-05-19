@@ -67,6 +67,7 @@ async function withTempDir(fn) {
 }
 
 async function withProductServer(fn) {
+  const state = { loginCount: 0 };
   const catalog = {
     products: [
       {
@@ -121,6 +122,7 @@ async function withProductServer(fn) {
       return;
     }
     if (req.method === 'POST' && req.url === '/api/login') {
+      state.loginCount++;
       let body = '';
       req.on('data', (chunk) => {
         body += chunk.toString('utf8');
@@ -156,7 +158,7 @@ async function withProductServer(fn) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const address = server.address();
   try {
-    await fn(`http://127.0.0.1:${address.port}`);
+    await fn(`http://127.0.0.1:${address.port}`, state);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -257,6 +259,80 @@ await withTempDir(async (dir) => {
     assert.equal(project.projectId, 'proj_1');
     assert.equal(project.owner, 'interactive-owner');
   });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl, state) => {
+    const repoOne = path.join(dir, 'repo-one');
+    const repoTwo = path.join(dir, 'repo-two');
+    const home = path.join(dir, 'home');
+
+    await runInteractive([
+      'init',
+      '--repo',
+      repoOne,
+      '--backend-url',
+      backendUrl,
+    ], 'orbit-user\nsecret\n2\n1\n3\n', { env: { HOME: home } });
+
+    assert.equal(state.loginCount, 1);
+    const firstProject = JSON.parse(await readFile(path.join(repoOne, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(firstProject.account, 'orbit-user');
+    assert.equal(firstProject.owner, 'orbit-user');
+    assert.equal(firstProject.token, 'orbit-dev-token');
+
+    await runInteractive([
+      'init',
+      '--repo',
+      repoTwo,
+      '--backend-url',
+      backendUrl,
+    ], '2\n1\n3\n', { env: { HOME: home } });
+
+    assert.equal(state.loginCount, 1);
+    const secondProject = JSON.parse(await readFile(path.join(repoTwo, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(secondProject.account, 'orbit-user');
+    assert.equal(secondProject.owner, 'orbit-user');
+    assert.equal(secondProject.token, 'orbit-dev-token');
+
+    const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(config.sessions[backendUrl].account, 'orbit-user');
+
+    await run(['logout'], { env: { HOME: home } });
+    const loggedOutConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.deepEqual(loggedOutConfig.sessions, {});
+    assert.equal(loggedOutConfig.token, undefined);
+    assert.equal(loggedOutConfig.session, undefined);
+  });
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+
+  const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
+  const installJson = JSON.parse(install.stdout);
+  assert.equal(installJson.ok, true);
+  assert.equal(installJson.installed.length, 6);
+
+  for (const skill of ['orbit-workflow', 'orbit-office-hours']) {
+    const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
+    const codexSkill = await readFile(path.join(home, '.codex', 'skills', skill, 'SKILL.md'), 'utf8');
+    const claudeSkill = await readFile(path.join(home, '.claude', 'skills', skill, 'SKILL.md'), 'utf8');
+    assert.match(orbitSkill, new RegExp(`# ${skill.replace(/-/g, ' ')}`, 'i'));
+    assert.equal(codexSkill, orbitSkill);
+    assert.equal(claudeSkill, orbitSkill);
+  }
+
+  const modified = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
+  await writeFile(modified, 'locally modified\n', 'utf8');
+  await assert.rejects(
+    run(['install', '--agent', 'codex'], { env: { HOME: home } }),
+    /Refusing to overwrite modified skill/,
+  );
+  assert.equal(await readFile(modified, 'utf8'), 'locally modified\n');
+
+  await run(['install', '--agent', 'codex', '--force'], { env: { HOME: home } });
+  assert.notEqual(await readFile(modified, 'utf8'), 'locally modified\n');
 });
 
 await withTempDir(async (dir) => {
