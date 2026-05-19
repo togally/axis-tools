@@ -81,6 +81,16 @@ async function withProductServer(fn) {
       },
       {
         product: {
+          id: 'pl_check',
+          uuid: '0dd55fdc-54d2-4dcb-97bb-b8cab2969239',
+          name: 'Orbit Check Product',
+          summary: 'Non-destructive create/read contract product.',
+          status: 'active',
+        },
+        modules: [],
+      },
+      {
+        product: {
           id: 'pl_2',
           uuid: '8f938fdc-f2be-44d6-8c48-91bc9156836d',
           name: 'Hermes',
@@ -136,7 +146,7 @@ async function withProductServer(fn) {
       return;
     }
     if (req.method === 'GET' && req.url === '/api/products/pl_2') {
-      res.end(JSON.stringify({ ...catalog.products[1], runtime: catalog.runtime }));
+      res.end(JSON.stringify({ ...catalog.products.find((entry) => entry.product.id === 'pl_2'), runtime: catalog.runtime }));
       return;
     }
     res.statusCode = 404;
@@ -336,6 +346,8 @@ await withTempDir(async (dir) => {
     ], 'jasper\nsecret\n2\n1\n2\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Select product line/);
+    assert.doesNotMatch(result.stdout, /Orbit Check Product/);
+    assert.doesNotMatch(result.stdout, /Non-destructive create\/read contract product/);
     assert.match(result.stdout, /console \(package.json\)/);
     assert.match(result.stdout, /notes \(plain folder\)/);
     assert.doesNotMatch(result.stdout, /\.hidden/);

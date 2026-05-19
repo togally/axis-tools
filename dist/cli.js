@@ -600,6 +600,31 @@ function asProductDetail(value) {
         modules: rawModules.map(asProjectModule).filter((module) => Boolean(module)),
     };
 }
+function isHiddenCatalogRecord(record) {
+    const text = [record.name, record.summary].map((value) => String(value ?? '').trim()).join('\n');
+    const name = String(record.name ?? '').trim().toLowerCase();
+    return /non-destructive create\/read contract product/i.test(text)
+        || name.startsWith('orbit check product')
+        || name.startsWith('orbit check product line')
+        || name.startsWith('orbit check module')
+        || name.startsWith('orbit check project')
+        || name.startsWith('hermes verify product')
+        || name.startsWith('hermes verify product line')
+        || name.startsWith('hermes verify module')
+        || name.startsWith('hermes verify project')
+        || name.startsWith('orbit codex product')
+        || name.startsWith('orbit codex product line')
+        || name.startsWith('orbit codex module')
+        || name.startsWith('orbit codex project');
+}
+function visibleProductDetail(entry) {
+    if (isHiddenCatalogRecord(entry.product))
+        return null;
+    return {
+        product: entry.product,
+        modules: entry.modules.filter((module) => !isHiddenCatalogRecord(module)),
+    };
+}
 async function fetchOrbitJson(backendUrl, routePath, token) {
     const url = `${normalizeBackendUrl(backendUrl)}${routePath}`;
     let response;
@@ -664,7 +689,11 @@ async function fetchProductLines(backendUrl, token) {
     if (!isJson(payload) || !Array.isArray(payload.products)) {
         throw new Error('Orbit Hub backend response for /api/products did not include a products array');
     }
-    const products = payload.products.map(asProductDetail).filter((entry) => Boolean(entry));
+    const products = payload.products
+        .map(asProductDetail)
+        .filter((entry) => Boolean(entry))
+        .map(visibleProductDetail)
+        .filter((entry) => Boolean(entry));
     if (products.length === 0) {
         throw new Error(`No product lines found in Orbit Hub at ${normalizeBackendUrl(backendUrl)}. Create a product line first.`);
     }
@@ -676,10 +705,14 @@ async function fetchProductDetail(backendUrl, productLineId, token, options = {}
     if (!detail) {
         throw new Error(`Orbit Hub backend response for product line ${productLineId} did not include product/modules data`);
     }
-    if (!options.allowEmptyProjects && detail.modules.length === 0) {
-        throw new Error(`No projects found under product line "${detail.product.name}". Create a project in that product line first.`);
+    const visibleDetail = visibleProductDetail(detail);
+    if (!visibleDetail) {
+        throw new Error(`Product line ${productLineId} is a hidden verification record and cannot be selected by default.`);
     }
-    return detail;
+    if (!options.allowEmptyProjects && visibleDetail.modules.length === 0) {
+        throw new Error(`No projects found under product line "${visibleDetail.product.name}". Create a project in that product line first.`);
+    }
+    return visibleDetail;
 }
 function describeProductLine(product) {
     const parts = [product.name];
