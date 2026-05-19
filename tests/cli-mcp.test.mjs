@@ -154,7 +154,8 @@ async function withProductServer(fn) {
 
 {
   const usage = await run([]);
-  assert.match(usage.stdout, /  init \[--repo <path>\]/);
+  assert.match(usage.stdout, /Commands:\n  init\n  init-product-line\n/);
+  assert.match(usage.stdout, /Advanced init overrides:\n  init \[--repo <path>\]/);
   assert.match(usage.stdout, /  init-product-line \[--root <path>\]/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
 }
@@ -297,6 +298,25 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
+    const repo = path.join(dir, 'repo');
+    const home = path.join(dir, 'home');
+    await mkdir(repo, { recursive: true });
+
+    await runInteractive([
+      'init',
+      '--backend-url',
+      backendUrl,
+    ], 'orbit-account\nsecret\n2\n1\n3\n', { cwd: repo, env: { HOME: home, USER: 'system-user' } });
+
+    const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(project.repo, repo);
+    assert.equal(project.owner, 'orbit-account');
+    assert.equal(project.backendUrl, backendUrl);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
     const root = path.join(dir, 'product-root');
     const home = path.join(dir, 'home');
     await mkdir(path.join(root, 'console'), { recursive: true });
@@ -350,6 +370,29 @@ await withTempDir(async (dir) => {
     assert.equal(consoleProject.selectedAgent, undefined);
     assert.equal(consoleProject.skillPath, undefined);
     await assert.rejects(readFile(path.join(root, 'notes', '.orbit', 'project.json'), 'utf8'));
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'product-root');
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(root, 'console'), { recursive: true });
+    await writeFile(path.join(root, 'console', 'package.json'), JSON.stringify({ name: 'console' }, null, 2));
+
+    await runInteractive([
+      'init-product-line',
+      '--backend-url',
+      backendUrl,
+    ], 'orbit-account\nsecret\n2\n1\n', { cwd: root, env: { HOME: home, USER: 'system-user' } });
+
+    const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
+    assert.equal(rootConfig.rootPath, root);
+
+    const consoleProject = JSON.parse(await readFile(path.join(root, 'console', '.orbit', 'project.json'), 'utf8'));
+    assert.equal(consoleProject.repo, path.join(root, 'console'));
+    assert.equal(consoleProject.owner, 'orbit-account');
+    assert.equal(consoleProject.backendUrl, backendUrl);
   });
 });
 

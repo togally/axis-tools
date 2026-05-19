@@ -85,12 +85,10 @@ orbit-tools mcp install \
 把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools init`：先输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。`orbit-tools setup` 仅作为旧脚本兼容别名保留。
 
 ```bash
-orbit-tools init \
-  --repo /path/to/repo \
-  --owner <owner>
+orbit-tools init
 ```
 
-CLI 会从 `--backend-url` 或 `ORBIT_BACKEND_URL` 指向的 backend 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。当前对外交互式绑定使用与控制台相同的共享 Orbit Hub backend：`http://117.72.14.134:18081`。本地开发不传参数时仍回落到本机 backend，默认 MCP URL 是 `<backend-url>/api/mcp`，避免测试和本地调试依赖外网。
+CLI 默认绑定当前目录，owner 默认使用登录的 Orbit 账号。它会从共享 Orbit Hub backend `http://117.72.14.134:18081` 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。默认 MCP URL 是 `<backend-url>/api/mcp`。`--backend-url` 和 `ORBIT_BACKEND_URL` 仍可覆盖 backend，本地开发和测试请显式传本机地址。
 
 Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器总是把本仓库的 `skills/orbit-workflow/SKILL.md` 复制到稳定路径 `~/.orbit/skills/orbit-workflow/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/orbit-workflow/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/orbit-workflow/SKILL.md`。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空或覆盖其他技能目录。
 
@@ -112,10 +110,7 @@ orbit-tools project bind \
 
 ```bash
 cd /home/team/orbit/product-line-root
-orbit-tools init-product-line \
-  --root /home/team/orbit/product-line-root \
-  --backend-url http://117.72.14.134:18081 \
-  --owner jasper
+orbit-tools init-product-line
 ```
 
 已绑定的子目录会写入 `<child>/.orbit/project.json`，字段与 `orbit-tools init` 的项目绑定一致，包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、选中的产品线、选中的项目、`repo`、`owner`、`updatedAt`。默认不会为每个子目录要求 Agent 选择或安装 skill；只有显式传 `--agent codex`、`--agent claude-code` 或 `--agent none` 时，才会按 `init` 的逻辑复制 `skills/orbit-workflow/SKILL.md`，并在根配置和子项目配置里记录 `selectedAgent`、`skillPath`、`agentSkillPath`。命令末尾会打印 summary，包括 bound 数量、skipped 数量和写入的 config path。
@@ -123,10 +118,7 @@ orbit-tools init-product-line \
 示例：
 
 ```bash
-orbit-tools init \
-  --repo /home/jasperWei/orbit/orbit-tools \
-  --backend-url http://117.72.14.134:18081 \
-  --owner jasper
+orbit-tools init
 ```
 
 高级 UUID 示例：
@@ -145,6 +137,12 @@ orbit-tools project bind \
 ```bash
 orbit-tools init \
   --repo /home/jasperWei/orbit/orbit-tools \
+  --backend-url http://127.0.0.1:18081 \
+  --owner jasper
+
+cd /home/team/orbit/product-line-root
+orbit-tools init-product-line \
+  --root /home/team/orbit/product-line-root \
   --backend-url http://127.0.0.1:18081 \
   --owner jasper
 ```

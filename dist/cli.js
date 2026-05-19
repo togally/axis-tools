@@ -6,8 +6,9 @@ import process from 'node:process';
 import { spawn } from 'node:child_process';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 function printUsage() {
-    console.log(`orbit-tools\n\nCommands:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+    console.log(`orbit-tools\n\nCommands:\n  init\n  init-product-line\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nAdvanced init overrides:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -31,7 +32,7 @@ function homeDir() {
     return process.env.HOME ?? process.cwd();
 }
 function defaultBackendUrl() {
-    return process.env.ORBIT_BACKEND_URL ?? 'http://127.0.0.1:3000';
+    return process.env.ORBIT_BACKEND_URL ?? SHARED_BACKEND_URL;
 }
 function defaultMcpUrl(backendUrl) {
     return process.env.ORBIT_MCP_URL ?? `${backendUrl.replace(/\/$/, '')}/api/mcp`;
@@ -957,7 +958,7 @@ async function setupRepo() {
     const existing = await readProjectBinding(repoPath);
     const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
     const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
-    const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
+    const ownerArg = getArg('--owner');
     const prompt = await createPromptSession();
     let account = '';
     let password = '';
@@ -978,6 +979,7 @@ async function setupRepo() {
     finally {
         prompt.close();
     }
+    const owner = ownerArg ?? login.user.account ?? account;
     const install = await installOrbitSkill(selectedAgent);
     const binding = buildProjectBinding({
         repoPath,
@@ -999,7 +1001,7 @@ async function setupProductLineRoot() {
     const rootPath = resolveProductLineRootArg();
     const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
     const mcpUrl = getArg('--mcp-url') ?? defaultMcpUrl(backendUrl);
-    const owner = getArg('--owner') ?? process.env.USER ?? null;
+    const ownerArg = getArg('--owner');
     const selectedAgent = parseAgentArg(getArg('--agent'));
     const prompt = await createPromptSession();
     let account = '';
@@ -1014,6 +1016,7 @@ async function setupProductLineRoot() {
             throw new Error('Orbit account and password are required');
         }
         login = await loginOrbitHub(backendUrl, account, password);
+        const owner = ownerArg ?? login.user.account ?? account;
         const productLines = await fetchProductLines(backendUrl, login.token);
         const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
         productDetail = await fetchProductDetail(backendUrl, selectedProduct.id, login.token, { allowEmptyProjects: true });

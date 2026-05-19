@@ -155,8 +155,10 @@ interface ProjectCandidate {
   markers: string[];
 }
 
+const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
+
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  init\n  init-product-line\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nAdvanced init overrides:\n  init [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -186,7 +188,7 @@ function homeDir(): string {
 }
 
 function defaultBackendUrl(): string {
-  return process.env.ORBIT_BACKEND_URL ?? 'http://127.0.0.1:3000';
+  return process.env.ORBIT_BACKEND_URL ?? SHARED_BACKEND_URL;
 }
 
 function defaultMcpUrl(backendUrl: string): string {
@@ -1204,7 +1206,7 @@ async function setupRepo(): Promise<void> {
   const existing = await readProjectBinding(repoPath);
   const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
   const mcpUrl = getArg('--mcp-url') ?? existing?.mcpUrl ?? defaultMcpUrl(backendUrl);
-  const owner = getArg('--owner') ?? existing?.owner ?? process.env.USER ?? null;
+  const ownerArg = getArg('--owner');
 
   const prompt = await createPromptSession();
   let account = '';
@@ -1226,6 +1228,7 @@ async function setupRepo(): Promise<void> {
     prompt.close();
   }
 
+  const owner = ownerArg ?? login.user.account ?? account;
   const install = await installOrbitSkill(selectedAgent);
   const binding = buildProjectBinding({
     repoPath,
@@ -1249,7 +1252,7 @@ async function setupProductLineRoot(): Promise<void> {
   const rootPath = resolveProductLineRootArg();
   const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
   const mcpUrl = getArg('--mcp-url') ?? defaultMcpUrl(backendUrl);
-  const owner = getArg('--owner') ?? process.env.USER ?? null;
+  const ownerArg = getArg('--owner');
   const selectedAgent = parseAgentArg(getArg('--agent'));
 
   const prompt = await createPromptSession();
@@ -1265,6 +1268,7 @@ async function setupProductLineRoot(): Promise<void> {
       throw new Error('Orbit account and password are required');
     }
     login = await loginOrbitHub(backendUrl, account, password);
+    const owner = ownerArg ?? login.user.account ?? account;
 
     const productLines = await fetchProductLines(backendUrl, login.token);
     const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
