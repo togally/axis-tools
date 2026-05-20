@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
 function printUsage() {
-    console.log(`orbit-tools\n\nCommands:\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  init = login/session cache + packaged skill setup\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>] [--login] [--force-login]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>] [--login] [--force-login]\n  pull [--root <path>] [--backend-url <url>] [--login] [--force-login]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>] [--login] [--force-login]\n`);
+    console.log(`orbit-tools\n\nCommands:\n  register\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  register = create an Orbit Hub account and local session\n  login = create a local Orbit Hub session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -547,10 +547,16 @@ function isJson(value) {
 function asOrbitUser(value, account) {
     if (!isJson(value))
         return { account, name: account };
+    const permissions = Array.isArray(value.permissions)
+        ? value.permissions.filter((permission) => typeof permission === 'string')
+        : [];
     return {
         id: safeString(value.id),
         account: safeString(value.account) ?? account,
-        name: safeString(value.name) ?? safeString(value.account) ?? account,
+        displayName: safeString(value.displayName) ?? safeString(value.name),
+        name: safeString(value.name) ?? safeString(value.displayName) ?? safeString(value.account) ?? account,
+        role: safeString(value.role),
+        permissions,
     };
 }
 function asLoginSession(value, account) {
@@ -590,6 +596,14 @@ function asCachedLoginSession(value) {
 function globalSessions(config) {
     return isJson(config.sessions) ? config.sessions : {};
 }
+class OrbitCliError extends Error {
+}
+function loginRequiredMessage(backendUrl) {
+    return `请先登录 / Please login: run orbit-tools login --backend-url ${normalizeBackendUrl(backendUrl)}`;
+}
+function insufficientPermissionMessage() {
+    return '权限不足 / Insufficient permission: ask an Orbit Hub owner/admin to grant access.';
+}
 async function cachedLoginSession(backendUrl) {
     const config = await readGlobalOrbitConfig();
     return asCachedLoginSession(globalSessions(config)[normalizeBackendUrl(backendUrl)]);
@@ -628,21 +642,61 @@ async function saveLoginSession(backendUrl, mcpUrl, account, login) {
     await writeGlobalOrbitConfigObject(config);
     return cached;
 }
-async function acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin) {
-    if (!forceLogin) {
-        const cached = await cachedLoginSession(backendUrl);
-        if (cached) {
-            return { login: cached, account: cached.account, fromCache: true };
+async function requireCachedLoginSession(backendUrl, mcpUrl) {
+    const cached = await cachedLoginSession(backendUrl);
+    if (!cached) {
+        throw new OrbitCliError(loginRequiredMessage(backendUrl));
+    }
+    const user = await fetchCurrentUser(backendUrl, cached.token);
+    const account = user.account ?? cached.account;
+    const refreshed = await saveLoginSession(backendUrl, mcpUrl ?? cached.mcpUrl ?? undefined, account, { ...cached, user });
+    return { login: refreshed, account };
+}
+async function loginCommand() {
+    const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
+    const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
+    const prompt = await createPromptSession();
+    try {
+        const account = (await prompt.question('Orbit account: ')).trim();
+        const password = (await prompt.question('Orbit password: ')).trim();
+        if (!account || !password)
+            throw new Error('Orbit account and password are required');
+        const login = await loginOrbitHub(backendUrl, account, password);
+        await saveLoginSession(backendUrl, mcpUrl, account, login);
+        console.log(`Logged in to Orbit Hub as ${login.user.account ?? account}.`);
+    }
+    finally {
+        prompt.close();
+    }
+}
+async function registerCommand() {
+    const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
+    const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
+    const prompt = await createPromptSession();
+    try {
+        const account = (await prompt.question('Orbit account: ')).trim();
+        const password = (await prompt.question('Orbit password: ')).trim();
+        const displayName = (await prompt.question('Display name: ')).trim();
+        if (!account || !password || !displayName) {
+            throw new Error('Orbit account, password and display name are required');
         }
+        const login = await registerOrbitHub(backendUrl, account, password, displayName);
+        await saveLoginSession(backendUrl, mcpUrl, account, login);
+        console.log(`Registered and logged in to Orbit Hub as ${login.user.account ?? account}.`);
+        console.log('If this Orbit Hub is bootstrapping and allows first-user bootstrap, the first user becomes owner/admin.');
     }
-    const account = (await prompt.question('Orbit account: ')).trim();
-    const password = (await prompt.question('Orbit password: ')).trim();
-    if (!account || !password) {
-        throw new Error('Orbit account and password are required');
+    finally {
+        prompt.close();
     }
-    const login = await loginOrbitHub(backendUrl, account, password);
-    const cached = await saveLoginSession(backendUrl, mcpUrl, account, login);
-    return { login: cached, account, fromCache: false };
+}
+async function meCommand() {
+    const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
+    const { login, account } = await requireCachedLoginSession(backendUrl);
+    const user = login.user;
+    console.log(`account: ${user.account ?? account}`);
+    console.log(`displayName: ${user.displayName ?? user.name ?? '-'}`);
+    console.log(`role: ${user.role ?? '-'}`);
+    console.log(`permissions: ${user.permissions && user.permissions.length > 0 ? user.permissions.join(', ') : '-'}`);
 }
 function asProductLine(value) {
     if (!isJson(value))
@@ -733,6 +787,10 @@ async function fetchOrbitJson(backendUrl, routePath, token) {
         throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
     }
     if (!response.ok) {
+        if (response.status === 401)
+            throw new OrbitCliError(loginRequiredMessage(backendUrl));
+        if (response.status === 403)
+            throw new OrbitCliError(insufficientPermissionMessage());
         throw new Error(`Orbit Hub backend returned HTTP ${response.status} for ${url}`);
     }
     try {
@@ -761,6 +819,10 @@ async function postOrbitJson(backendUrl, routePath, body, token) {
         throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
     }
     if (!response.ok) {
+        if (response.status === 401)
+            throw new OrbitCliError(loginRequiredMessage(backendUrl));
+        if (response.status === 403)
+            throw new OrbitCliError(insufficientPermissionMessage());
         throw new Error(`Orbit Hub backend returned HTTP ${response.status} for ${url}`);
     }
     try {
@@ -778,6 +840,23 @@ async function loginOrbitHub(backendUrl, account, password) {
         throw new Error('Orbit Hub backend response for /api/login did not include token/key/user data');
     }
     return session;
+}
+async function registerOrbitHub(backendUrl, account, password, displayName) {
+    const payload = await postOrbitJson(backendUrl, '/api/register', { account, password, displayName });
+    const session = asLoginSession(payload, account);
+    if (!session) {
+        throw new Error('Orbit Hub backend response for /api/register did not include token/key/user data');
+    }
+    return session;
+}
+async function fetchCurrentUser(backendUrl, token) {
+    const payload = await fetchOrbitJson(backendUrl, '/api/me', token);
+    const rawUser = isJson(payload) && isJson(payload.user) ? payload.user : payload;
+    const user = asOrbitUser(rawUser, '');
+    if (!user.account) {
+        throw new Error('Orbit Hub backend response for /api/me did not include user.account');
+    }
+    return user;
 }
 async function fetchProductLines(backendUrl, token) {
     const payload = await fetchOrbitJson(backendUrl, '/api/products', token);
@@ -1065,8 +1144,9 @@ async function bindProjectInteractively(repoPath, backendUrl, mcpUrl, owner) {
     const prompt = await createPromptSession();
     let productDetail;
     let selectedProject;
+    const { login, account } = await requireCachedLoginSession(backendUrl, mcpUrl);
     try {
-        ({ productDetail, selectedProject } = await promptProjectSelection(prompt, backendUrl));
+        ({ productDetail, selectedProject } = await promptProjectSelection(prompt, backendUrl, login.token));
     }
     finally {
         prompt.close();
@@ -1078,6 +1158,8 @@ async function bindProjectInteractively(repoPath, backendUrl, mcpUrl, owner) {
         owner,
         productDetail,
         selectedProject,
+        login,
+        account,
     });
     await writeProjectBinding(repoPath, binding);
     console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
@@ -1211,15 +1293,10 @@ async function promptAgent(prompt) {
 async function setupRepo() {
     const repoPath = resolveRepoArg();
     const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
-    const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
     const selectedAgentArg = parseAgentArg(getArg('--agent'));
-    const forceLogin = hasFlag('--login') || hasFlag('--force-login');
     const prompt = await createPromptSession();
-    let account = '';
-    let login;
     let selectedAgent;
     try {
-        ({ login, account } = await acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin));
         selectedAgent = selectedAgentArg ?? await promptAgent(prompt);
     }
     finally {
@@ -1228,17 +1305,12 @@ async function setupRepo() {
     const install = await installPackagedSkills(selectedAgent, true);
     await writeGlobalOrbitConfig({
         backendUrl,
-        token: login.token,
-        key: login.key,
-        session: login.session,
-        account,
-        user: login.user,
         selectedAgent,
         skillPath: install.skillPath,
         agentSkillPath: install.agentSkillPath,
         lastRepo: repoPath,
     });
-    console.log(JSON.stringify({ ok: true, repo: repoPath, backendUrl, account, selectedAgent, skillPath: install.skillPath, agentSkillPath: install.agentSkillPath }, null, 2));
+    console.log(JSON.stringify({ ok: true, repo: repoPath, backendUrl, selectedAgent, skillPath: install.skillPath, agentSkillPath: install.agentSkillPath }, null, 2));
 }
 async function setupProductLineRoot() {
     const rootPath = resolveProductLineRootArg();
@@ -1246,15 +1318,14 @@ async function setupProductLineRoot() {
     const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
     const ownerArg = getArg('--owner');
     const selectedAgent = parseAgentArg(getArg('--agent'));
-    const forceLogin = hasFlag('--login') || hasFlag('--force-login');
-    const prompt = await createPromptSession();
     let account = '';
     let login;
     let productDetail;
     const bound = [];
     const skipped = [];
+    ({ login, account } = await requireCachedLoginSession(backendUrl, mcpUrl));
+    const prompt = await createPromptSession();
     try {
-        ({ login, account } = await acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin));
         const owner = ownerArg ?? login.user.account ?? account;
         const productLines = await fetchProductLines(backendUrl, login.token);
         const selectedProduct = await promptSelect(prompt, 'Select product line:', productLines.map((entry) => entry.product), describeProductLine);
@@ -1363,11 +1434,10 @@ async function bindTopLevel() {
     const existing = await readProjectBinding(repoPath);
     const backendUrl = getArg('--backend-url') ?? existing?.backendUrl ?? defaultBackendUrl();
     const mcpUrl = resolveMcpUrl(getArg('--mcp-url'), existing?.mcpUrl);
-    const forceLogin = hasFlag('--login') || hasFlag('--force-login');
     const selectedAgent = parseAgentArg(getArg('--agent'));
+    const { login, account } = await requireCachedLoginSession(backendUrl, mcpUrl);
     const prompt = await createPromptSession();
     try {
-        const { login, account } = await acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin);
         const owner = getArg('--owner') ?? login.user.account ?? account;
         const target = await promptSelect(prompt, 'Bind target:', [
             { id: 'project', label: 'Single project repo' },
@@ -1484,13 +1554,12 @@ async function pullCloudStructure() {
     const rootPath = path.resolve(getArg('--root') ?? process.cwd());
     const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
     const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
-    const forceLogin = hasFlag('--login') || hasFlag('--force-login');
-    const prompt = await createPromptSession();
     const productConfigs = [];
     const projectConfigs = [];
     const gitResults = [];
+    const { login, account } = await requireCachedLoginSession(backendUrl, mcpUrl);
+    const prompt = await createPromptSession();
     try {
-        const { login, account } = await acquireLoginSession(prompt, backendUrl, mcpUrl, forceLogin);
         const owner = login.user.account ?? account;
         const productDetails = await selectProductLinesToPull(prompt, backendUrl, login.token);
         ensureDir(rootPath);
@@ -1637,6 +1706,18 @@ async function main() {
         printUsage();
         process.exit(0);
     }
+    if (group === 'register') {
+        await registerCommand();
+        return;
+    }
+    if (group === 'login') {
+        await loginCommand();
+        return;
+    }
+    if (group === 'me' || group === 'whoami') {
+        await meCommand();
+        return;
+    }
     if (group === 'init' || group === 'setup') {
         await setupRepo();
         return;
@@ -1697,6 +1778,10 @@ async function main() {
     process.exit(1);
 }
 main().catch((error) => {
+    if (error instanceof OrbitCliError) {
+        console.error(error.message);
+        process.exit(1);
+    }
     console.error(error instanceof Error ? error.stack ?? error.message : String(error));
     process.exit(1);
 });

@@ -17,8 +17,14 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
 - `orbit-tools mcp install`
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
+- `orbit-tools register`
+  - 在 Orbit Hub 创建账号，成功后缓存 session
+- `orbit-tools login`
+  - 显式登录共享 Orbit Hub backend，缓存 bearer token/session
+- `orbit-tools me`
+  - 调用 `/api/me` 查看当前账号、显示名、角色和权限
 - `orbit-tools init`
-  - 登录 Orbit Hub、缓存 session、选择 Agent，并安装 packaged skills
+  - 选择 Agent，并安装 packaged skills
   - 不选择产品线/项目，也不写 `.orbit/project.json`
 - `orbit-tools bind`
   - 绑定单个项目 repo，或绑定一个产品线根目录及其直接子目录
@@ -80,16 +86,27 @@ npm link
 orbit-tools codex-status current --repo /home/jasperWei/orbit/orbit-hub
 ```
 
-## Orbit 初始化、绑定与 Pull
+## Orbit 登录、初始化、绑定与 Pull
 
 推荐新流程：
 
 ```bash
+orbit-tools login
 orbit-tools init
 orbit-tools bind
 ```
 
-`init` 只处理登录/session 缓存和 packaged skill 安装。首次运行会提示 Orbit 账号/密码，并把同一 backend 的 session 缓存在 `~/.orbit/config.json`；之后默认复用缓存。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*/SKILL.md` 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
+首次使用也可以注册：
+
+```bash
+orbit-tools register
+```
+
+`register` 会调用 Orbit Hub `/api/register`，提交账号、密码和显示名；成功后和 `login` 一样缓存 session。服务器允许 bootstrap 时，第一个用户通常会成为 owner/admin，具体以 Orbit Hub 当前配置为准。`orbit-tools` 不保存明文密码，只缓存 backend 返回的 token/session。
+
+`login` 会调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
+
+`init` 只处理 packaged skill 安装。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*/SKILL.md` 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.orbit/project.json`。项目或产品线绑定由 `bind` 完成。
 
@@ -98,6 +115,8 @@ orbit-tools bind
 ```bash
 orbit-tools bind
 ```
+
+`bind` 需要已经登录；如果本地没有 session，或 cached token 被 Orbit Hub 返回 401/403 拒绝，CLI 会提示重新执行 `orbit-tools login` 或联系 owner/admin 授权。
 
 `bind` 会先确认绑定目标：
 
@@ -114,7 +133,7 @@ orbit-tools bind
 orbit-tools pull
 ```
 
-`pull` 会登录/复用 session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。项目维护了 `repositoryAddress`、`repoPath`、`repositoryUrl`、`gitUrl` 或 `remoteUrl` 时：
+`pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。项目维护了 `repositoryAddress`、`repoPath`、`repositoryUrl`、`gitUrl` 或 `remoteUrl` 时：
 
 - 目标目录不存在或为空：执行 `git clone`
 - 目标目录已经是 git repo：执行 `git fetch --all --prune` 和 `git pull --ff-only`
@@ -152,6 +171,7 @@ orbit-tools install --agent cc
 清理缓存登录：
 
 ```bash
+orbit-tools me
 orbit-tools logout
 orbit-tools logout --backend-url http://117.72.14.134:18081
 ```
@@ -182,6 +202,9 @@ orbit-tools project bind \
 本地开发示例：
 
 ```bash
+orbit-tools login \
+  --backend-url http://127.0.0.1:18081
+
 orbit-tools init \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://127.0.0.1:18081

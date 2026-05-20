@@ -81,7 +81,7 @@ async function createBareGitFixture(dir) {
 }
 
 async function withProductServer(fn, options = {}) {
-  const state = { loginCount: 0 };
+  const state = { loginCount: 0, registerCount: 0, requests: [], accountByToken: {} };
   const catalog = {
     products: [
       {
@@ -140,8 +140,34 @@ async function withProductServer(fn, options = {}) {
 
   const server = http.createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
+    state.requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
+    const requireAuth = () => {
+      if (req.headers.authorization !== 'Bearer orbit-dev-token' && req.headers.authorization !== 'Bearer orbit-register-token') {
+        res.statusCode = options.authStatus ?? 401;
+        res.end(JSON.stringify({ error: 'auth required' }));
+        return false;
+      }
+      return true;
+    };
     if (req.method === 'GET' && req.url === '/api/products') {
+      if (!requireAuth()) return;
       res.end(JSON.stringify(catalog));
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/me') {
+      if (!requireAuth()) return;
+      const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      const account = state.accountByToken[token] ?? 'orbit-user';
+      res.end(JSON.stringify({
+        user: {
+          id: 'orbit-dev-user',
+          account,
+          displayName: 'Orbit User',
+          name: 'Orbit User',
+          role: 'admin',
+          permissions: ['products:read', 'projects:bind'],
+        },
+      }));
       return;
     }
     if (req.method === 'POST' && req.url === '/api/login') {
@@ -157,6 +183,7 @@ async function withProductServer(fn, options = {}) {
           res.end(JSON.stringify({ error: 'account and password are required' }));
           return;
         }
+        state.accountByToken['orbit-dev-token'] = payload.account;
         res.end(JSON.stringify({
           token: 'orbit-dev-token',
           key: 'orbit-dev-key',
@@ -164,13 +191,46 @@ async function withProductServer(fn, options = {}) {
           user: {
             id: 'orbit-dev-user',
             account: payload.account,
-            name: payload.account,
+            displayName: 'Orbit User',
+            name: 'Orbit User',
+            role: 'admin',
+            permissions: ['products:read', 'projects:bind'],
+          },
+        }));
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/register') {
+      state.registerCount++;
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString('utf8');
+      });
+      req.on('end', () => {
+        state.registerPayload = JSON.parse(body);
+        if (!state.registerPayload.account || !state.registerPayload.password || !state.registerPayload.displayName) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'account, password and displayName are required' }));
+          return;
+        }
+        state.accountByToken['orbit-register-token'] = state.registerPayload.account;
+        res.end(JSON.stringify({
+          token: 'orbit-register-token',
+          key: 'orbit-register-key',
+          session: 'orbit-register-session',
+          user: {
+            id: 'orbit-register-user',
+            account: state.registerPayload.account,
+            displayName: state.registerPayload.displayName,
+            role: 'owner',
+            permissions: ['*'],
           },
         }));
       });
       return;
     }
     if (req.method === 'GET' && req.url === '/api/products/pl_2') {
+      if (!requireAuth()) return;
       res.end(JSON.stringify({ ...catalog.products.find((entry) => entry.product.id === 'pl_2'), runtime: catalog.runtime }));
       return;
     }
@@ -189,8 +249,11 @@ async function withProductServer(fn, options = {}) {
 
 {
   const usage = await run([]);
-  assert.match(usage.stdout, /Commands:\n  init\n  bind\n  pull\n  init-product-line\n/);
-  assert.match(usage.stdout, /init = login\/session cache \+ packaged skill setup/);
+  assert.match(usage.stdout, /Commands:\n  register\n  login\n  me\n  init\n  bind\n  pull\n/);
+  assert.match(usage.stdout, /init = packaged skill setup only/);
+  assert.match(usage.stdout, /login = create a local Orbit Hub session/);
+  assert.match(usage.stdout, /register = create an Orbit Hub account/);
+  assert.match(usage.stdout, /me = show current Orbit Hub user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = create local folders from Orbit Hub/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
@@ -256,8 +319,67 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    const repo = path.join(dir, 'repo');
+    await assert.rejects(
+      run(['bind', '--repo', repo, '--backend-url', backendUrl], { env: { HOME: home } }),
+      /请先登录 \/ Please login/,
+    );
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'denied-user',
+          token: 'bad-token',
+          key: 'bad-key',
+          user: { account: 'denied-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+    await assert.rejects(
+      run(['me', '--backend-url', backendUrl], { env: { HOME: home } }),
+      /请先登录 \/ Please login/,
+    );
+  }, { authStatus: 401 });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'denied-user',
+          token: 'bad-token',
+          key: 'bad-key',
+          user: { account: 'denied-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+    await assert.rejects(
+      run(['me', '--backend-url', backendUrl], { env: { HOME: home } }),
+      /权限不足 \/ Insufficient permission/,
+    );
+  }, { authStatus: 403 });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
     const repo = path.join(dir, 'repo');
     const home = path.join(dir, 'home');
+
+    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-user\nsecret\n', { env: { HOME: home } });
 
     const result = await runInteractive([
       'project',
@@ -292,13 +414,25 @@ await withTempDir(async (dir) => {
     const home = path.join(dir, 'home');
 
     await runInteractive([
+      'login',
+      '--backend-url',
+      backendUrl,
+    ], 'orbit-user\nsecret\n', { env: { HOME: home } });
+
+    assert.equal(state.loginCount, 1);
+    const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(config.sessions[backendUrl].account, 'orbit-user');
+    assert.equal(config.sessions[backendUrl].mcpUrl, undefined);
+    assert.equal(config.sessions[backendUrl].token, 'orbit-dev-token');
+    assert.equal(config.sessions[backendUrl].password, undefined);
+
+    await runInteractive([
       'init',
       '--repo',
       repoOne,
       '--backend-url',
       backendUrl,
-    ], 'orbit-user\nsecret\n3\n', { env: { HOME: home } });
-
+    ], '3\n', { env: { HOME: home } });
     assert.equal(state.loginCount, 1);
     await assert.rejects(readFile(path.join(repoOne, '.orbit', 'project.json'), 'utf8'));
     assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'), /Orbit/);
@@ -313,10 +447,6 @@ await withTempDir(async (dir) => {
 
     assert.equal(state.loginCount, 1);
     await assert.rejects(readFile(path.join(repoTwo, '.orbit', 'project.json'), 'utf8'));
-
-    const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
-    assert.equal(config.sessions[backendUrl].account, 'orbit-user');
-    assert.equal(config.sessions[backendUrl].mcpUrl, undefined);
 
     await run(['logout'], { env: { HOME: home } });
     const loggedOutConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
@@ -376,6 +506,26 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    await runInteractive(['register', '--backend-url', backendUrl], 'new-user\nsecret\nNew User\n', { env: { HOME: home } });
+    assert.equal(state.registerCount, 1);
+    assert.deepEqual(state.registerPayload, { account: 'new-user', password: 'secret', displayName: 'New User' });
+
+    const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(config.sessions[backendUrl].account, 'new-user');
+    assert.equal(config.sessions[backendUrl].token, 'orbit-register-token');
+    assert.equal(config.sessions[backendUrl].password, undefined);
+
+    const me = await run(['me', '--backend-url', backendUrl], { env: { HOME: home } });
+    assert.match(me.stdout, /account: new-user/);
+    assert.match(me.stdout, /displayName: Orbit User/);
+    assert.match(me.stdout, /role: admin/);
+    assert.match(me.stdout, /permissions: products:read, projects:bind/);
+  });
+});
+
+await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
     const repo = path.join(dir, 'repo');
     const home = path.join(dir, 'home');
@@ -386,9 +536,9 @@ await withTempDir(async (dir) => {
       repo,
       '--backend-url',
       backendUrl,
-    ], 'jasper\nsecret\n1\n', { env: { HOME: home } });
+    ], '1\n', { env: { HOME: home } });
 
-    assert.match(result.stdout, /Orbit account/);
+    assert.doesNotMatch(result.stdout, /Orbit account/);
     assert.doesNotMatch(result.stdout, /Select product line/);
     assert.doesNotMatch(result.stdout, /Select project/);
     assert.match(result.stdout, /Select agent/);
@@ -416,11 +566,10 @@ await withTempDir(async (dir) => {
       'init',
       '--backend-url',
       backendUrl,
-    ], 'orbit-account\nsecret\n3\n', { cwd: repo, env: { HOME: home, USER: 'system-user' } });
+    ], '3\n', { cwd: repo, env: { HOME: home, USER: 'system-user' } });
 
     await assert.rejects(readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
     const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
-    assert.equal(globalConfig.account, 'orbit-account');
     assert.equal(globalConfig.backendUrl, backendUrl);
   });
 });
@@ -434,6 +583,7 @@ await withTempDir(async (dir) => {
     await mkdir(path.join(root, 'notes'), { recursive: true });
     await mkdir(path.join(root, '.hidden'), { recursive: true });
     await mkdir(path.join(root, 'node_modules'), { recursive: true });
+    await runInteractive(['login', '--backend-url', backendUrl], 'jasper\nsecret\n', { env: { HOME: home } });
 
     const result = await runInteractive([
       'bind',
@@ -443,7 +593,7 @@ await withTempDir(async (dir) => {
       backendUrl,
       '--owner',
       'product-owner',
-    ], 'jasper\nsecret\n2\n2\n1\n3\n', { env: { HOME: home } });
+    ], '2\n2\n1\n3\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Select product line/);
     assert.doesNotMatch(result.stdout, /Orbit Check Product/);
@@ -492,12 +642,13 @@ await withTempDir(async (dir) => {
     const home = path.join(dir, 'home');
     await mkdir(path.join(root, 'console'), { recursive: true });
     await writeFile(path.join(root, 'console', 'package.json'), JSON.stringify({ name: 'console' }, null, 2));
+    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-account\nsecret\n', { env: { HOME: home } });
 
     await runInteractive([
       'bind',
       '--backend-url',
       backendUrl,
-    ], 'orbit-account\nsecret\n2\n2\n1\n', { cwd: root, env: { HOME: home, USER: 'system-user' } });
+    ], '2\n2\n1\n', { cwd: root, env: { HOME: home, USER: 'system-user' } });
 
     const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
     assert.equal(rootConfig.rootPath, root);
@@ -514,6 +665,7 @@ await withTempDir(async (dir) => {
     const root = path.join(dir, 'product-root');
     const home = path.join(dir, 'home');
     await mkdir(root, { recursive: true });
+    await runInteractive(['login', '--backend-url', backendUrl], 'jasper\nsecret\n', { env: { HOME: home } });
 
     await runInteractive([
       'init-product-line',
@@ -521,7 +673,7 @@ await withTempDir(async (dir) => {
       root,
       '--backend-url',
       backendUrl,
-    ], 'jasper\nsecret\n2\n', { env: { HOME: home } });
+    ], '2\n', { env: { HOME: home } });
 
     const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
     assert.equal(rootConfig.rootPath, root);
@@ -532,6 +684,7 @@ await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
     const repo = path.join(dir, 'repo');
     const home = path.join(dir, 'home');
+    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-account\nsecret\n', { env: { HOME: home } });
 
     const result = await runInteractive([
       'bind',
@@ -541,7 +694,7 @@ await withTempDir(async (dir) => {
       backendUrl,
       '--owner',
       'bind-owner',
-    ], 'orbit-account\nsecret\n1\n2\n1\n', { env: { HOME: home } });
+    ], '1\n2\n1\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Bind target:/);
     assert.match(result.stdout, /Select product line/);
@@ -561,6 +714,7 @@ await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
     const root = path.join(dir, 'pull-root');
     const home = path.join(dir, 'home');
+    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-account\nsecret\n', { env: { HOME: home } });
 
     const result = await runInteractive([
       'pull',
@@ -568,7 +722,7 @@ await withTempDir(async (dir) => {
       root,
       '--backend-url',
       backendUrl,
-    ], 'orbit-account\nsecret\n1\n2\n', { env: { HOME: home } });
+    ], '1\n2\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Pull product lines:/);
     assert.match(result.stdout, /cloned:/);
