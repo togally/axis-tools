@@ -2001,7 +2001,7 @@ async function showProject(): Promise<void> {
 
 async function main(): Promise<void> {
   const [, , group, command] = process.argv;
-  if (!group) {
+  if (!group || group === '--help' || group === '-h') {
     printUsage();
     process.exit(0);
   }

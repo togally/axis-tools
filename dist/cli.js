@@ -1674,7 +1674,7 @@ async function showProject() {
 }
 async function main() {
     const [, , group, command] = process.argv;
-    if (!group) {
+    if (!group || group === '--help' || group === '-h') {
         printUsage();
         process.exit(0);
     }

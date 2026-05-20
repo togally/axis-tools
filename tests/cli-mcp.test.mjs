@@ -220,7 +220,11 @@ async function withProductServer(fn, options = {}) {
 
 {
   const usage = await run([]);
+  const longHelp = await run(['--help']);
+  const shortHelp = await run(['-h']);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
+  assert.equal(longHelp.stdout, usage.stdout);
+  assert.equal(shortHelp.stdout, usage.stdout);
   assert.match(usage.stdout, /init = packaged skill setup only/);
   assert.match(usage.stdout, /login = create a local Orbit Hub session/);
   assert.match(usage.stdout, /me = show current Orbit Hub user/);
@@ -228,6 +232,7 @@ async function withProductServer(fn, options = {}) {
   assert.match(usage.stdout, /pull = create local folders from Orbit Hub/);
   assert.doesNotMatch(usage.stdout, /\bregister\b/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
+  await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);
 }
 
 await withTempDir(async (dir) => {
