@@ -81,7 +81,7 @@ async function createBareGitFixture(dir) {
 }
 
 async function withProductServer(fn, options = {}) {
-  const state = { loginCount: 0, registerCount: 0, requests: [], accountByToken: {} };
+  const state = { loginCount: 0, requests: [], accountByToken: {} };
   const catalog = {
     products: [
       {
@@ -142,7 +142,7 @@ async function withProductServer(fn, options = {}) {
     res.setHeader('content-type', 'application/json');
     state.requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
     const requireAuth = () => {
-      if (req.headers.authorization !== 'Bearer orbit-dev-token' && req.headers.authorization !== 'Bearer orbit-register-token') {
+      if (req.headers.authorization !== 'Bearer orbit-dev-token') {
         res.statusCode = options.authStatus ?? 401;
         res.end(JSON.stringify({ error: 'auth required' }));
         return false;
@@ -200,35 +200,6 @@ async function withProductServer(fn, options = {}) {
       });
       return;
     }
-    if (req.method === 'POST' && req.url === '/api/register') {
-      state.registerCount++;
-      let body = '';
-      req.on('data', (chunk) => {
-        body += chunk.toString('utf8');
-      });
-      req.on('end', () => {
-        state.registerPayload = JSON.parse(body);
-        if (!state.registerPayload.account || !state.registerPayload.password || !state.registerPayload.displayName) {
-          res.statusCode = 400;
-          res.end(JSON.stringify({ error: 'account, password and displayName are required' }));
-          return;
-        }
-        state.accountByToken['orbit-register-token'] = state.registerPayload.account;
-        res.end(JSON.stringify({
-          token: 'orbit-register-token',
-          key: 'orbit-register-key',
-          session: 'orbit-register-session',
-          user: {
-            id: 'orbit-register-user',
-            account: state.registerPayload.account,
-            displayName: state.registerPayload.displayName,
-            role: 'owner',
-            permissions: ['*'],
-          },
-        }));
-      });
-      return;
-    }
     if (req.method === 'GET' && req.url === '/api/products/pl_2') {
       if (!requireAuth()) return;
       res.end(JSON.stringify({ ...catalog.products.find((entry) => entry.product.id === 'pl_2'), runtime: catalog.runtime }));
@@ -249,13 +220,13 @@ async function withProductServer(fn, options = {}) {
 
 {
   const usage = await run([]);
-  assert.match(usage.stdout, /Commands:\n  register\n  login\n  me\n  init\n  bind\n  pull\n/);
+  assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
   assert.match(usage.stdout, /init = packaged skill setup only/);
   assert.match(usage.stdout, /login = create a local Orbit Hub session/);
-  assert.match(usage.stdout, /register = create an Orbit Hub account/);
   assert.match(usage.stdout, /me = show current Orbit Hub user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = create local folders from Orbit Hub/);
+  assert.doesNotMatch(usage.stdout, /\bregister\b/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
 }
 
@@ -503,26 +474,6 @@ await withTempDir(async (dir) => {
 
   await run(['install', '--agent', 'codex', '--force'], { env: { HOME: home } });
   assert.notEqual(await readFile(modifiedDependency, 'utf8'), 'locally modified dependency\n');
-});
-
-await withTempDir(async (dir) => {
-  await withProductServer(async (backendUrl, state) => {
-    const home = path.join(dir, 'home');
-    await runInteractive(['register', '--backend-url', backendUrl], 'new-user\nsecret\nNew User\n', { env: { HOME: home } });
-    assert.equal(state.registerCount, 1);
-    assert.deepEqual(state.registerPayload, { account: 'new-user', password: 'secret', displayName: 'New User' });
-
-    const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
-    assert.equal(config.sessions[backendUrl].account, 'new-user');
-    assert.equal(config.sessions[backendUrl].token, 'orbit-register-token');
-    assert.equal(config.sessions[backendUrl].password, undefined);
-
-    const me = await run(['me', '--backend-url', backendUrl], { env: { HOME: home } });
-    assert.match(me.stdout, /account: new-user/);
-    assert.match(me.stdout, /displayName: Orbit User/);
-    assert.match(me.stdout, /role: admin/);
-    assert.match(me.stdout, /permissions: products:read, projects:bind/);
-  });
 });
 
 await withTempDir(async (dir) => {

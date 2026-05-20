@@ -180,7 +180,7 @@ const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
 
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  register\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  register = create an Orbit Hub account and local session\n  login = create a local Orbit Hub session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = create a local Orbit Hub session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -888,26 +888,6 @@ async function loginCommand(): Promise<void> {
   }
 }
 
-async function registerCommand(): Promise<void> {
-  const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
-  const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
-  const prompt = await createPromptSession();
-  try {
-    const account = (await prompt.question('Orbit account: ')).trim();
-    const password = (await prompt.question('Orbit password: ')).trim();
-    const displayName = (await prompt.question('Display name: ')).trim();
-    if (!account || !password || !displayName) {
-      throw new Error('Orbit account, password and display name are required');
-    }
-    const login = await registerOrbitHub(backendUrl, account, password, displayName);
-    await saveLoginSession(backendUrl, mcpUrl, account, login);
-    console.log(`Registered and logged in to Orbit Hub as ${login.user.account ?? account}.`);
-    console.log('If this Orbit Hub is bootstrapping and allows first-user bootstrap, the first user becomes owner/admin.');
-  } finally {
-    prompt.close();
-  }
-}
-
 async function meCommand(): Promise<void> {
   const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
   const { login, account } = await requireCachedLoginSession(backendUrl);
@@ -1054,15 +1034,6 @@ async function loginOrbitHub(backendUrl: string, account: string, password: stri
   const session = asLoginSession(payload, account);
   if (!session) {
     throw new Error('Orbit Hub backend response for /api/login did not include token/key/user data');
-  }
-  return session;
-}
-
-async function registerOrbitHub(backendUrl: string, account: string, password: string, displayName: string): Promise<OrbitLoginSession> {
-  const payload = await postOrbitJson(backendUrl, '/api/register', { account, password, displayName });
-  const session = asLoginSession(payload, account);
-  if (!session) {
-    throw new Error('Orbit Hub backend response for /api/register did not include token/key/user data');
   }
   return session;
 }
@@ -2033,11 +2004,6 @@ async function main(): Promise<void> {
   if (!group) {
     printUsage();
     process.exit(0);
-  }
-
-  if (group === 'register') {
-    await registerCommand();
-    return;
   }
 
   if (group === 'login') {

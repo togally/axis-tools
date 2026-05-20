@@ -17,8 +17,6 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
 - `orbit-tools mcp install`
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
-- `orbit-tools register`
-  - 在 Orbit Hub 创建账号，成功后缓存 session
 - `orbit-tools login`
   - 显式登录共享 Orbit Hub backend，缓存 bearer token/session
 - `orbit-tools me`
@@ -96,13 +94,7 @@ orbit-tools init
 orbit-tools bind
 ```
 
-首次使用也可以注册：
-
-```bash
-orbit-tools register
-```
-
-`register` 会调用 Orbit Hub `/api/register`，提交账号、密码和显示名；成功后和 `login` 一样缓存 session。服务器允许 bootstrap 时，第一个用户通常会成为 owner/admin，具体以 Orbit Hub 当前配置为准。`orbit-tools` 不保存明文密码，只缓存 backend 返回的 token/session。
+账号创建只在 Orbit Hub Web UI 完成；CLI 不提供注册命令。
 
 `login` 会调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
 
