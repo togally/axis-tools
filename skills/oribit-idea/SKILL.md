@@ -12,7 +12,7 @@ Use this skill to incubate an early idea through the Oribit Idea workflow and tu
 1. Read `.orbit/project.json` from the target repo.
 2. Confirm it includes `backendUrl`, `token`, `productLineUuid`, and `projectUuid`.
 3. Prefer `productLineUuid` and `projectUuid` for Orbit Hub association. Preserve legacy `productLineId` and `projectId` in metadata when present.
-4. If `token` is missing, ask the user to run `orbit-tools init --login` or `orbit-tools init-product-line --login` before importing.
+4. If `token` is missing, ask the user to run `orbit-tools init --login` to refresh the session cache, then `orbit-tools bind` if the repo still lacks a project binding.
 
 ## Discussion Flow
 

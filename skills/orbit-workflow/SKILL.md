@@ -10,10 +10,10 @@ Use this skill when the repo has an Orbit project binding in `.orbit/project.jso
 ## Required Context
 
 1. Run `orbit-tools project show --json` from the target repo.
-2. Confirm the binding has `backendUrl`, `mcpUrl`, `productLineUuid`, `projectUuid`, and `owner`.
+2. Confirm the binding has `backendUrl`, `productLineUuid`, `projectUuid`, and `owner`. Treat `mcpUrl` as optional and preserve it when it already exists.
 3. If legacy `productLineId` or `projectId` fields are present, preserve them for compatibility but prefer UUID fields for new Orbit association.
 4. Use the configured Orbit MCP server for Orbit DB mutations. Do not edit Orbit DB files directly.
-5. If authentication is missing or expired, run `orbit-tools init --login` for a repo or `orbit-tools init-product-line --login` for a product-line root to refresh the cached session in `~/.orbit/config.json`.
+5. If authentication is missing or expired, run `orbit-tools init --login` to refresh the cached session in `~/.orbit/config.json`.
 
 ## OfficeHours Intake
 
@@ -55,23 +55,29 @@ Install Orbit MCP into Hermes:
 orbit-tools mcp install --backend-url http://117.72.14.134:18081 --mcp-url http://117.72.14.134:18081/api/mcp
 ```
 
-Bind the current repo to a product-line project:
+Initialize local Orbit CLI state and packaged skills:
 
 ```bash
 orbit-tools init
 ```
 
-The command logs in to the shared Orbit Hub backend by default, binds the current directory, and uses the logged-in Orbit account as owner unless `--owner` is explicitly provided. Login sessions are cached by `backendUrl` in `~/.orbit/config.json`; pass `--login` or `--force-login` to prompt for account/password again. For local development only, override the backend with `--backend-url http://127.0.0.1:18081` or `ORBIT_BACKEND_URL`.
+The command logs in to the shared Orbit Hub backend by default, refreshes the session cache, and installs packaged Orbit skills for the selected agent. Login sessions are cached by `backendUrl` in `~/.orbit/config.json`; pass `--login` or `--force-login` to prompt for account/password again. For local development only, override the backend with `--backend-url http://127.0.0.1:18081` or `ORBIT_BACKEND_URL`.
 
-Install packaged Orbit skills:
+Bind the current repo to a product-line project:
 
 ```bash
-orbit-tools install --agent all
-orbit-tools install --agent codex
-orbit-tools install --agent claude-code
+orbit-tools bind
 ```
 
-The install command copies every `skills/*/SKILL.md` from the package to `~/.orbit/skills/<skill>/SKILL.md` and to the selected agent skill directories. It refuses to overwrite locally modified files unless `--force` is provided.
+`bind` writes `.orbit/project.json` for a repo binding or `.orbit/product-line.json` plus child project bindings for a product-line root. Use `--repo <repo-path>` for a single repo or `--root <root-path>` for a product-line root. It uses the cached session from `orbit-tools init`; pass `--login` first if the session is missing or expired.
+
+Create local folders from Orbit Hub and clone maintained repos:
+
+```bash
+orbit-tools pull
+```
+
+`pull` creates product-line and project folders from cloud state, writes the corresponding `.orbit/product-line.json` and `.orbit/project.json` files, and clones maintained repositories when repo URLs are available.
 
 Clear cached login/session data:
 
@@ -80,23 +86,21 @@ orbit-tools logout
 orbit-tools logout --backend-url http://117.72.14.134:18081
 ```
 
-For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly instead of `--interactive`.
+For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly to `orbit-tools bind` instead of using interactive selection.
 
-Initialize a product-line root that contains several child project folders:
+Compatibility alias:
 
 ```bash
 orbit-tools init-product-line
 ```
 
-Run this from the product-line root. The command reuses the same cached Orbit Hub session as `orbit-tools init`, writes `<root>/.orbit/product-line.json`, scans immediate child directories, and prompts for each child in sequence. Choose one project from the selected product line to bind that folder, or choose `Skip` explicitly and continue. Hidden directories, `.git`, `node_modules`, `dist`, `build`, and `cache` are ignored; unrecognized folders are still offered as `plain folder`.
-
-`init-product-line` writes `<child>/.orbit/project.json` only for folders you bind. It does not ask for an agent or install packaged skills per folder unless `--agent codex`, `--agent claude-code`, `--agent cc`, or `--agent none` is supplied; when supplied, it copies packaged skills the same way as `orbit-tools init` and records the selected agent paths in both root and child configs.
+`init-product-line` remains available for older scripts, but new workflows should use `orbit-tools bind --root <root-path>` for product-line binding.
 
 Advanced/local development overrides:
 
 ```bash
-orbit-tools init --repo <repo-path> --backend-url http://127.0.0.1:18081 --owner <owner>
-orbit-tools init-product-line --root <root-path> --backend-url http://127.0.0.1:18081 --owner <owner>
+orbit-tools init --repo <repo-path> --backend-url http://127.0.0.1:18081
+orbit-tools bind --root <root-path> --backend-url http://127.0.0.1:18081 --owner <owner>
 ```
 
 Show the active binding:
