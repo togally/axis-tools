@@ -45,7 +45,7 @@ orbit-tools/
 ├── skills/
 │   ├── orbit-workflow/
 │   │   └── SKILL.md
-│   └── orbit-office-idea/
+│   └── oribit-idea/
 │       └── SKILL.md
 ├── src/
 │   └── cli.ts
@@ -97,7 +97,7 @@ orbit-tools init
 
 CLI 默认绑定当前目录，owner 默认使用登录的 Orbit 账号。它会从共享 Orbit Hub backend `http://117.72.14.134:18081` 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。默认 MCP URL 是 `<backend-url>/api/mcp`。`--backend-url` 和 `ORBIT_BACKEND_URL` 仍可覆盖 backend，本地开发和测试请显式传本机地址。
 
-Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器会把本仓库的所有 `skills/*/SKILL.md` 复制到稳定路径 `~/.orbit/skills/<skill>/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/<skill>/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/<skill>/SKILL.md`。安装 `orbit-office-idea` 时，还会为选中的 Agent 目标确保 `gstack-office-hours` 依赖技能存在：优先复制本机 Hermes 的 `~/.hermes/skills/gstack-office-hours/SKILL.md`，不存在时写入最小依赖说明。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空其他技能目录。
+Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器会把本仓库的所有 `skills/*/SKILL.md` 复制到稳定路径 `~/.orbit/skills/<skill>/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/<skill>/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/<skill>/SKILL.md`。安装 `oribit-idea` 时，还会为选中的 Agent 目标确保 `gstack-office-hours` 依赖技能存在：优先复制本机 Hermes 的 `~/.hermes/skills/gstack-office-hours/SKILL.md`，不存在时写入最小依赖说明。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空其他技能目录。
 
 也可以单独安装技能：
 

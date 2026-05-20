@@ -19,7 +19,7 @@ Use this skill when the repo has an Orbit project binding in `.orbit/project.jso
 
 When an OfficeHours discussion produces actionable work:
 
-1. If the user wants a fresh idea discussion, use the `orbit-office-idea` skill first. It internally calls gstack's `office-hours` capability/skill, produces office-hours docs, and imports/uploads them to Orbit Hub using the project binding.
+1. If the user wants a fresh idea discussion, use the `oribit-idea` skill first. It internally calls gstack's `office-hours` capability/skill, produces office-hours docs, and imports/uploads them to Orbit Hub using the project binding.
 2. Submit the discussion summary to Orbit DB under the bound `productLineUuid` and `projectUuid`.
 3. Preserve the original discussion link, participants, owner, and date when available.
 4. Split the discussion into requirement items. Each item should have a title, description, source discussion, acceptance criteria, and type.

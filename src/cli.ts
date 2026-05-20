@@ -1360,7 +1360,7 @@ async function gstackOfficeHoursDependencyText(): Promise<string> {
 
   return `---
 name: gstack-office-hours
-description: Dependency skill for running gstack office-hours discussions used by Orbit Office Idea.
+description: Dependency skill for running gstack office-hours discussions used by Oribit Idea.
 ---
 
 # Gstack Office Hours
@@ -1373,7 +1373,7 @@ Run the office-hours discussion with:
 gstack office-hours
 \`\`\`
 
-The \`orbit-office-idea\` skill uses this dependency to incubate ideas through an office-hours discussion, then turns the resulting notes into Orbit-ready artifacts.
+The \`oribit-idea\` skill uses this dependency to incubate ideas through an office-hours discussion, then turns the resulting notes into Orbit-ready artifacts.
 `;
 }
 

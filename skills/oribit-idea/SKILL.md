@@ -1,11 +1,11 @@
 ---
-name: orbit-office-idea
-description: Use when a user wants to incubate an idea through the Orbit Office Idea workflow, internally call gstack office-hours, turn the discussion into artifacts, and import or upload the result to the bound Orbit Hub project.
+name: oribit-idea
+description: Use when a user wants to incubate an idea through the Oribit Idea workflow, internally call gstack office-hours, turn the discussion into artifacts, and import or upload the result to the bound Orbit Hub project.
 ---
 
-# Orbit Office Idea
+# Oribit Idea
 
-Use this skill to incubate an early idea through the Orbit Office Idea workflow and turn it into Orbit-ready office-hours artifacts. This skill depends on gstack's `office-hours` capability/skill and internally calls it to run the office-hours discussion.
+Use this skill to incubate an early idea through the Oribit Idea workflow and turn it into Orbit-ready office-hours artifacts. This skill depends on gstack's `office-hours` capability/skill and internally calls it to run the office-hours discussion.
 
 ## Required Binding
 

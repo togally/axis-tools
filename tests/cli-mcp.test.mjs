@@ -318,7 +318,7 @@ await withTempDir(async (dir) => {
   assert.equal(installJson.ok, true);
   assert.equal(installJson.installed.length, 8);
 
-  for (const skill of ['orbit-workflow', 'orbit-office-idea']) {
+  for (const skill of ['orbit-workflow', 'oribit-idea']) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
     const codexSkill = await readFile(path.join(home, '.codex', 'skills', skill, 'SKILL.md'), 'utf8');
     const claudeSkill = await readFile(path.join(home, '.claude', 'skills', skill, 'SKILL.md'), 'utf8');
