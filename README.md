@@ -18,13 +18,16 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
 - `orbit-tools init`
-  - 完整交互式初始化当前 repo：登录 Orbit Hub、选择产品线、选择项目、选择 Agent，并安装 orbit-tools skill
-  - 同一 `backendUrl` 的登录会缓存到 `~/.orbit/config.json`，后续初始化默认复用 session
-  - 写入 `<repo>/.orbit/project.json`
+  - 登录 Orbit Hub、缓存 session、选择 Agent，并安装 packaged skills
+  - 不选择产品线/项目，也不写 `.orbit/project.json`
+- `orbit-tools bind`
+  - 绑定单个项目 repo，或绑定一个产品线根目录及其直接子目录
+  - 写入 `.orbit/project.json` / `.orbit/product-line.json`
+- `orbit-tools pull`
+  - 从 Orbit Hub 拉取产品线/项目结构，在本地创建目录
+  - 项目维护了 repo 地址时会 clone；已有 git repo 时会安全 fetch/pull
 - `orbit-tools init-product-line`
-  - 从产品线根目录运行：登录 Orbit Hub、选择产品线、扫描当前根目录下一层子目录
-  - 对每个子目录逐个选择绑定到该产品线下的项目，或明确 skip
-  - 写入根目录 `.orbit/product-line.json`，并为已绑定子目录写入 `<child>/.orbit/project.json`
+  - 兼容旧入口；新文档推荐使用 `orbit-tools bind`
 - `orbit-tools install`
   - 安装本包 `skills/*/SKILL.md` 到 `~/.orbit/skills`，并按 `--agent` 同步到 Codex / Claude Code skill 目录
 - `orbit-tools logout`
@@ -77,7 +80,49 @@ npm link
 orbit-tools codex-status current --repo /home/jasperWei/orbit/orbit-hub
 ```
 
-## Orbit MCP 与项目绑定
+## Orbit 初始化、绑定与 Pull
+
+推荐新流程：
+
+```bash
+orbit-tools init
+orbit-tools bind
+```
+
+`init` 只处理登录/session 缓存和 packaged skill 安装。首次运行会提示 Orbit 账号/密码，并把同一 backend 的 session 缓存在 `~/.orbit/config.json`；之后默认复用缓存。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*/SKILL.md` 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
+
+`init` 不会询问产品线/项目，也不会写当前 repo 的 `.orbit/project.json`。项目或产品线绑定由 `bind` 完成。
+
+### 绑定本地目录
+
+```bash
+orbit-tools bind
+```
+
+`bind` 会先确认绑定目标：
+
+- 单个项目 repo：选择产品线，再选择项目，写入当前 repo 的 `.orbit/project.json`
+- 产品线根目录：选择产品线，写入根目录 `.orbit/product-line.json`，扫描直接子目录并逐个绑定或跳过
+
+绑定 JSON 会写入 `backendUrl`、登录/session 信息、产品线/项目 id/name、`repo`、`owner` 和更新时间。`mcpUrl` 默认不再写入；只有显式传 `--mcp-url`，或已有绑定里本来有 `mcpUrl` 时才会保留。
+
+旧的 `orbit-tools init-product-line` 仍作为兼容入口保留，行为等同于产品线根目录绑定；新使用方式请优先用 `orbit-tools bind`。
+
+### Pull 云端结构
+
+```bash
+orbit-tools pull
+```
+
+`pull` 会登录/复用 session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。项目维护了 `repositoryAddress`、`repoPath`、`repositoryUrl`、`gitUrl` 或 `remoteUrl` 时：
+
+- 目标目录不存在或为空：执行 `git clone`
+- 目标目录已经是 git repo：执行 `git fetch --all --prune` 和 `git pull --ff-only`
+- 目标目录非空且不是 git repo：不覆盖，只写入/更新绑定配置并在 summary 中标记跳过 clone
+
+`pull` 会为产品线目录写 `.orbit/product-line.json`，为项目目录写 `.orbit/project.json`。owner 默认使用当前登录账号；`mcpUrl` 同样只在显式传入时写入。
+
+### Orbit MCP
 
 安装 Orbit HTTP MCP 到 Hermes：
 
@@ -89,15 +134,9 @@ orbit-tools mcp install \
 
 默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
 
-把 repo 绑定到 Orbit Hub 的产品线和项目。推荐主流程是 `orbit-tools init`：首次针对某个 `backendUrl` 运行时输入 Orbit 账号/密码，CLI 调用共享 backend 的 `/api/login`；当前登录是模拟实现，只要求账号密码非空，并返回固定 `token/key/session` 与用户信息。登录成功后 session 会按 `backendUrl` 缓存到 `~/.orbit/config.json`，后续 `init` / `init-product-line` 使用同一个 backend 时会直接复用，不再提示账号密码。传 `--login` 或 `--force-login` 可强制重新登录。随后 CLI 会先选产品线，再选该产品线下的项目，最后选择 Agent。`orbit-tools setup` 仅作为旧脚本兼容别名保留。
+MCP install 是独立步骤，仍允许使用显式 `--mcp-url`，未传时会用 `<backend-url>/api/mcp` 安装 Hermes MCP。这个默认值只用于 `mcp install`，不会让 `init`、`bind` 或 `pull` 默认写入绑定 JSON。
 
-```bash
-orbit-tools init
-```
-
-CLI 默认绑定当前目录，owner 默认使用登录的 Orbit 账号。它会从共享 Orbit Hub backend `http://117.72.14.134:18081` 读取 `/api/products`，列出产品线；选中产品线后读取 `/api/products/<product-line-id>`，列出该产品线下的项目。默认 MCP URL 是 `<backend-url>/api/mcp`。`--backend-url` 和 `ORBIT_BACKEND_URL` 仍可覆盖 backend，本地开发和测试请显式传本机地址。
-
-Agent 选择支持 `Codex`、`Claude Code/cc` 或 `None`。安装器会把本仓库的所有 `skills/*/SKILL.md` 复制到稳定路径 `~/.orbit/skills/<skill>/SKILL.md`；选择 Codex 时也复制到 `~/.codex/skills/<skill>/SKILL.md`，选择 Claude Code/cc 时复制到 `~/.claude/skills/<skill>/SKILL.md`。安装 `oribit-idea` 时，还会为选中的 Agent 目标确保 `gstack-office-hours` 依赖技能存在：优先复制本机 Hermes 的 `~/.hermes/skills/gstack-office-hours/SKILL.md`，不存在时写入最小依赖说明。这些路径会写入本地绑定和 `~/.orbit/config.json`，不会清空其他技能目录。
+### 单独安装技能
 
 也可以单独安装技能：
 
@@ -127,24 +166,7 @@ orbit-tools project bind \
   --owner <owner>
 ```
 
-绑定会写入 `/path/to/repo/.orbit/project.json`。`orbit-tools init` 写入字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、`selectedAgent`、`skillPath`、`agentSkillPath`、`updatedAt`。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
-
-产品线根目录可以用 `orbit-tools init-product-line` 一次绑定多个子项目。默认从当前目录运行，也可用 `--root <root-path>` 指定产品线根目录。CLI 会复用同一 backend 的缓存登录；没有缓存时才提示账号密码。读取产品线列表，选择产品线后写入 `<root>/.orbit/product-line.json`，字段包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`rootPath`、`updatedAt`。
-
-随后 CLI 扫描根目录的直接子目录作为候选项目，排除隐藏目录、`.git`、`node_modules`、`dist`、`build`、`cache`。有 `package.json`、`tsconfig.json`、`pyproject.toml`、`go.mod`、`Cargo.toml` 等标记的目录会显示对应 marker；没有 marker 的目录仍会出现，并标记为 `plain folder`。每个候选目录都会依次提示：选择该产品线下的一个项目完成绑定，或显式选择 `Skip` 后继续下一个目录。
-
-```bash
-cd /home/team/orbit/product-line-root
-orbit-tools init-product-line
-```
-
-已绑定的子目录会写入 `<child>/.orbit/project.json`，字段与 `orbit-tools init` 的项目绑定一致，包括 `backendUrl`、`mcpUrl`、`token`、`key`、`session`、`account`、`user`、选中的产品线、选中的项目、`repo`、`owner`、`updatedAt`。默认不会为每个子目录要求 Agent 选择或安装 skill；只有显式传 `--agent codex`、`--agent claude-code`、`--agent cc` 或 `--agent none` 时，才会按 `init` 的逻辑复制全部 packaged skills，并在根配置和子项目配置里记录 `selectedAgent`、`skillPath`、`agentSkillPath`。命令末尾会打印 summary，包括 bound 数量、skipped 数量和写入的 config path。
-
-示例：
-
-```bash
-orbit-tools init
-```
+绑定会写入 `/path/to/repo/.orbit/project.json`。字段包括 `backendUrl`、登录/session 信息、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、可选 repo 地址、可选 skill 路径和 `updatedAt`。`mcpUrl` 只有显式传入或已有绑定中存在时才会写入。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
 高级 UUID 示例：
 
@@ -162,11 +184,10 @@ orbit-tools project bind \
 ```bash
 orbit-tools init \
   --repo /home/jasperWei/orbit/orbit-tools \
-  --backend-url http://127.0.0.1:18081 \
-  --owner jasper
+  --backend-url http://127.0.0.1:18081
 
 cd /home/team/orbit/product-line-root
-orbit-tools init-product-line \
+orbit-tools bind \
   --root /home/team/orbit/product-line-root \
   --backend-url http://127.0.0.1:18081 \
   --owner jasper

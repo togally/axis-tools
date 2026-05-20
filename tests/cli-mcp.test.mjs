@@ -66,7 +66,21 @@ async function withTempDir(fn) {
   }
 }
 
-async function withProductServer(fn) {
+async function createBareGitFixture(dir) {
+  const source = path.join(dir, 'source-repo');
+  const bare = path.join(dir, 'source-repo.git');
+  await mkdir(source, { recursive: true });
+  await execFileAsync('git', ['init'], { cwd: source });
+  await execFileAsync('git', ['config', 'user.email', 'orbit-tools@example.com'], { cwd: source });
+  await execFileAsync('git', ['config', 'user.name', 'Orbit Tools Test'], { cwd: source });
+  await writeFile(path.join(source, 'README.md'), '# Fixture\n', 'utf8');
+  await execFileAsync('git', ['add', 'README.md'], { cwd: source });
+  await execFileAsync('git', ['commit', '-m', 'fixture'], { cwd: source });
+  await execFileAsync('git', ['clone', '--bare', source, bare]);
+  return bare;
+}
+
+async function withProductServer(fn, options = {}) {
   const state = { loginCount: 0 };
   const catalog = {
     products: [
@@ -107,7 +121,16 @@ async function withProductServer(fn) {
             name: 'Hermes Console',
             summary: 'Console project',
             status: 'active',
-            repoPath: '/tmp/hermes-console',
+            repoPath: options.repoPath ?? '/tmp/hermes-console',
+          },
+          {
+            id: 'mod_2',
+            uuid: 'bd53b010-e6b3-4ac6-9df6-f7558d5c1189',
+            productId: 'pl_2',
+            projectId: 'proj_2',
+            name: 'Hermes Docs',
+            summary: 'Docs project',
+            status: 'active',
           },
         ],
       },
@@ -166,9 +189,10 @@ async function withProductServer(fn) {
 
 {
   const usage = await run([]);
-  assert.match(usage.stdout, /Commands:\n  init\n  init-product-line\n/);
-  assert.match(usage.stdout, /Advanced init overrides:\n  init \[--repo <path>\]/);
-  assert.match(usage.stdout, /  init-product-line \[--root <path>\]/);
+  assert.match(usage.stdout, /Commands:\n  init\n  bind\n  pull\n  init-product-line\n/);
+  assert.match(usage.stdout, /init = login\/session cache \+ packaged skill setup/);
+  assert.match(usage.stdout, /bind = bind a repo or product-line root/);
+  assert.match(usage.stdout, /pull = create local folders from Orbit Hub/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
 }
 
@@ -252,7 +276,7 @@ await withTempDir(async (dir) => {
 
     const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
     assert.equal(project.backendUrl, backendUrl);
-    assert.equal(project.mcpUrl, `${backendUrl}/api/mcp`);
+    assert.equal(project.mcpUrl, undefined);
     assert.equal(project.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
     assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
     assert.equal(project.productLineId, 'pl_2');
@@ -273,13 +297,11 @@ await withTempDir(async (dir) => {
       repoOne,
       '--backend-url',
       backendUrl,
-    ], 'orbit-user\nsecret\n2\n1\n3\n', { env: { HOME: home } });
+    ], 'orbit-user\nsecret\n3\n', { env: { HOME: home } });
 
     assert.equal(state.loginCount, 1);
-    const firstProject = JSON.parse(await readFile(path.join(repoOne, '.orbit', 'project.json'), 'utf8'));
-    assert.equal(firstProject.account, 'orbit-user');
-    assert.equal(firstProject.owner, 'orbit-user');
-    assert.equal(firstProject.token, 'orbit-dev-token');
+    await assert.rejects(readFile(path.join(repoOne, '.orbit', 'project.json'), 'utf8'));
+    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'), /Orbit/);
 
     await runInteractive([
       'init',
@@ -287,16 +309,14 @@ await withTempDir(async (dir) => {
       repoTwo,
       '--backend-url',
       backendUrl,
-    ], '2\n1\n3\n', { env: { HOME: home } });
+    ], '3\n', { env: { HOME: home } });
 
     assert.equal(state.loginCount, 1);
-    const secondProject = JSON.parse(await readFile(path.join(repoTwo, '.orbit', 'project.json'), 'utf8'));
-    assert.equal(secondProject.account, 'orbit-user');
-    assert.equal(secondProject.owner, 'orbit-user');
-    assert.equal(secondProject.token, 'orbit-dev-token');
+    await assert.rejects(readFile(path.join(repoTwo, '.orbit', 'project.json'), 'utf8'));
 
     const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(config.sessions[backendUrl].account, 'orbit-user');
+    assert.equal(config.sessions[backendUrl].mcpUrl, undefined);
 
     await run(['logout'], { env: { HOME: home } });
     const loggedOutConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
@@ -366,39 +386,23 @@ await withTempDir(async (dir) => {
       repo,
       '--backend-url',
       backendUrl,
-      '--owner',
-      'init-owner',
-    ], 'jasper\nsecret\n2\n1\n1\n', { env: { HOME: home } });
+    ], 'jasper\nsecret\n1\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Orbit account/);
-    assert.match(result.stdout, /Select product line/);
-    assert.match(result.stdout, /Select project/);
+    assert.doesNotMatch(result.stdout, /Select product line/);
+    assert.doesNotMatch(result.stdout, /Select project/);
     assert.match(result.stdout, /Select agent/);
 
-    const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
-    assert.equal(project.backendUrl, backendUrl);
-    assert.equal(project.mcpUrl, `${backendUrl}/api/mcp`);
-    assert.equal(project.token, 'orbit-dev-token');
-    assert.equal(project.key, 'orbit-dev-key');
-    assert.equal(project.account, 'jasper');
-    assert.equal(project.user.id, 'orbit-dev-user');
-    assert.equal(project.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
-    assert.equal(project.productLineId, 'pl_2');
-    assert.equal(project.productLineName, 'Hermes');
-    assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
-    assert.equal(project.projectId, 'proj_1');
-    assert.equal(project.projectName, 'Hermes Console');
-    assert.equal(project.owner, 'init-owner');
-    assert.equal(project.selectedAgent, 'codex');
-    assert.equal(project.skillPath, path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'));
-    assert.equal(project.agentSkillPath, path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md'));
-    assert.match(await readFile(project.skillPath, 'utf8'), /Orbit/);
-    assert.match(await readFile(project.agentSkillPath, 'utf8'), /Orbit/);
+    await assert.rejects(readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
+    const skillPath = path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md');
+    const agentSkillPath = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
+    assert.match(await readFile(skillPath, 'utf8'), /Orbit/);
+    assert.match(await readFile(agentSkillPath, 'utf8'), /Orbit/);
 
     const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(globalConfig.selectedAgent, 'codex');
-    assert.equal(globalConfig.skillPath, project.skillPath);
-    assert.equal(globalConfig.agentSkillPath, project.agentSkillPath);
+    assert.equal(globalConfig.skillPath, skillPath);
+    assert.equal(globalConfig.agentSkillPath, agentSkillPath);
   });
 });
 
@@ -412,12 +416,12 @@ await withTempDir(async (dir) => {
       'init',
       '--backend-url',
       backendUrl,
-    ], 'orbit-account\nsecret\n2\n1\n3\n', { cwd: repo, env: { HOME: home, USER: 'system-user' } });
+    ], 'orbit-account\nsecret\n3\n', { cwd: repo, env: { HOME: home, USER: 'system-user' } });
 
-    const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
-    assert.equal(project.repo, repo);
-    assert.equal(project.owner, 'orbit-account');
-    assert.equal(project.backendUrl, backendUrl);
+    await assert.rejects(readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
+    const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(globalConfig.account, 'orbit-account');
+    assert.equal(globalConfig.backendUrl, backendUrl);
   });
 });
 
@@ -432,14 +436,14 @@ await withTempDir(async (dir) => {
     await mkdir(path.join(root, 'node_modules'), { recursive: true });
 
     const result = await runInteractive([
-      'init-product-line',
+      'bind',
       '--root',
       root,
       '--backend-url',
       backendUrl,
       '--owner',
       'product-owner',
-    ], 'jasper\nsecret\n2\n1\n2\n', { env: { HOME: home } });
+    ], 'jasper\nsecret\n2\n2\n1\n3\n', { env: { HOME: home } });
 
     assert.match(result.stdout, /Select product line/);
     assert.doesNotMatch(result.stdout, /Orbit Check Product/);
@@ -455,7 +459,7 @@ await withTempDir(async (dir) => {
     const rootConfigPath = path.join(root, '.orbit', 'product-line.json');
     const rootConfig = JSON.parse(await readFile(rootConfigPath, 'utf8'));
     assert.equal(rootConfig.backendUrl, backendUrl);
-    assert.equal(rootConfig.mcpUrl, `${backendUrl}/api/mcp`);
+    assert.equal(rootConfig.mcpUrl, undefined);
     assert.equal(rootConfig.token, 'orbit-dev-token');
     assert.equal(rootConfig.key, 'orbit-dev-key');
     assert.equal(rootConfig.account, 'jasper');
@@ -467,6 +471,7 @@ await withTempDir(async (dir) => {
 
     const consoleProject = JSON.parse(await readFile(path.join(root, 'console', '.orbit', 'project.json'), 'utf8'));
     assert.equal(consoleProject.backendUrl, backendUrl);
+    assert.equal(consoleProject.mcpUrl, undefined);
     assert.equal(consoleProject.token, 'orbit-dev-token');
     assert.equal(consoleProject.key, 'orbit-dev-key');
     assert.equal(consoleProject.account, 'jasper');
@@ -489,10 +494,10 @@ await withTempDir(async (dir) => {
     await writeFile(path.join(root, 'console', 'package.json'), JSON.stringify({ name: 'console' }, null, 2));
 
     await runInteractive([
-      'init-product-line',
+      'bind',
       '--backend-url',
       backendUrl,
-    ], 'orbit-account\nsecret\n2\n1\n', { cwd: root, env: { HOME: home, USER: 'system-user' } });
+    ], 'orbit-account\nsecret\n2\n2\n1\n', { cwd: root, env: { HOME: home, USER: 'system-user' } });
 
     const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
     assert.equal(rootConfig.rootPath, root);
@@ -521,6 +526,71 @@ await withTempDir(async (dir) => {
     const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
     assert.equal(rootConfig.rootPath, root);
   });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const repo = path.join(dir, 'repo');
+    const home = path.join(dir, 'home');
+
+    const result = await runInteractive([
+      'bind',
+      '--repo',
+      repo,
+      '--backend-url',
+      backendUrl,
+      '--owner',
+      'bind-owner',
+    ], 'orbit-account\nsecret\n1\n2\n1\n', { env: { HOME: home } });
+
+    assert.match(result.stdout, /Bind target:/);
+    assert.match(result.stdout, /Select product line/);
+    assert.match(result.stdout, /Select project/);
+
+    const project = JSON.parse(await readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(project.backendUrl, backendUrl);
+    assert.equal(project.mcpUrl, undefined);
+    assert.equal(project.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
+    assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
+    assert.equal(project.owner, 'bind-owner');
+  });
+});
+
+await withTempDir(async (dir) => {
+  const bareRepo = await createBareGitFixture(dir);
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+
+    const result = await runInteractive([
+      'pull',
+      '--root',
+      root,
+      '--backend-url',
+      backendUrl,
+    ], 'orbit-account\nsecret\n1\n2\n', { env: { HOME: home } });
+
+    assert.match(result.stdout, /Pull product lines:/);
+    assert.match(result.stdout, /cloned:/);
+    const productConfig = JSON.parse(await readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
+    assert.equal(productConfig.backendUrl, backendUrl);
+    assert.equal(productConfig.mcpUrl, undefined);
+    assert.equal(productConfig.productLineId, 'pl_2');
+    assert.equal(productConfig.owner, 'orbit-account');
+
+    const consoleProject = JSON.parse(await readFile(path.join(root, 'hermes', 'hermes-console', '.orbit', 'project.json'), 'utf8'));
+    assert.equal(consoleProject.backendUrl, backendUrl);
+    assert.equal(consoleProject.mcpUrl, undefined);
+    assert.equal(consoleProject.productLineName, 'Hermes');
+    assert.equal(consoleProject.projectName, 'Hermes Console');
+    assert.equal(consoleProject.owner, 'orbit-account');
+    assert.equal(consoleProject.repoPath, bareRepo);
+    assert.match(await readFile(path.join(root, 'hermes', 'hermes-console', 'README.md'), 'utf8'), /Fixture/);
+
+    const docsProject = JSON.parse(await readFile(path.join(root, 'hermes', 'hermes-docs', '.orbit', 'project.json'), 'utf8'));
+    assert.equal(docsProject.projectName, 'Hermes Docs');
+    assert.equal(docsProject.repoPath, undefined);
+  }, { repoPath: bareRepo });
 });
 
 await withTempDir(async (dir) => {
