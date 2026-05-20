@@ -76,6 +76,9 @@ function agentSkillPath(agent, skillName = 'orbit-workflow') {
         return path.join(homeDir(), '.claude', 'skills', skillName, 'SKILL.md');
     return null;
 }
+function hermesSkillPath(skillName) {
+    return path.join(homeDir(), '.hermes', 'skills', skillName, 'SKILL.md');
+}
 function defaultHermesConfigPath() {
     return path.join(homeDir(), '.hermes', 'config.yaml');
 }
@@ -1058,6 +1061,19 @@ async function packagedSkillNames() {
     }
     return names.sort();
 }
+async function copySkillTextIfAllowed(sourceText, target, force) {
+    ensureDir(path.dirname(target));
+    if (existsSync(target)) {
+        const targetText = await readFile(target, 'utf8');
+        if (targetText === sourceText)
+            return 'identical';
+        if (!force) {
+            throw new Error(`Refusing to overwrite modified skill at ${target}. Re-run with --force to replace it.`);
+        }
+    }
+    await writeFile(target, sourceText, 'utf8');
+    return 'copied';
+}
 async function copySkillIfAllowed(source, target, force) {
     ensureDir(path.dirname(target));
     const sourceText = await readFile(source, 'utf8');
@@ -1071,6 +1087,29 @@ async function copySkillIfAllowed(source, target, force) {
     }
     await copyFile(source, target);
     return 'copied';
+}
+async function gstackOfficeHoursDependencyText() {
+    const source = hermesSkillPath('gstack-office-hours');
+    if (existsSync(source)) {
+        return readFile(source, 'utf8');
+    }
+    return `---
+name: gstack-office-hours
+description: Dependency skill for running gstack office-hours discussions used by Orbit Office Idea.
+---
+
+# Gstack Office Hours
+
+Use this dependency skill when another skill asks for gstack's \`office-hours\` capability/skill.
+
+Run the office-hours discussion with:
+
+\`\`\`bash
+gstack office-hours
+\`\`\`
+
+The \`orbit-office-idea\` skill uses this dependency to incubate ideas through an office-hours discussion, then turns the resulting notes into Orbit-ready artifacts.
+`;
 }
 function installAgentsForChoice(agent) {
     if (agent === 'all')
@@ -1103,6 +1142,17 @@ async function installPackagedSkills(agent, force) {
                 continue;
             installed.push({ skill: skillName, target, status: await copySkillIfAllowed(source, target, force) });
         }
+    }
+    const dependencyText = await gstackOfficeHoursDependencyText();
+    for (const selectedAgent of agents) {
+        const target = agentSkillPath(selectedAgent, 'gstack-office-hours');
+        if (!target)
+            continue;
+        installed.push({
+            skill: 'gstack-office-hours',
+            target,
+            status: await copySkillTextIfAllowed(dependencyText, target, force),
+        });
     }
     return {
         skillPath: stableOrbitSkillPath('orbit-workflow'),

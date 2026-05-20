@@ -1,11 +1,11 @@
 ---
-name: orbit-office-hours
-description: Use when a user wants to discuss an idea through gstack office-hours, turn the discussion into artifacts, and import or upload the result to the bound Orbit Hub project.
+name: orbit-office-idea
+description: Use when a user wants to incubate an idea through the Orbit Office Idea workflow, internally call gstack office-hours, turn the discussion into artifacts, and import or upload the result to the bound Orbit Hub project.
 ---
 
-# Orbit Office Hours
+# Orbit Office Idea
 
-Use this skill to turn an early idea into Orbit-ready office-hours artifacts.
+Use this skill to incubate an early idea through the Orbit Office Idea workflow and turn it into Orbit-ready office-hours artifacts. This skill depends on gstack's `office-hours` capability/skill and internally calls it to run the office-hours discussion.
 
 ## Required Binding
 
@@ -16,7 +16,7 @@ Use this skill to turn an early idea into Orbit-ready office-hours artifacts.
 
 ## Discussion Flow
 
-1. Run `gstack office-hours` from the repo or product workspace.
+1. Invoke gstack's `office-hours` capability/skill from the repo or product workspace. If using the CLI directly, run `gstack office-hours`.
 2. Use it to discuss the idea, constraints, risks, affected users, and success criteria.
 3. Save the resulting notes as office-hours docs under an `office-hours/` or `docs/office-hours/` folder in the repo.
 4. Produce these docs:

@@ -308,13 +308,17 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const home = path.join(dir, 'home');
+  const hermesDependency = path.join(home, '.hermes', 'skills', 'gstack-office-hours', 'SKILL.md');
+  const hermesDependencyText = '# Gstack Office Hours\n\nRun `gstack office-hours` for idea discussions.\n';
+  await mkdir(path.dirname(hermesDependency), { recursive: true });
+  await writeFile(hermesDependency, hermesDependencyText, 'utf8');
 
   const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
   const installJson = JSON.parse(install.stdout);
   assert.equal(installJson.ok, true);
-  assert.equal(installJson.installed.length, 6);
+  assert.equal(installJson.installed.length, 8);
 
-  for (const skill of ['orbit-workflow', 'orbit-office-hours']) {
+  for (const skill of ['orbit-workflow', 'orbit-office-idea']) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
     const codexSkill = await readFile(path.join(home, '.codex', 'skills', skill, 'SKILL.md'), 'utf8');
     const claudeSkill = await readFile(path.join(home, '.claude', 'skills', skill, 'SKILL.md'), 'utf8');
@@ -322,6 +326,11 @@ await withTempDir(async (dir) => {
     assert.equal(codexSkill, orbitSkill);
     assert.equal(claudeSkill, orbitSkill);
   }
+
+  const codexDependency = await readFile(path.join(home, '.codex', 'skills', 'gstack-office-hours', 'SKILL.md'), 'utf8');
+  const claudeDependency = await readFile(path.join(home, '.claude', 'skills', 'gstack-office-hours', 'SKILL.md'), 'utf8');
+  assert.equal(codexDependency, hermesDependencyText);
+  assert.equal(claudeDependency, codexDependency);
 
   const modified = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
   await writeFile(modified, 'locally modified\n', 'utf8');
@@ -333,6 +342,17 @@ await withTempDir(async (dir) => {
 
   await run(['install', '--agent', 'codex', '--force'], { env: { HOME: home } });
   assert.notEqual(await readFile(modified, 'utf8'), 'locally modified\n');
+
+  const modifiedDependency = path.join(home, '.codex', 'skills', 'gstack-office-hours', 'SKILL.md');
+  await writeFile(modifiedDependency, 'locally modified dependency\n', 'utf8');
+  await assert.rejects(
+    run(['install', '--agent', 'codex'], { env: { HOME: home } }),
+    /Refusing to overwrite modified skill/,
+  );
+  assert.equal(await readFile(modifiedDependency, 'utf8'), 'locally modified dependency\n');
+
+  await run(['install', '--agent', 'codex', '--force'], { env: { HOME: home } });
+  assert.notEqual(await readFile(modifiedDependency, 'utf8'), 'locally modified dependency\n');
 });
 
 await withTempDir(async (dir) => {
