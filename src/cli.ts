@@ -1106,9 +1106,20 @@ function repositoryAddress(module: OrbitProjectModule): string | null {
     ?? null;
 }
 
-async function readHiddenLine(prompt: string): Promise<string> {
-  const input = process.stdin;
-  const output = process.stdout;
+type HiddenLineInput = NodeJS.ReadStream & {
+  isRaw?: boolean;
+  setRawMode?: (mode: boolean) => void;
+};
+
+type HiddenLineOutput = {
+  write(chunk: string): unknown;
+};
+
+export async function readHiddenLine(
+  prompt: string,
+  input: HiddenLineInput = process.stdin,
+  output: HiddenLineOutput = process.stdout,
+): Promise<string> {
   const setRawMode = input.setRawMode?.bind(input);
   const wasRaw = input.isRaw;
   let answer = '';
@@ -1121,6 +1132,7 @@ async function readHiddenLine(prompt: string): Promise<string> {
     const cleanup = (): void => {
       input.off('data', onData);
       setRawMode?.(wasRaw);
+      input.pause();
     };
     const finish = (): void => {
       cleanup();
@@ -2151,11 +2163,13 @@ async function main(): Promise<void> {
   process.exit(1);
 }
 
-main().catch((error: unknown) => {
-  if (error instanceof OrbitCliError) {
-    console.error(error.message);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error: unknown) => {
+    if (error instanceof OrbitCliError) {
+      console.error(error.message);
+      process.exit(1);
+    }
+    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
     process.exit(1);
-  }
-  console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-  process.exit(1);
-});
+  });
+}

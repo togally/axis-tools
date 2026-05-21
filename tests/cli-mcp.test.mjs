@@ -5,10 +5,73 @@ import path from 'node:path';
 import http from 'node:http';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { EventEmitter } from 'node:events';
+import { readHiddenLine } from '../dist/cli.js';
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
 const TEST_PASSWORD = 'test-password-for-hidden-prompt';
+
+class FakeTtyInput extends EventEmitter {
+  constructor() {
+    super();
+    this.isRaw = false;
+    this.resumed = false;
+    this.paused = false;
+    this.rawModes = [];
+  }
+
+  resume() {
+    this.resumed = true;
+  }
+
+  pause() {
+    this.paused = true;
+  }
+
+  setRawMode(value) {
+    this.rawModes.push(value);
+    this.isRaw = value;
+  }
+}
+
+class FakeOutput {
+  constructor() {
+    this.text = '';
+  }
+
+  write(chunk) {
+    this.text += String(chunk);
+    return true;
+  }
+}
+
+{
+  const input = new FakeTtyInput();
+  const output = new FakeOutput();
+  const answer = readHiddenLine('Orbit password: ', input, output);
+  input.emit('data', Buffer.from(`${TEST_PASSWORD}\n`));
+
+  assert.equal(await answer, TEST_PASSWORD);
+  assert.equal(input.resumed, true);
+  assert.equal(input.paused, true);
+  assert.deepEqual(input.rawModes, [true, false]);
+  assert.equal(input.listenerCount('data'), 0);
+  assert.equal(output.text, 'Orbit password: \n');
+}
+
+{
+  const input = new FakeTtyInput();
+  const output = new FakeOutput();
+  const answer = readHiddenLine('Orbit password: ', input, output);
+  input.emit('data', Buffer.from('\u0003'));
+
+  await assert.rejects(answer, /Interrupted/);
+  assert.equal(input.paused, true);
+  assert.deepEqual(input.rawModes, [true, false]);
+  assert.equal(input.listenerCount('data'), 0);
+  assert.equal(output.text, 'Orbit password: \n');
+}
 
 async function run(args, options = {}) {
   return execFileAsync(process.execPath, [cli, ...args], {

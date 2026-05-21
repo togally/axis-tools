@@ -887,9 +887,7 @@ function repositoryAddress(module) {
         ?? module.sourceRepo
         ?? null;
 }
-async function readHiddenLine(prompt) {
-    const input = process.stdin;
-    const output = process.stdout;
+export async function readHiddenLine(prompt, input = process.stdin, output = process.stdout) {
     const setRawMode = input.setRawMode?.bind(input);
     const wasRaw = input.isRaw;
     let answer = '';
@@ -900,6 +898,7 @@ async function readHiddenLine(prompt) {
         const cleanup = () => {
             input.off('data', onData);
             setRawMode?.(wasRaw);
+            input.pause();
         };
         const finish = () => {
             cleanup();
@@ -1805,11 +1804,13 @@ async function main() {
     printUsage();
     process.exit(1);
 }
-main().catch((error) => {
-    if (error instanceof OrbitCliError) {
-        console.error(error.message);
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    main().catch((error) => {
+        if (error instanceof OrbitCliError) {
+            console.error(error.message);
+            process.exit(1);
+        }
+        console.error(error instanceof Error ? error.stack ?? error.message : String(error));
         process.exit(1);
-    }
-    console.error(error instanceof Error ? error.stack ?? error.message : String(error));
-    process.exit(1);
-});
+    });
+}
