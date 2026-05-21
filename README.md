@@ -180,6 +180,8 @@ orbit-tools project bind \
 
 绑定会写入 `/path/to/repo/.orbit/project.json`。字段包括 `backendUrl`、登录/session 信息、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、可选 repo 地址、可选 skill 路径和 `updatedAt`。`mcpUrl` 只有显式传入或已有绑定中存在时才会写入。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
+产品线和项目元数据只写入当前目录的 `.orbit/product-line.json` / `.orbit/project.json`；`~/.orbit/config.json` 只保存登录、后端地址、MCP 和默认 agent/skill 等全局 CLI 配置。
+
 高级 UUID 示例：
 
 ```bash

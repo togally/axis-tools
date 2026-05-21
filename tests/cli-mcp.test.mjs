@@ -144,6 +144,30 @@ async function createBareGitFixture(dir) {
   return bare;
 }
 
+async function assertGlobalConfigHasNoLocalBindingKeys(home) {
+  const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+  const forbiddenKeys = [
+    'productLineUuid',
+    'projectUuid',
+    'productLineId',
+    'projectId',
+    'productLineName',
+    'projectName',
+    'owner',
+    'repo',
+    'repoPath',
+    'repositoryUrl',
+    'gitUrl',
+    'remoteUrl',
+    'lastRepo',
+    'lastProductLineRoot',
+  ];
+  for (const key of forbiddenKeys) {
+    assert.equal(config[key], undefined, `global config should not contain ${key}`);
+  }
+  return config;
+}
+
 async function withProductServer(fn, options = {}) {
   const state = { loginCount: 0, requests: [], accountByToken: {} };
   const catalog = {
@@ -354,6 +378,7 @@ await withTempDir(async (dir) => {
   assert.equal(project.productLineId, undefined);
   assert.equal(project.projectId, undefined);
   assert.equal(project.owner, 'office-hours');
+  await assertGlobalConfigHasNoLocalBindingKeys(home);
 
   const show = await run(['project', 'show', '--repo', repo, '--json'], { env: { HOME: home } });
   assert.deepEqual(JSON.parse(show.stdout), project);
@@ -446,6 +471,7 @@ await withTempDir(async (dir) => {
     assert.equal(project.productLineId, 'pl_2');
     assert.equal(project.projectId, 'proj_1');
     assert.equal(project.owner, 'interactive-owner');
+    await assertGlobalConfigHasNoLocalBindingKeys(home);
   });
 });
 
@@ -657,6 +683,7 @@ await withTempDir(async (dir) => {
     assert.equal(consoleProject.selectedAgent, undefined);
     assert.equal(consoleProject.skillPath, undefined);
     await assert.rejects(readFile(path.join(root, 'notes', '.orbit', 'project.json'), 'utf8'));
+    await assertGlobalConfigHasNoLocalBindingKeys(home);
   });
 });
 
@@ -730,6 +757,7 @@ await withTempDir(async (dir) => {
     assert.equal(project.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
     assert.equal(project.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
     assert.equal(project.owner, 'bind-owner');
+    await assertGlobalConfigHasNoLocalBindingKeys(home);
   });
 });
 
@@ -768,6 +796,7 @@ await withTempDir(async (dir) => {
     const docsProject = JSON.parse(await readFile(path.join(root, 'hermes', 'hermes-docs', '.orbit', 'project.json'), 'utf8'));
     assert.equal(docsProject.projectName, 'Hermes Docs');
     assert.equal(docsProject.repoPath, undefined);
+    await assertGlobalConfigHasNoLocalBindingKeys(home);
   }, { repoPath: bareRepo });
 });
 

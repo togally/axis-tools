@@ -9,6 +9,22 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
+const LOCAL_BINDING_GLOBAL_KEYS = [
+    'productLineUuid',
+    'projectUuid',
+    'productLineId',
+    'projectId',
+    'productLineName',
+    'projectName',
+    'owner',
+    'repo',
+    'repoPath',
+    'repositoryUrl',
+    'gitUrl',
+    'remoteUrl',
+    'lastRepo',
+    'lastProductLineRoot',
+];
 function printUsage() {
     console.log(`orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
@@ -166,7 +182,7 @@ async function writeGlobalOrbitConfig(values) {
     const filePath = globalOrbitConfigPath();
     ensureDir(path.dirname(filePath));
     const current = await readGlobalOrbitConfig();
-    await writeFile(filePath, `${JSON.stringify({ ...current, ...values, updatedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+    await writeFile(filePath, `${JSON.stringify(cleanGlobalOrbitConfig({ ...current, ...values, updatedAt: new Date().toISOString() }), null, 2)}\n`, 'utf8');
 }
 async function readProjectBinding(repoPath) {
     try {
@@ -544,6 +560,12 @@ function normalizeBackendUrl(backendUrl) {
 function isJson(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+function cleanGlobalOrbitConfig(config) {
+    for (const key of LOCAL_BINDING_GLOBAL_KEYS) {
+        delete config[key];
+    }
+    return config;
+}
 function asOrbitUser(value, account) {
     if (!isJson(value))
         return { account, name: account };
@@ -611,7 +633,7 @@ async function cachedLoginSession(backendUrl) {
 async function writeGlobalOrbitConfigObject(config) {
     const filePath = globalOrbitConfigPath();
     ensureDir(path.dirname(filePath));
-    await writeFile(filePath, `${JSON.stringify({ ...config, updatedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+    await writeFile(filePath, `${JSON.stringify(cleanGlobalOrbitConfig({ ...config, updatedAt: new Date().toISOString() }), null, 2)}\n`, 'utf8');
 }
 async function saveLoginSession(backendUrl, mcpUrl, account, login) {
     const normalizedBackendUrl = normalizeBackendUrl(backendUrl);
@@ -1020,17 +1042,9 @@ async function writeProjectBinding(repoPath, binding) {
         session: binding.session,
         account: binding.account,
         user: binding.user,
-        productLineUuid: binding.productLineUuid,
-        projectUuid: binding.projectUuid,
-        productLineId: binding.productLineId,
-        projectId: binding.projectId,
-        productLineName: binding.productLineName,
-        projectName: binding.projectName,
-        owner: binding.owner,
         selectedAgent: binding.selectedAgent,
         skillPath: binding.skillPath,
         agentSkillPath: binding.agentSkillPath,
-        lastRepo: repoPath,
     };
     if (binding.mcpUrl)
         globalValues.mcpUrl = binding.mcpUrl;
@@ -1130,14 +1144,9 @@ async function writeProductLineBinding(rootPath, binding) {
         session: binding.session,
         account: binding.account,
         user: binding.user,
-        productLineUuid: binding.productLineUuid,
-        productLineId: binding.productLineId,
-        productLineName: binding.productLineName,
-        owner: binding.owner,
         selectedAgent: binding.selectedAgent,
         skillPath: binding.skillPath,
         agentSkillPath: binding.agentSkillPath,
-        lastProductLineRoot: rootPath,
     };
     if (binding.mcpUrl)
         globalValues.mcpUrl = binding.mcpUrl;
@@ -1357,7 +1366,6 @@ async function setupRepo() {
         selectedAgent,
         skillPath: install.skillPath,
         agentSkillPath: install.agentSkillPath,
-        lastRepo: repoPath,
     });
     console.log(JSON.stringify({ ok: true, repo: repoPath, backendUrl, selectedAgent, skillPath: install.skillPath, agentSkillPath: install.agentSkillPath }, null, 2));
 }
