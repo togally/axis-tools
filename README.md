@@ -62,6 +62,43 @@ orbit-tools/
 
 ## 安装
 
+新电脑推荐一键安装 / 更新（macOS 和 Linux）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/togally/orbit-tools/main/scripts/install-orbit-tools.sh | bash
+```
+
+脚本默认把仓库安装到 `~/orbit-tools`，如果目录不存在会 clone；如果目录已经是 `https://github.com/togally/orbit-tools.git` 的 git repo，会安全更新到 `origin/main`，然后自动执行：
+
+```bash
+npm install
+npm run build
+npm link
+```
+
+本地已有脚本时也可以直接运行：
+
+```bash
+bash scripts/install-orbit-tools.sh
+```
+
+可选环境变量：
+
+```bash
+ORBIT_TOOLS_DIR="$HOME/orbit-tools" \
+ORBIT_TOOLS_REPO="https://github.com/togally/orbit-tools.git" \
+ORBIT_TOOLS_BRANCH="main" \
+bash scripts/install-orbit-tools.sh
+```
+
+默认不会覆盖本地修改。如果本地 repo 有未提交修改、未跟踪文件、本地提交或分叉历史，脚本会停止并提示先 commit/stash。确认要丢弃本地变更时，可以显式使用：
+
+```bash
+ORBIT_TOOLS_FORCE=1 bash scripts/install-orbit-tools.sh
+```
+
+手动安装：
+
 ```bash
 cd /home/jasperWei/orbit/orbit-tools
 npm install

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -124,10 +124,23 @@ async function runInteractive(args, input, options = {}) {
 async function withTempDir(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), 'orbit-tools-mcp-'));
   try {
-    await fn(dir);
+    return await fn(dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+async function runViaLinkedBin(args) {
+  return withTempDir(async (dir) => {
+    const binPath = path.join(dir, 'orbit-tools');
+    await symlink(cli, binPath);
+    return execFileAsync(binPath, args, {
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+      },
+    });
+  });
 }
 
 async function createBareGitFixture(dir) {
@@ -312,9 +325,11 @@ async function withProductServer(fn, options = {}) {
   const usage = await run([]);
   const longHelp = await run(['--help']);
   const shortHelp = await run(['-h']);
+  const linkedHelp = await runViaLinkedBin(['--help']);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
+  assert.equal(linkedHelp.stdout, usage.stdout);
   assert.match(usage.stdout, /init = packaged skill setup only/);
   assert.match(usage.stdout, /login = prompt for Orbit account and hidden password; cache session/);
   assert.match(usage.stdout, /me = show current Orbit Hub user/);
