@@ -166,7 +166,7 @@ interface OrbitProductDetail {
 }
 
 interface PromptSession {
-  question(prompt: string): Promise<string>;
+  question(prompt: string, options?: { hidden?: boolean }): Promise<string>;
   close(): void;
 }
 
@@ -180,7 +180,7 @@ const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
 
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = create a local Orbit Hub session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -878,7 +878,7 @@ async function loginCommand(): Promise<void> {
   const prompt = await createPromptSession();
   try {
     const account = (await prompt.question('Orbit account: ')).trim();
-    const password = (await prompt.question('Orbit password: ')).trim();
+    const password = (await prompt.question('Orbit password: ', { hidden: true })).trim();
     if (!account || !password) throw new Error('Orbit account and password are required');
     const login = await loginOrbitHub(backendUrl, account, password);
     await saveLoginSession(backendUrl, mcpUrl, account, login);
@@ -1106,9 +1106,70 @@ function repositoryAddress(module: OrbitProjectModule): string | null {
     ?? null;
 }
 
+async function readHiddenLine(prompt: string): Promise<string> {
+  const input = process.stdin;
+  const output = process.stdout;
+  const setRawMode = input.setRawMode?.bind(input);
+  const wasRaw = input.isRaw;
+  let answer = '';
+
+  output.write(prompt);
+  input.resume();
+  setRawMode?.(true);
+
+  return new Promise((resolve, reject) => {
+    const cleanup = (): void => {
+      input.off('data', onData);
+      setRawMode?.(wasRaw);
+    };
+    const finish = (): void => {
+      cleanup();
+      output.write('\n');
+      resolve(answer);
+    };
+    const interrupt = (): void => {
+      cleanup();
+      output.write('\n');
+      reject(new Error('Interrupted'));
+    };
+    const onData = (chunk: Buffer | string): void => {
+      const text = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : chunk;
+      for (const char of text) {
+        if (char === '\u0003') {
+          interrupt();
+          return;
+        }
+        if (char === '\r' || char === '\n') {
+          finish();
+          return;
+        }
+        if (char === '\b' || char === '\u007f') {
+          answer = answer.slice(0, -1);
+          continue;
+        }
+        if (char >= ' ' && char !== '\u007f' && char !== '\u001b') {
+          answer += char;
+        }
+      }
+    };
+    input.on('data', onData);
+  });
+}
+
 async function createPromptSession(): Promise<PromptSession> {
   if (process.stdin.isTTY) {
-    return createInterface({ input: process.stdin, output: process.stdout });
+    return {
+      async question(question: string, options?: { hidden?: boolean }): Promise<string> {
+        if (options?.hidden) return readHiddenLine(question);
+        const prompt = createInterface({ input: process.stdin, output: process.stdout });
+        try {
+          return await prompt.question(question);
+        } finally {
+          prompt.close();
+        }
+      },
+      close(): void {},
+    };
   }
 
   let input = '';
@@ -1118,13 +1179,13 @@ async function createPromptSession(): Promise<PromptSession> {
   const answers = input.split(/\r?\n/);
 
   return {
-    async question(prompt: string): Promise<string> {
+    async question(prompt: string, options?: { hidden?: boolean }): Promise<string> {
       process.stdout.write(prompt);
       const answer = answers.shift();
       if (answer === undefined) {
         throw new Error('No input received for interactive project bind selection');
       }
-      process.stdout.write(`${answer}\n`);
+      process.stdout.write(options?.hidden ? '\n' : `${answer}\n`);
       return answer;
     },
     close(): void {},

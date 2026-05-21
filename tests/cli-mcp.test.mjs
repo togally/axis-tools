@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
+const TEST_PASSWORD = 'test-password-for-hidden-prompt';
 
 async function run(args, options = {}) {
   return execFileAsync(process.execPath, [cli, ...args], {
@@ -226,7 +227,7 @@ async function withProductServer(fn, options = {}) {
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.match(usage.stdout, /init = packaged skill setup only/);
-  assert.match(usage.stdout, /login = create a local Orbit Hub session/);
+  assert.match(usage.stdout, /login = prompt for Orbit account and hidden password; cache session/);
   assert.match(usage.stdout, /me = show current Orbit Hub user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = create local folders from Orbit Hub/);
@@ -355,7 +356,7 @@ await withTempDir(async (dir) => {
     const repo = path.join(dir, 'repo');
     const home = path.join(dir, 'home');
 
-    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-user\nsecret\n', { env: { HOME: home } });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-user\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     const result = await runInteractive([
       'project',
@@ -389,13 +390,15 @@ await withTempDir(async (dir) => {
     const repoTwo = path.join(dir, 'repo-two');
     const home = path.join(dir, 'home');
 
-    await runInteractive([
+    const loginResult = await runInteractive([
       'login',
       '--backend-url',
       backendUrl,
-    ], 'orbit-user\nsecret\n', { env: { HOME: home } });
+    ], `orbit-user\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     assert.equal(state.loginCount, 1);
+    assert.doesNotMatch(loginResult.stdout, new RegExp(TEST_PASSWORD));
+    assert.match(loginResult.stdout, /Orbit password: \n/);
     const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(config.sessions[backendUrl].account, 'orbit-user');
     assert.equal(config.sessions[backendUrl].mcpUrl, undefined);
@@ -539,7 +542,7 @@ await withTempDir(async (dir) => {
     await mkdir(path.join(root, 'notes'), { recursive: true });
     await mkdir(path.join(root, '.hidden'), { recursive: true });
     await mkdir(path.join(root, 'node_modules'), { recursive: true });
-    await runInteractive(['login', '--backend-url', backendUrl], 'jasper\nsecret\n', { env: { HOME: home } });
+    await runInteractive(['login', '--backend-url', backendUrl], `jasper\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     const result = await runInteractive([
       'bind',
@@ -598,7 +601,7 @@ await withTempDir(async (dir) => {
     const home = path.join(dir, 'home');
     await mkdir(path.join(root, 'console'), { recursive: true });
     await writeFile(path.join(root, 'console', 'package.json'), JSON.stringify({ name: 'console' }, null, 2));
-    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-account\nsecret\n', { env: { HOME: home } });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     await runInteractive([
       'bind',
@@ -621,7 +624,7 @@ await withTempDir(async (dir) => {
     const root = path.join(dir, 'product-root');
     const home = path.join(dir, 'home');
     await mkdir(root, { recursive: true });
-    await runInteractive(['login', '--backend-url', backendUrl], 'jasper\nsecret\n', { env: { HOME: home } });
+    await runInteractive(['login', '--backend-url', backendUrl], `jasper\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     await runInteractive([
       'init-product-line',
@@ -640,7 +643,7 @@ await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
     const repo = path.join(dir, 'repo');
     const home = path.join(dir, 'home');
-    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-account\nsecret\n', { env: { HOME: home } });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     const result = await runInteractive([
       'bind',
@@ -670,7 +673,7 @@ await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
     const root = path.join(dir, 'pull-root');
     const home = path.join(dir, 'home');
-    await runInteractive(['login', '--backend-url', backendUrl], 'orbit-account\nsecret\n', { env: { HOME: home } });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
 
     const result = await runInteractive([
       'pull',

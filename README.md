@@ -18,7 +18,7 @@ Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MC
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
 - `orbit-tools login`
-  - 显式登录共享 Orbit Hub backend，缓存 bearer token/session
+  - 提示账号和隐藏密码，登录共享 Orbit Hub backend，缓存 bearer token/session
 - `orbit-tools me`
   - 调用 `/api/me` 查看当前账号、显示名、角色和权限
 - `orbit-tools init`
@@ -96,7 +96,7 @@ orbit-tools bind
 
 账号创建只在 Orbit Hub Web UI 完成；CLI 不提供注册命令。
 
-`login` 会调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
+`login` 会提示 account 和隐藏输入的 password，调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
 
 `init` 只处理 packaged skill 安装。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*/SKILL.md` 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
 
