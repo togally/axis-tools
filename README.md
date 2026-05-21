@@ -2,43 +2,45 @@
 
 Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MCP / 项目绑定配置。
 
+公共 CLI 主命令是 `orbit`。`orbit-tools` 仍作为兼容别名保留；仓库名和 npm package 名仍是 `orbit-tools`。
+
 ## 当前能力
 
-- `orbit-tools codex-hook ingest`
+- `orbit codex-hook ingest`
   - 从 Codex 官方 hook stdin JSON 读取事件
   - 写入 `<repo>/.codex-status/latest.json`
   - 追加 `<repo>/.codex-status/events.jsonl`
-- `orbit-tools codex-status current`
+- `orbit codex-status current`
   - 查看当前状态
-- `orbit-tools codex-status tail`
+- `orbit codex-status tail`
   - 查看最近事件流
-- `orbit-tools codex-status summary`
+- `orbit codex-status summary`
   - 输出简版摘要
-- `orbit-tools mcp install`
+- `orbit mcp install`
   - 把 Orbit HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
-- `orbit-tools login`
+- `orbit login`
   - 提示账号和隐藏密码，登录共享 Orbit Hub backend，缓存 bearer token/session
-- `orbit-tools me`
+- `orbit me`
   - 调用 `/api/me` 查看当前账号、显示名、角色和权限
-- `orbit-tools init`
+- `orbit init`
   - 选择 Agent，并安装 packaged skills
   - 不选择产品线/项目，也不写 `.orbit/project.json`
-- `orbit-tools bind`
+- `orbit bind`
   - 绑定单个项目 repo，或绑定一个产品线根目录及其直接子目录
   - 写入 `.orbit/project.json` / `.orbit/product-line.json`
-- `orbit-tools pull`
-  - 从 Orbit Hub 拉取产品线/项目结构，在本地创建目录
-  - 项目维护了 repo 地址时会 clone；已有 git repo 时会安全 fetch/pull
-- `orbit-tools init-product-line`
-  - 兼容旧入口；新文档推荐使用 `orbit-tools bind`
-- `orbit-tools install`
+- `orbit pull`
+  - 从 Orbit Hub 拉取产品线/项目结构，只为可 clone 的维护仓库创建本地目录
+  - 项目维护了 clone URL 时会 clone；已有 git repo 时会安全 fetch/pull
+- `orbit init-product-line`
+  - 兼容旧入口；新文档推荐使用 `orbit bind`
+- `orbit install`
   - 安装本包 `skills/*/SKILL.md` 到 `~/.orbit/skills`，并按 `--agent` 同步到 Codex / Claude Code skill 目录
-- `orbit-tools logout`
+- `orbit logout`
   - 清理 `~/.orbit/config.json` 中缓存的登录 token/session
-- `orbit-tools project bind`
+- `orbit project bind`
   - 高级非交互式绑定命令，保留给自动化脚本使用
-- `orbit-tools project show`
+- `orbit project show`
   - 查看当前 repo 的 Orbit 绑定
 
 ## 仓库结构
@@ -118,7 +120,7 @@ npm link
 安装后可直接用：
 
 ```bash
-orbit-tools codex-status current --repo /home/jasperWei/orbit/orbit-hub
+orbit codex-status current --repo /home/jasperWei/orbit/orbit-hub
 ```
 
 ## Orbit 登录、初始化、绑定与 Pull
@@ -126,9 +128,9 @@ orbit-tools codex-status current --repo /home/jasperWei/orbit/orbit-hub
 推荐新流程：
 
 ```bash
-orbit-tools login
-orbit-tools init
-orbit-tools bind
+orbit login
+orbit init
+orbit bind
 ```
 
 账号创建只在 Orbit Hub Web UI 完成；CLI 不提供注册命令。
@@ -142,10 +144,10 @@ orbit-tools bind
 ### 绑定本地目录
 
 ```bash
-orbit-tools bind
+orbit bind
 ```
 
-`bind` 需要已经登录；如果本地没有 session，或 cached token 被 Orbit Hub 返回 401/403 拒绝，CLI 会提示重新执行 `orbit-tools login` 或联系 owner/admin 授权。
+`bind` 需要已经登录；如果本地没有 session，或 cached token 被 Orbit Hub 返回 401/403 拒绝，CLI 会提示重新执行 `orbit login` 或联系 owner/admin 授权。
 
 `bind` 会先确认绑定目标：
 
@@ -154,28 +156,29 @@ orbit-tools bind
 
 绑定 JSON 会写入 `backendUrl`、登录/session 信息、产品线/项目 id/name、`repo`、`owner` 和更新时间。`mcpUrl` 默认不再写入；只有显式传 `--mcp-url`，或已有绑定里本来有 `mcpUrl` 时才会保留。
 
-旧的 `orbit-tools init-product-line` 仍作为兼容入口保留，行为等同于产品线根目录绑定；新使用方式请优先用 `orbit-tools bind`。
+旧的 `orbit init-product-line` 仍作为兼容入口保留，行为等同于产品线根目录绑定；新使用方式请优先用 `orbit bind`。
 
 ### Pull 云端结构
 
 ```bash
-orbit-tools pull
+orbit pull
 ```
 
-`pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。项目维护了 `repositoryAddress`、`repoPath`、`repositoryUrl`、`gitUrl` 或 `remoteUrl` 时：
+`pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。只有项目维护了 clone URL 时才会创建本地项目目录：`repositoryAddress`、`repositoryUrl`、`gitUrl`、`remoteUrl`、`githubRepo` 或 `sourceRepo`。仅有旧机器上的绝对 `repoPath` 不会被当成可 clone 地址。
 
 - 目标目录不存在或为空：执行 `git clone`
 - 目标目录已经是 git repo：执行 `git fetch --all --prune` 和 `git pull --ff-only`
-- 目标目录非空且不是 git repo：不覆盖，只写入/更新绑定配置并在 summary 中标记跳过 clone
+- 目标目录非空且不是 git repo：不覆盖，不写入绑定配置，并在 summary 中标记跳过 clone
+- 项目没有 clone URL：标记为 `skipped-no-repo`，不创建项目目录或 `.orbit/project.json`
 
-`pull` 会为产品线目录写 `.orbit/product-line.json`，为项目目录写 `.orbit/project.json`。owner 默认使用当前登录账号；`mcpUrl` 同样只在显式传入时写入。
+`pull` 只会在该产品线至少有一个项目成功 clone/pull 后写产品线目录的 `.orbit/product-line.json`，并只为成功 clone/pull 的项目写 `.orbit/project.json`。owner 默认使用当前登录账号；`mcpUrl` 同样只在显式传入时写入。
 
 ### Orbit MCP
 
 安装 Orbit HTTP MCP 到 Hermes：
 
 ```bash
-orbit-tools mcp install \
+orbit mcp install \
   --backend-url http://117.72.14.134:18081 \
   --mcp-url http://117.72.14.134:18081/api/mcp
 ```
@@ -189,26 +192,26 @@ MCP install 是独立步骤，仍允许使用显式 `--mcp-url`，未传时会�
 也可以单独安装技能：
 
 ```bash
-orbit-tools install --agent all
-orbit-tools install --agent codex
-orbit-tools install --agent claude-code
-orbit-tools install --agent cc
+orbit install --agent all
+orbit install --agent codex
+orbit install --agent claude-code
+orbit install --agent cc
 ```
 
-`orbit-tools install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。这个不覆盖规则同样适用于 `gstack-office-hours` 依赖技能。
+`orbit install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。这个不覆盖规则同样适用于 `gstack-office-hours` 依赖技能。
 
 清理缓存登录：
 
 ```bash
-orbit-tools me
-orbit-tools logout
-orbit-tools logout --backend-url http://117.72.14.134:18081
+orbit me
+orbit logout
+orbit logout --backend-url http://117.72.14.134:18081
 ```
 
 可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
 
 ```bash
-orbit-tools project bind \
+orbit project bind \
   --repo /path/to/repo \
   --product-line-uuid <product-line-uuid> \
   --project-uuid <project-uuid> \
@@ -222,7 +225,7 @@ orbit-tools project bind \
 高级 UUID 示例：
 
 ```bash
-orbit-tools project bind \
+orbit project bind \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://117.72.14.134:18081 \
   --product-line-uuid 8f938fdc-f2be-44d6-8c48-91bc9156836d \
@@ -233,15 +236,15 @@ orbit-tools project bind \
 本地开发示例：
 
 ```bash
-orbit-tools login \
+orbit login \
   --backend-url http://127.0.0.1:18081
 
-orbit-tools init \
+orbit init \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://127.0.0.1:18081
 
 cd /home/team/orbit/product-line-root
-orbit-tools bind \
+orbit bind \
   --root /home/team/orbit/product-line-root \
   --backend-url http://127.0.0.1:18081 \
   --owner jasper
@@ -250,13 +253,13 @@ orbit-tools bind \
 查看绑定：
 
 ```bash
-orbit-tools project show --repo /path/to/repo
-orbit-tools project show --repo /path/to/repo --json
+orbit project show --repo /path/to/repo
+orbit project show --repo /path/to/repo --json
 ```
 
 ## WorkItem 生命周期
 
-`orbit-tools` 目前只负责本地 CLI、Hermes MCP 配置和 repo 绑定；没有实现 `claim/start/complete` 这类生命周期 CLI 子命令。模型或 CLI 侧应通过已配置的 Orbit MCP server 调用 Orbit Hub 工具，或直接调用 Orbit Hub backend API。
+`orbit` CLI 目前只负责本地 CLI、Hermes MCP 配置和 repo 绑定；没有实现 `claim/start/complete` 这类生命周期 CLI 子命令。模型或 CLI 侧应通过已配置的 Orbit MCP server 调用 Orbit Hub 工具，或直接调用 Orbit Hub backend API。
 
 MCP 工具：
 
@@ -330,7 +333,7 @@ bash scripts/uninstall-codex-hook.sh
 ```
 
 ### 方式二：把命令改成绝对路径，减少 PATH 依赖
-如果担心 Codex hook 环境拿不到 `orbit-tools`，把 `examples/hooks.json` 里的 command 改成：
+如果担心 Codex hook 环境拿不到 `orbit`，把 `examples/hooks.json` 里的 command 改成：
 
 ```bash
 node /home/jasperWei/orbit/orbit-tools/dist/cli.js codex-hook ingest

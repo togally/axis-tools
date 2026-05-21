@@ -132,6 +132,19 @@ async function withTempDir(fn) {
 
 async function runViaLinkedBin(args) {
   return withTempDir(async (dir) => {
+    const binPath = path.join(dir, 'orbit');
+    await symlink(cli, binPath);
+    return execFileAsync(binPath, args, {
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+      },
+    });
+  });
+}
+
+async function runViaLinkedAlias(args) {
+  return withTempDir(async (dir) => {
     const binPath = path.join(dir, 'orbit-tools');
     await symlink(cli, binPath);
     return execFileAsync(binPath, args, {
@@ -305,6 +318,11 @@ async function withProductServer(fn, options = {}) {
     }
     if (req.method === 'GET' && req.url === '/api/products/pl_2') {
       if (!requireAuth()) return;
+      if (options.detailAuthStatus) {
+        res.statusCode = options.detailAuthStatus;
+        res.end(JSON.stringify({ error: 'detail auth required' }));
+        return;
+      }
       res.end(JSON.stringify({ ...catalog.products.find((entry) => entry.product.id === 'pl_2'), runtime: catalog.runtime }));
       return;
     }
@@ -326,15 +344,19 @@ async function withProductServer(fn, options = {}) {
   const longHelp = await run(['--help']);
   const shortHelp = await run(['-h']);
   const linkedHelp = await runViaLinkedBin(['--help']);
+  const aliasHelp = await runViaLinkedAlias(['--help']);
+  assert.match(usage.stdout, /^orbit\n/);
+  assert.match(usage.stdout, /Alias: orbit-tools/);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.equal(linkedHelp.stdout, usage.stdout);
+  assert.equal(aliasHelp.stdout, usage.stdout);
   assert.match(usage.stdout, /init = packaged skill setup only/);
   assert.match(usage.stdout, /login = prompt for Orbit account and hidden password; cache session/);
   assert.match(usage.stdout, /me = show current Orbit Hub user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
-  assert.match(usage.stdout, /pull = create local folders from Orbit Hub/);
+  assert.match(usage.stdout, /pull = clone\/pull maintained repos from Orbit Hub/);
   assert.doesNotMatch(usage.stdout, /\bregister\b/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
   await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);
@@ -805,14 +827,37 @@ await withTempDir(async (dir) => {
     assert.equal(consoleProject.productLineName, 'Hermes');
     assert.equal(consoleProject.projectName, 'Hermes Console');
     assert.equal(consoleProject.owner, 'orbit-account');
-    assert.equal(consoleProject.repoPath, bareRepo);
+    assert.equal(consoleProject.repoPath, '/tmp/hermes-console');
+    assert.equal(consoleProject.repositoryUrl, bareRepo);
     assert.match(await readFile(path.join(root, 'hermes', 'hermes-console', 'README.md'), 'utf8'), /Fixture/);
 
-    const docsProject = JSON.parse(await readFile(path.join(root, 'hermes', 'hermes-docs', '.orbit', 'project.json'), 'utf8'));
-    assert.equal(docsProject.projectName, 'Hermes Docs');
-    assert.equal(docsProject.repoPath, undefined);
+    assert.match(result.stdout, /skipped-no-repo: 1/);
+    await assert.rejects(readFile(path.join(root, 'hermes', 'hermes-docs', '.orbit', 'project.json'), 'utf8'));
+    await assert.rejects(readFile(path.join(root, 'hermes', 'hermes-docs', 'README.md'), 'utf8'));
     await assertGlobalConfigHasNoLocalBindingKeys(home);
-  }, { repoPath: bareRepo });
+  }, { repositoryUrl: bareRepo });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    await assert.rejects(
+      runInteractive([
+        'pull',
+        '--root',
+        root,
+        '--backend-url',
+        backendUrl,
+      ], '1\n', { env: { HOME: home } }),
+      /权限不足 \/ Insufficient permission/,
+    );
+
+    await assert.rejects(readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
+    await assert.rejects(readFile(path.join(root, 'hermes', 'hermes-console', '.orbit', 'project.json'), 'utf8'));
+  }, { detailAuthStatus: 403 });
 });
 
 await withTempDir(async (dir) => {
@@ -829,13 +874,12 @@ await withTempDir(async (dir) => {
       backendUrl,
     ], '3\n', { env: { HOME: home } });
 
-    assert.match(result.stdout, /created: 2/);
+    assert.match(result.stdout, /skipped-no-repo: 2/);
     assert.doesNotMatch(result.stderr, /git clone \/home\/jasperWei\/orbit\/orbit-flow/);
 
     const consoleProjectPath = path.join(root, 'hermes', 'hermes-console');
-    const consoleProject = JSON.parse(await readFile(path.join(consoleProjectPath, '.orbit', 'project.json'), 'utf8'));
-    assert.equal(consoleProject.projectName, 'Hermes Console');
-    assert.equal(consoleProject.repoPath, '/home/jasperWei/orbit/orbit-flow');
+    await assert.rejects(readFile(path.join(consoleProjectPath, '.orbit', 'project.json'), 'utf8'));
+    await assert.rejects(readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
   }, { repoPath: '/home/jasperWei/orbit/orbit-flow' });
 });
 

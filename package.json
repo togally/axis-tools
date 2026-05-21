@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
+    "orbit": "./dist/cli.js",
     "orbit-tools": "./dist/cli.js"
   },
   "scripts": {

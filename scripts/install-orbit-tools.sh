@@ -124,24 +124,30 @@ install_cli() {
   log "Installing npm dependencies"
   (cd "$ORBIT_TOOLS_DIR" && npm install)
 
-  log "Building orbit-tools"
+  log "Building orbit CLI"
   (cd "$ORBIT_TOOLS_DIR" && npm run build)
 
-  log "Linking global orbit-tools command"
+  log "Linking global orbit command"
   (cd "$ORBIT_TOOLS_DIR" && npm link)
 }
 
 verify_cli() {
-  log "Verifying orbit-tools command"
+  log "Verifying orbit command"
   tmp_output="$(mktemp)"
-  if orbit-tools --help >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
+  if orbit --help >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
     sed -n '1,40p' "$tmp_output"
-  elif orbit-tools >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
+  elif orbit >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
     sed -n '1,40p' "$tmp_output"
   else
     cat "$tmp_output" >&2
     rm -f "$tmp_output"
-    die "Global orbit-tools command did not print help output after npm link."
+    die "Global orbit command did not print help output after npm link."
+  fi
+
+  if orbit-tools --help >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
+    log "Verified compatibility alias orbit-tools"
+  else
+    log "Compatibility alias orbit-tools was not available"
   fi
   rm -f "$tmp_output"
 }
@@ -159,7 +165,7 @@ main() {
 
   install_cli
   verify_cli
-  log "Installed orbit-tools from $ORBIT_TOOLS_DIR"
+  log "Installed orbit from $ORBIT_TOOLS_DIR"
 }
 
 main "$@"

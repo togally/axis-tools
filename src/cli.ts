@@ -198,7 +198,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 ];
 
 function printUsage(): void {
-  console.log(`orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = create local folders from Orbit Hub and clone maintained repos\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -840,7 +840,7 @@ function globalSessions(config: Json): Json {
 class OrbitCliError extends Error {}
 
 function loginRequiredMessage(backendUrl: string): string {
-  return `请先登录 / Please login: run orbit-tools login --backend-url ${normalizeBackendUrl(backendUrl)}`;
+  return `请先登录 / Please login: run orbit login --backend-url ${normalizeBackendUrl(backendUrl)}`;
 }
 
 function insufficientPermissionMessage(): string {
@@ -1888,22 +1888,8 @@ async function isGitRepo(repoPath: string): Promise<boolean> {
   }
 }
 
-async function isCloneableLocalRepoPath(repoPath: string | null | undefined): Promise<boolean> {
-  if (!repoPath || !path.isAbsolute(repoPath) || !repoPath.endsWith('.git')) return false;
-  if (!await directoryExists(repoPath)) return false;
-  try {
-    await execFileAsync('git', ['-C', repoPath, 'rev-parse', '--is-bare-repository']);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function cloneAddress(module: OrbitProjectModule): Promise<string | null> {
-  const explicitAddress = explicitCloneAddress(module);
-  if (explicitAddress) return explicitAddress;
-  if (await isCloneableLocalRepoPath(module.repoPath)) return module.repoPath ?? null;
-  return null;
+function cloneAddress(module: OrbitProjectModule): string | null {
+  return explicitCloneAddress(module);
 }
 
 function summarizeCommandError(error: unknown): string {
@@ -1914,23 +1900,17 @@ function summarizeCommandError(error: unknown): string {
 }
 
 type SyncRepositoryResult = {
-  status: 'created' | 'cloned' | 'pulled' | 'skipped-nonempty' | 'clone-failed';
+  status: 'cloned' | 'pulled' | 'skipped-nonempty' | 'clone-failed';
   error?: string;
 };
 
-async function syncRepository(repoUrl: string | null, targetPath: string): Promise<SyncRepositoryResult> {
-  if (!repoUrl) {
-    ensureDir(targetPath);
-    return { status: 'created' };
-  }
-
+async function syncRepository(repoUrl: string, targetPath: string): Promise<SyncRepositoryResult> {
   if (!await directoryExists(targetPath) || await directoryIsEmpty(targetPath)) {
     ensureDir(path.dirname(targetPath));
     try {
       await execFileAsync('git', ['clone', repoUrl, targetPath]);
       return { status: 'cloned' };
     } catch (error) {
-      ensureDir(targetPath);
       return { status: 'clone-failed', error: summarizeCommandError(error) };
     }
   }
@@ -1957,7 +1937,8 @@ async function selectProductLinesToPull(prompt: PromptSession, backendUrl: strin
     for (const entry of productLines) {
       try {
         details.push(await fetchProductDetail(backendUrl, entry.product.id, token, { allowEmptyProjects: true }));
-      } catch {
+      } catch (error) {
+        if (error instanceof OrbitCliError) throw error;
         details.push(entry);
       }
     }
@@ -1984,23 +1965,19 @@ async function pullCloudStructure(): Promise<void> {
     ensureDir(rootPath);
     for (const productDetail of productDetails) {
       const productPath = path.join(rootPath, safeSlug(productDetail.product.name));
-      ensureDir(productPath);
-      const productBinding = buildProductLineBinding({
-        rootPath: productPath,
-        backendUrl,
-        mcpUrl,
-        productDetail,
-        login,
-        account,
-        owner,
-      });
-      await writeProductLineBinding(productPath, productBinding);
-      productConfigs.push(productLineConfigPath(productPath));
 
       for (const project of productDetail.modules) {
         const projectPath = path.join(productPath, safeSlug(project.name));
-        const repoUrl = await cloneAddress(project);
+        const repoUrl = cloneAddress(project);
+        if (!repoUrl) {
+          gitResults.push({ path: projectPath, status: 'skipped-no-repo', repo: null });
+          continue;
+        }
         const syncResult = await syncRepository(repoUrl, projectPath);
+        gitResults.push({ path: projectPath, status: syncResult.status, repo: repoUrl, error: syncResult.error });
+        if (syncResult.status === 'clone-failed' || syncResult.status === 'skipped-nonempty') {
+          continue;
+        }
         const binding = buildProjectBinding({
           repoPath: projectPath,
           backendUrl,
@@ -2013,8 +1990,22 @@ async function pullCloudStructure(): Promise<void> {
         });
         await writeProjectBinding(projectPath, binding);
         projectConfigs.push(projectConfigPath(projectPath));
-        gitResults.push({ path: projectPath, status: syncResult.status, repo: repoUrl, error: syncResult.error });
       }
+
+      if (!projectConfigs.some((configPath) => configPath.startsWith(`${productPath}${path.sep}`))) {
+        continue;
+      }
+      const productBinding = buildProductLineBinding({
+        rootPath: productPath,
+        backendUrl,
+        mcpUrl,
+        productDetail,
+        login,
+        account,
+        owner,
+      });
+      await writeProductLineBinding(productPath, productBinding);
+      productConfigs.push(productLineConfigPath(productPath));
     }
   } finally {
     prompt.close();
@@ -2025,7 +2016,7 @@ async function pullCloudStructure(): Promise<void> {
   productConfigs.forEach((configPath) => console.log(`    ${configPath}`));
   console.log(`  projects: ${projectConfigs.length}`);
   projectConfigs.forEach((configPath) => console.log(`    ${configPath}`));
-  for (const status of ['cloned', 'pulled', 'created', 'skipped-nonempty', 'clone-failed']) {
+  for (const status of ['cloned', 'pulled', 'skipped-no-repo', 'skipped-nonempty', 'clone-failed']) {
     const matches = gitResults.filter((result) => result.status === status);
     console.log(`  ${status}: ${matches.length}`);
     matches.forEach((result) => console.log(`    ${result.path}${result.repo ? ` <- ${result.repo}` : ''}${result.error ? ` (${result.error})` : ''}`));
