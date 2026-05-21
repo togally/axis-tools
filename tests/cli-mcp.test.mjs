@@ -186,6 +186,8 @@ async function withProductServer(fn, options = {}) {
             summary: 'Console project',
             status: 'active',
             repoPath: options.repoPath ?? '/tmp/hermes-console',
+            repositoryUrl: options.repositoryUrl,
+            githubRepo: options.githubRepo,
           },
           {
             id: 'mod_2',
@@ -767,6 +769,54 @@ await withTempDir(async (dir) => {
     assert.equal(docsProject.projectName, 'Hermes Docs');
     assert.equal(docsProject.repoPath, undefined);
   }, { repoPath: bareRepo });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    const result = await runInteractive([
+      'pull',
+      '--root',
+      root,
+      '--backend-url',
+      backendUrl,
+    ], '3\n', { env: { HOME: home } });
+
+    assert.match(result.stdout, /created: 2/);
+    assert.doesNotMatch(result.stderr, /git clone \/home\/jasperWei\/orbit\/orbit-flow/);
+
+    const consoleProjectPath = path.join(root, 'hermes', 'hermes-console');
+    const consoleProject = JSON.parse(await readFile(path.join(consoleProjectPath, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(consoleProject.projectName, 'Hermes Console');
+    assert.equal(consoleProject.repoPath, '/home/jasperWei/orbit/orbit-flow');
+  }, { repoPath: '/home/jasperWei/orbit/orbit-flow' });
+});
+
+await withTempDir(async (dir) => {
+  const bareRepo = await createBareGitFixture(dir);
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    const result = await runInteractive([
+      'pull',
+      '--root',
+      root,
+      '--backend-url',
+      backendUrl,
+    ], '3\n', { env: { HOME: home } });
+
+    assert.match(result.stdout, /cloned: 1/);
+    const consoleProjectPath = path.join(root, 'hermes', 'hermes-console');
+    const consoleProject = JSON.parse(await readFile(path.join(consoleProjectPath, '.orbit', 'project.json'), 'utf8'));
+    assert.equal(consoleProject.repoPath, '/home/jasperWei/orbit/orbit-flow');
+    assert.equal(consoleProject.repositoryUrl, bareRepo);
+    assert.match(await readFile(path.join(consoleProjectPath, 'README.md'), 'utf8'), /Fixture/);
+  }, { repoPath: '/home/jasperWei/orbit/orbit-flow', repositoryUrl: bareRepo });
 });
 
 await withTempDir(async (dir) => {

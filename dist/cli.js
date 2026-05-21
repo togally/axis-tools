@@ -879,7 +879,16 @@ function describeProject(module) {
 }
 function repositoryAddress(module) {
     return module.repositoryAddress
+        ?? module.repositoryUrl
+        ?? module.gitUrl
+        ?? module.remoteUrl
+        ?? module.githubRepo
+        ?? module.sourceRepo
         ?? module.repoPath
+        ?? null;
+}
+function explicitCloneAddress(module) {
+    return module.repositoryAddress
         ?? module.repositoryUrl
         ?? module.gitUrl
         ?? module.remoteUrl
@@ -1063,9 +1072,18 @@ function buildProjectBinding(values) {
     };
     if (values.mcpUrl)
         binding.mcpUrl = values.mcpUrl;
-    const repoUrl = repositoryAddress(values.selectedProject);
-    if (repoUrl)
-        binding.repoPath = repoUrl;
+    if (values.selectedProject.repoPath)
+        binding.repoPath = values.selectedProject.repoPath;
+    if (values.selectedProject.githubRepo)
+        binding.githubRepo = values.selectedProject.githubRepo;
+    if (values.selectedProject.sourceRepo)
+        binding.sourceRepo = values.selectedProject.sourceRepo;
+    if (values.selectedProject.repositoryUrl)
+        binding.repositoryUrl = values.selectedProject.repositoryUrl;
+    if (values.selectedProject.gitUrl)
+        binding.gitUrl = values.selectedProject.gitUrl;
+    if (values.selectedProject.remoteUrl)
+        binding.remoteUrl = values.selectedProject.remoteUrl;
     return binding;
 }
 function parseAgentArg(value) {
@@ -1537,27 +1555,55 @@ async function isGitRepo(repoPath) {
         return false;
     }
 }
+async function isCloneableLocalRepoPath(repoPath) {
+    if (!repoPath || !path.isAbsolute(repoPath) || !repoPath.endsWith('.git'))
+        return false;
+    if (!await directoryExists(repoPath))
+        return false;
+    try {
+        await execFileAsync('git', ['-C', repoPath, 'rev-parse', '--is-bare-repository']);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function cloneAddress(module) {
+    const explicitAddress = explicitCloneAddress(module);
+    if (explicitAddress)
+        return explicitAddress;
+    if (await isCloneableLocalRepoPath(module.repoPath))
+        return module.repoPath ?? null;
+    return null;
+}
+function summarizeCommandError(error) {
+    if (error instanceof Error && error.message.trim()) {
+        return error.message.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, 2).join(' ');
+    }
+    return String(error);
+}
 async function syncRepository(repoUrl, targetPath) {
     if (!repoUrl) {
         ensureDir(targetPath);
-        return 'created';
+        return { status: 'created' };
     }
     if (!await directoryExists(targetPath) || await directoryIsEmpty(targetPath)) {
         ensureDir(path.dirname(targetPath));
-        if (await directoryExists(targetPath)) {
+        try {
             await execFileAsync('git', ['clone', repoUrl, targetPath]);
+            return { status: 'cloned' };
         }
-        else {
-            await execFileAsync('git', ['clone', repoUrl, targetPath]);
+        catch (error) {
+            ensureDir(targetPath);
+            return { status: 'clone-failed', error: summarizeCommandError(error) };
         }
-        return 'cloned';
     }
     if (await isGitRepo(targetPath)) {
         await execFileAsync('git', ['-C', targetPath, 'fetch', '--all', '--prune']);
         await execFileAsync('git', ['-C', targetPath, 'pull', '--ff-only']);
-        return 'pulled';
+        return { status: 'pulled' };
     }
-    return 'skipped-nonempty';
+    return { status: 'skipped-nonempty' };
 }
 async function selectProductLinesToPull(prompt, backendUrl, token) {
     const productLines = await fetchProductLines(backendUrl, token);
@@ -1610,8 +1656,8 @@ async function pullCloudStructure() {
             productConfigs.push(productLineConfigPath(productPath));
             for (const project of productDetail.modules) {
                 const projectPath = path.join(productPath, safeSlug(project.name));
-                const repoUrl = repositoryAddress(project);
-                const status = await syncRepository(repoUrl, projectPath);
+                const repoUrl = await cloneAddress(project);
+                const syncResult = await syncRepository(repoUrl, projectPath);
                 const binding = buildProjectBinding({
                     repoPath: projectPath,
                     backendUrl,
@@ -1624,7 +1670,7 @@ async function pullCloudStructure() {
                 });
                 await writeProjectBinding(projectPath, binding);
                 projectConfigs.push(projectConfigPath(projectPath));
-                gitResults.push({ path: projectPath, status, repo: repoUrl });
+                gitResults.push({ path: projectPath, status: syncResult.status, repo: repoUrl, error: syncResult.error });
             }
         }
     }
@@ -1636,10 +1682,10 @@ async function pullCloudStructure() {
     productConfigs.forEach((configPath) => console.log(`    ${configPath}`));
     console.log(`  projects: ${projectConfigs.length}`);
     projectConfigs.forEach((configPath) => console.log(`    ${configPath}`));
-    for (const status of ['cloned', 'pulled', 'created', 'skipped-nonempty']) {
+    for (const status of ['cloned', 'pulled', 'created', 'skipped-nonempty', 'clone-failed']) {
         const matches = gitResults.filter((result) => result.status === status);
         console.log(`  ${status}: ${matches.length}`);
-        matches.forEach((result) => console.log(`    ${result.path}${result.repo ? ` <- ${result.repo}` : ''}`));
+        matches.forEach((result) => console.log(`    ${result.path}${result.repo ? ` <- ${result.repo}` : ''}${result.error ? ` (${result.error})` : ''}`));
     }
 }
 async function bindProject() {
