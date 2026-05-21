@@ -566,12 +566,18 @@ function cleanGlobalOrbitConfig(config) {
     }
     return config;
 }
-function asOrbitUser(value, account) {
+function asPermissionList(value) {
+    return Array.isArray(value)
+        ? value.filter((permission) => typeof permission === 'string')
+        : [];
+}
+function mergePermissions(...permissionLists) {
+    return [...new Set(permissionLists.flat())];
+}
+function asOrbitUser(value, account, extraPermissions = []) {
     if (!isJson(value))
         return { account, name: account };
-    const permissions = Array.isArray(value.permissions)
-        ? value.permissions.filter((permission) => typeof permission === 'string')
-        : [];
+    const permissions = mergePermissions(asPermissionList(value.permissions), extraPermissions);
     return {
         id: safeString(value.id),
         account: safeString(value.account) ?? account,
@@ -592,7 +598,7 @@ function asLoginSession(value, account) {
         token,
         key,
         session: safeString(value.session),
-        user: asOrbitUser(value.user, account),
+        user: asOrbitUser(value.user, account, asPermissionList(value.permissions)),
     };
 }
 function asCachedLoginSession(value) {
@@ -846,7 +852,7 @@ async function loginOrbitHub(backendUrl, account, password) {
 async function fetchCurrentUser(backendUrl, token) {
     const payload = await fetchOrbitJson(backendUrl, '/api/me', token);
     const rawUser = isJson(payload) && isJson(payload.user) ? payload.user : payload;
-    const user = asOrbitUser(rawUser, '');
+    const user = asOrbitUser(rawUser, '', isJson(payload) ? asPermissionList(payload.permissions) : []);
     if (!user.account) {
         throw new Error('Orbit Hub backend response for /api/me did not include user.account');
     }

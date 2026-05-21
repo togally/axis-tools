@@ -274,15 +274,19 @@ async function withProductServer(fn, options = {}) {
       if (!requireAuth()) return;
       const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
       const account = state.accountByToken[token] ?? 'orbit-user';
+      const user = {
+        id: 'orbit-dev-user',
+        account,
+        displayName: 'Orbit User',
+        name: 'Orbit User',
+        role: options.meRole ?? 'admin',
+      };
+      if (!options.meTopLevelPermissions) {
+        user.permissions = ['products:read', 'projects:bind'];
+      }
       res.end(JSON.stringify({
-        user: {
-          id: 'orbit-dev-user',
-          account,
-          displayName: 'Orbit User',
-          name: 'Orbit User',
-          role: 'admin',
-          permissions: ['products:read', 'projects:bind'],
-        },
+        ...(options.meTopLevelPermissions ? { permissions: options.meTopLevelPermissions } : {}),
+        user,
       }));
       return;
     }
@@ -300,18 +304,22 @@ async function withProductServer(fn, options = {}) {
           return;
         }
         state.accountByToken['orbit-dev-token'] = payload.account;
+        const user = {
+          id: 'orbit-dev-user',
+          account: payload.account,
+          displayName: 'Orbit User',
+          name: 'Orbit User',
+          role: 'admin',
+        };
+        if (!options.loginTopLevelPermissions) {
+          user.permissions = ['products:read', 'projects:bind'];
+        }
         res.end(JSON.stringify({
+          ...(options.loginTopLevelPermissions ? { permissions: options.loginTopLevelPermissions } : {}),
           token: 'orbit-dev-token',
           key: 'orbit-dev-key',
           session: 'orbit-dev-session',
-          user: {
-            id: 'orbit-dev-user',
-            account: payload.account,
-            displayName: 'Orbit User',
-            name: 'Orbit User',
-            role: 'admin',
-            permissions: ['products:read', 'projects:bind'],
-          },
+          user,
         }));
       });
       return;
@@ -476,6 +484,30 @@ await withTempDir(async (dir) => {
       /权限不足 \/ Insufficient permission/,
     );
   }, { authStatus: 403 });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+
+    await runInteractive(['login', '--backend-url', backendUrl], `jzw\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    const loggedInConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.deepEqual(loggedInConfig.sessions[backendUrl].user.permissions, ['login:top-level']);
+
+    const result = await run(['me', '--backend-url', backendUrl], { env: { HOME: home } });
+    assert.match(result.stdout, /account: jzw/);
+    assert.match(result.stdout, /displayName: Orbit User/);
+    assert.match(result.stdout, /role: member/);
+    assert.match(result.stdout, /permissions: products:read, projects:bind/);
+
+    const refreshedConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.deepEqual(refreshedConfig.sessions[backendUrl].user.permissions, ['products:read', 'projects:bind']);
+  }, {
+    loginTopLevelPermissions: ['login:top-level'],
+    meRole: 'member',
+    meTopLevelPermissions: ['products:read', 'projects:bind'],
+  });
 });
 
 await withTempDir(async (dir) => {
