@@ -267,6 +267,10 @@ async function withProductServer(fn, options = {}) {
     };
     if (req.method === 'GET' && req.url === '/api/products') {
       if (!requireAuth()) return;
+      if (options.emptyProducts) {
+        res.end(JSON.stringify({ products: [], runtime: catalog.runtime }));
+        return;
+      }
       res.end(JSON.stringify(catalog));
       return;
     }
@@ -832,7 +836,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const bareRepo = await createBareGitFixture(dir);
-  await withProductServer(async (backendUrl) => {
+  await withProductServer(async (backendUrl, state) => {
     const root = path.join(dir, 'pull-root');
     const home = path.join(dir, 'home');
     await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
@@ -866,8 +870,90 @@ await withTempDir(async (dir) => {
     assert.match(result.stdout, /skipped-no-repo: 1/);
     await assert.rejects(readFile(path.join(root, 'hermes', 'hermes-docs', '.orbit', 'project.json'), 'utf8'));
     await assert.rejects(readFile(path.join(root, 'hermes', 'hermes-docs', 'README.md'), 'utf8'));
+    const productRequest = state.requests.find((request) => request.method === 'GET' && request.url === '/api/products');
+    const detailRequest = state.requests.find((request) => request.method === 'GET' && request.url === '/api/products/pl_2');
+    assert.equal(productRequest.authorization, 'Bearer orbit-dev-token');
+    assert.equal(detailRequest.authorization, 'Bearer orbit-dev-token');
     await assertGlobalConfigHasNoLocalBindingKeys(home);
   }, { repositoryUrl: bareRepo });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+
+    await assert.rejects(
+      runInteractive([
+        'pull',
+        '--root',
+        root,
+        '--backend-url',
+        backendUrl,
+      ], '1\n', { env: { HOME: home } }),
+      /run orbit login --backend-url/,
+    );
+
+    await assert.rejects(readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'denied-user',
+          token: 'bad-token',
+          key: 'bad-key',
+          user: { account: 'denied-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+
+    await assert.rejects(
+      runInteractive([
+        'pull',
+        '--root',
+        root,
+        '--backend-url',
+        backendUrl,
+      ], '1\n', { env: { HOME: home } }),
+      (error) => /run orbit login --backend-url/.test(error.stderr)
+        && /verify account has product\/project access/.test(error.stderr)
+        && !/Create a product line first/.test(error.stderr),
+    );
+
+    await assert.rejects(readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
+  }, { authStatus: 401 });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const root = path.join(dir, 'pull-root');
+    const home = path.join(dir, 'home');
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    await assert.rejects(
+      runInteractive([
+        'pull',
+        '--root',
+        root,
+        '--backend-url',
+        backendUrl,
+      ], '1\n', { env: { HOME: home } }),
+      (error) => /No accessible product lines/.test(error.stderr)
+        && /orbit-account/.test(error.stderr)
+        && /Create a product line first/.test(error.stderr) === false,
+    );
+
+    await assert.rejects(readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
+  }, { emptyProducts: true });
 });
 
 await withTempDir(async (dir) => {

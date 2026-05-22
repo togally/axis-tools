@@ -848,11 +848,11 @@ function globalSessions(config: Json): Json {
 class OrbitCliError extends Error {}
 
 function loginRequiredMessage(backendUrl: string): string {
-  return `请先登录 / Please login: run orbit login --backend-url ${normalizeBackendUrl(backendUrl)}`;
+  return `请先登录 / Please login: run orbit login --backend-url ${normalizeBackendUrl(backendUrl)}; verify account has product/project access.`;
 }
 
-function insufficientPermissionMessage(): string {
-  return '权限不足 / Insufficient permission: ask an Orbit Hub owner/admin to grant access.';
+function insufficientPermissionMessage(backendUrl: string): string {
+  return `权限不足 / Insufficient permission: run orbit login --backend-url ${normalizeBackendUrl(backendUrl)} with the correct account; verify account has product/project access.`;
 }
 
 async function cachedLoginSession(backendUrl: string): Promise<CachedOrbitLoginSession | null> {
@@ -1019,7 +1019,7 @@ async function fetchOrbitJson(backendUrl: string, routePath: string, token?: str
 
   if (!response.ok) {
     if (response.status === 401) throw new OrbitCliError(loginRequiredMessage(backendUrl));
-    if (response.status === 403) throw new OrbitCliError(insufficientPermissionMessage());
+    if (response.status === 403) throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
     throw new Error(`Orbit Hub backend returned HTTP ${response.status} for ${url}`);
   }
 
@@ -1050,7 +1050,7 @@ async function postOrbitJson(backendUrl: string, routePath: string, body: Json, 
 
   if (!response.ok) {
     if (response.status === 401) throw new OrbitCliError(loginRequiredMessage(backendUrl));
-    if (response.status === 403) throw new OrbitCliError(insufficientPermissionMessage());
+    if (response.status === 403) throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
     throw new Error(`Orbit Hub backend returned HTTP ${response.status} for ${url}`);
   }
 
@@ -1081,7 +1081,7 @@ async function fetchCurrentUser(backendUrl: string, token: string): Promise<Orbi
   return user;
 }
 
-async function fetchProductLines(backendUrl: string, token?: string | null): Promise<OrbitProductDetail[]> {
+async function fetchProductLines(backendUrl: string, token?: string | null, options: { account?: string | null } = {}): Promise<OrbitProductDetail[]> {
   const payload = await fetchOrbitJson(backendUrl, '/api/products', token);
   if (!isJson(payload) || !Array.isArray(payload.products)) {
     throw new Error('Orbit Hub backend response for /api/products did not include a products array');
@@ -1092,7 +1092,8 @@ async function fetchProductLines(backendUrl: string, token?: string | null): Pro
     .map(visibleProductDetail)
     .filter((entry): entry is OrbitProductDetail => Boolean(entry));
   if (products.length === 0) {
-    throw new Error(`No product lines found in Orbit Hub at ${normalizeBackendUrl(backendUrl)}. Create a product line first.`);
+    const account = options.account ? ` for account "${options.account}"` : ' for this account';
+    throw new Error(`No accessible product lines${account} at ${normalizeBackendUrl(backendUrl)}. Verify this account has product/project access for this backend.`);
   }
   return products;
 }
@@ -1932,8 +1933,8 @@ async function syncRepository(repoUrl: string, targetPath: string): Promise<Sync
   return { status: 'skipped-nonempty' };
 }
 
-async function selectProductLinesToPull(prompt: PromptSession, backendUrl: string, token?: string | null): Promise<OrbitProductDetail[]> {
-  const productLines = await fetchProductLines(backendUrl, token);
+async function selectProductLinesToPull(prompt: PromptSession, backendUrl: string, token?: string | null, account?: string | null): Promise<OrbitProductDetail[]> {
+  const productLines = await fetchProductLines(backendUrl, token, { account });
   const allChoice = { id: 'all', label: 'All product lines', detail: null as OrbitProductDetail | null };
   const choices = [
     allChoice,
@@ -1968,7 +1969,7 @@ async function pullCloudStructure(): Promise<void> {
   const prompt = await createPromptSession();
   try {
     const owner = login.user.account ?? account;
-    const productDetails = await selectProductLinesToPull(prompt, backendUrl, login.token);
+    const productDetails = await selectProductLinesToPull(prompt, backendUrl, login.token, owner);
 
     ensureDir(rootPath);
     for (const productDetail of productDetails) {
