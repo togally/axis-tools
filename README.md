@@ -52,6 +52,8 @@ orbit-tools/
 │   ├── sample-pretool.json
 │   └── sample-posttool.json
 ├── skills/
+│   ├── orbit-requirement/
+│   │   └── SKILL.md
 │   ├── orbit-workflow/
 │   │   └── SKILL.md
 │   └── oribit-idea/
@@ -138,6 +140,12 @@ orbit bind
 `login` 会提示 account 和隐藏输入的 password，调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
 
 `init` 只处理 packaged skill 安装。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*/SKILL.md` 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
+
+当前 packaged skills：
+
+- `orbit-workflow`: 通过 Orbit MCP 处理 discussion、requirement、bug、improvement 池和 WorkItem 生命周期。
+- `orbit-requirement`: 把产品/项目想法或用户请求整理成 Orbit requirement/spec Markdown，并可生成 requirement 池 WorkItems 和 Orbit Hub import payload。
+- `oribit-idea`: 保留现有拼写，使用 gstack office-hours 孵化早期想法并生成 Orbit-ready artifacts。
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.orbit/project.json`。项目或产品线绑定由 `bind` 完成。
 

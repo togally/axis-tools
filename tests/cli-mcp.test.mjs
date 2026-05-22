@@ -609,9 +609,9 @@ await withTempDir(async (dir) => {
   const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
   const installJson = JSON.parse(install.stdout);
   assert.equal(installJson.ok, true);
-  assert.equal(installJson.installed.length, 8);
+  assert.equal(installJson.installed.length, 11);
 
-  for (const skill of ['orbit-workflow', 'oribit-idea']) {
+  for (const skill of ['orbit-requirement', 'orbit-workflow', 'oribit-idea']) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
     const codexSkill = await readFile(path.join(home, '.codex', 'skills', skill, 'SKILL.md'), 'utf8');
     const claudeSkill = await readFile(path.join(home, '.claude', 'skills', skill, 'SKILL.md'), 'utf8');
@@ -671,6 +671,8 @@ await withTempDir(async (dir) => {
     const agentSkillPath = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
     assert.match(await readFile(skillPath, 'utf8'), /Orbit/);
     assert.match(await readFile(agentSkillPath, 'utf8'), /Orbit/);
+    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /Orbit Requirement/);
+    assert.match(await readFile(path.join(home, '.codex', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /Orbit Requirement/);
 
     const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(globalConfig.selectedAgent, 'codex');
