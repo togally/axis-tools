@@ -5,7 +5,7 @@ description: Use when converting a product/project idea or user request into a s
 
 # Orbit Requirement
 
-Use this skill to turn an idea, user request, issue, or conversation into an Orbit Hub project requirement document and optional requirement-pool WorkItems.
+Use this skill to turn an idea, user request, issue, or conversation into an Orbit Hub project requirement document and optional requirement-pool WorkItems. User-facing CLI calls such as `orbit-req "商品评价支持图片"` create and submit automatically; `prepare` and `import` are the internal Agent protocol.
 
 ## Trigger Conditions
 
@@ -67,6 +67,14 @@ When deriving WorkItems, use this shape:
 Keep WorkItems small enough to implement independently. Do not mark them claimed, started, or done.
 
 ## Orbit Import Flow
+
+When this skill is running inside an Agent, prefer handing the artifact to the CLI:
+
+```bash
+orbit-req import --stdin
+```
+
+`import` tries `POST /api/projects/{projectId}/requirements` first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
 1. Read `.orbit/project.json` from the target repo when available.
 2. Use `projectUuid`/`projectId` and `productLineUuid`/`productLineId` from that binding. Prefer UUID fields.

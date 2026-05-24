@@ -5,18 +5,20 @@ description: Use when turning a bug report, regression, error log, or failed wor
 
 # Orbit Bug
 
-Use this skill to convert a user report or debugging context into an Orbit bug artifact. The CLI is the only entry point for repo context, local save, and later import.
+Use this skill to convert a user report or debugging context into an Orbit bug artifact. User-facing CLI calls such as `orbit-bug "登录失败"` create and submit/fallback automatically; `prepare` and `import` are the internal Agent protocol.
 
 ## Flow
 
 1. Run `orbit-bug prepare --json` in the target repo to read safe project binding context.
 2. Understand the bug: expected behavior, actual behavior, reproduction steps, environment, logs, severity, and suspected scope.
 3. Produce an `orbit.pool.artifact.v1` JSON artifact with `kind: "bug"`.
-4. Import or save through the CLI:
+4. Import through the CLI:
 
 ```bash
-orbit-bug import --stdin --save
+orbit-bug import --stdin
 ```
+
+`import` tries to submit to the bound Orbit pool first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
 When this skill is already running inside an Agent, use `--agent current` only for `orbit-bug run` handoffs where the Agent has already produced the semantic artifact. Do not ask the CLI to start another Agent from inside this skill.
 

@@ -44,7 +44,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  orbit-ide prepare|import|run\n  orbit-req prepare|import|run\n  orbit-bug prepare|import|run\n  orbit-sug prepare|import|run\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nPool examples:\n  orbit-req "商品评价支持图片" --save\n  orbit-ide prepare --json\n  orbit-bug import --stdin --save\n  orbit-sug run --from notes.md --agent codex --save\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  orbit-req <text> [--repo <path>] [--agent <codex|claude-code|current|none>] [--json]\n  orbit-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  orbit-req --delete <id> [--repo <path>] [--yes] [--json]\n  orbit-ide|orbit-bug|orbit-sug use the same create/list/delete flags\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nPool examples:\n  orbit-req "商品评价支持图片"\n  orbit-bug "登录失败" --agent none --local\n  orbit-sug "优化按钮文案" --dry-run --json\n  orbit-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local save instead of Hub submit\n  --save = deprecated alias for --local\n  --dry-run = generate artifact only; do not submit or save\n  --from <file> / --stdin = read input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  orbit-ide prepare|import|run\n  orbit-req prepare|import|run\n  orbit-bug prepare|import|run\n  orbit-sug prepare|import|run\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -858,6 +858,46 @@ async function postOrbitJson(backendUrl, routePath, body, token) {
         const message = error instanceof Error ? error.message : String(error);
         throw new Error(`Orbit Hub backend returned invalid JSON for ${url}: ${message}`);
     }
+}
+function pageArg() {
+    const value = Number.parseInt(getArg('--page') ?? '1', 10);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+}
+function pageSizeArg() {
+    const value = Number.parseInt(getArg('--page-size') ?? '20', 10);
+    return Number.isFinite(value) && value > 0 ? Math.min(value, 100) : 20;
+}
+function extractId(payload) {
+    if (!isJson(payload))
+        return null;
+    return safeString(payload.id)
+        ?? safeString(payload.uuid)
+        ?? safeString(payload.documentId)
+        ?? safeString(payload.requirementId)
+        ?? (isJson(payload.data) ? extractId(payload.data) : null);
+}
+function extractUrl(payload) {
+    if (!isJson(payload))
+        return null;
+    return safeString(payload.url)
+        ?? safeString(payload.webUrl)
+        ?? safeString(payload.href)
+        ?? (isJson(payload.data) ? extractUrl(payload.data) : null);
+}
+function projectApiId(binding) {
+    return safeString(binding.projectId) ?? safeString(binding.projectUuid);
+}
+async function tokenForBinding(binding) {
+    if (!binding)
+        return null;
+    const direct = safeString(binding.token);
+    if (direct)
+        return direct;
+    const cached = await cachedLoginSession(binding.backendUrl);
+    if (cached?.token)
+        return cached.token;
+    const config = await readGlobalOrbitConfig();
+    return safeString(config.token);
 }
 async function loginOrbitHub(backendUrl, account, password) {
     const payload = await postOrbitJson(backendUrl, '/api/login', { account, password });
@@ -1827,7 +1867,7 @@ async function preparePool(pool) {
         instructions: [
             `Use ${pool.skill} when available; otherwise produce orbit.pool.artifact.v1 JSON.`,
             `Artifact kind must be ${pool.kind}.`,
-            `When already running inside an Agent/Skill, generate the artifact yourself and call ${pool.command} import --stdin --save, or use ${pool.command} run --agent current --save for an already generated artifact.`,
+            `When already running inside an Agent/Skill, generate the artifact yourself and call ${pool.command} import --stdin. This import will try Orbit Hub first; pass --local for local-only fallback/debug output.`,
             'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
         ],
     };
@@ -1929,7 +1969,7 @@ async function readPoolInput(args) {
     return collectFreeText(args);
 }
 function collectFreeText(args) {
-    const flagsWithValue = new Set(['--repo', '--from', '--file', '--agent']);
+    const flagsWithValue = new Set(['--repo', '--from', '--file', '--agent', '--page', '--page-size', '--delete']);
     const text = [];
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
@@ -1937,7 +1977,7 @@ function collectFreeText(args) {
             index++;
             continue;
         }
-        if (arg === '--save' || arg === '--stdin' || arg === '--json')
+        if (arg === '--save' || arg === '--local' || arg === '--save-local' || arg === '--dry-run' || arg === '--stdin' || arg === '--json' || arg === '--list' || arg === '--yes')
             continue;
         if (arg.startsWith('--'))
             continue;
@@ -1971,12 +2011,92 @@ async function savePoolArtifact(pool, artifact, repoPath, source) {
     await writeFile(filePath, `${metadata}${artifact.markdown.replace(/\s*$/, '\n')}`, 'utf8');
     return filePath;
 }
+function shouldUseLocalOnly() {
+    return hasFlag('--local') || hasFlag('--save-local') || hasFlag('--save');
+}
+function buildRequirementPayload(artifact, repoPath) {
+    return {
+        title: artifact.title,
+        summary: artifact.summary,
+        markdown: artifact.markdown,
+        content: artifact.markdown,
+        artifact,
+        source: {
+            type: 'requirement',
+            kind: artifact.kind,
+            command: 'orbit-req',
+            repo: repoPath,
+        },
+        workItems: artifact.workItems,
+        sections: artifact.sections,
+    };
+}
+async function submitRequirementToHub(binding, token, artifact, repoPath) {
+    const projectId = projectApiId(binding);
+    if (!projectId)
+        throw new Error('project binding has no projectId/projectUuid');
+    if (!token)
+        throw new Error('project binding has no token and no cached login session');
+    return postOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/requirements`, buildRequirementPayload(artifact, repoPath), token);
+}
+async function submitPoolArtifact(pool, repoPath, artifact, source) {
+    if (hasFlag('--dry-run')) {
+        return { ok: true, mode: 'dry-run', repo: repoPath, pool: pool.pool, artifact, id: null, url: null, savedPath: null, warning: null };
+    }
+    if (shouldUseLocalOnly()) {
+        const savedPath = await savePoolArtifact(pool, artifact, repoPath, source);
+        return { ok: true, mode: 'local', repo: repoPath, pool: pool.pool, artifact, id: null, url: null, savedPath, warning: null };
+    }
+    const binding = await readProjectBinding(repoPath);
+    if (binding && pool.kind === 'requirement') {
+        try {
+            const response = await submitRequirementToHub(binding, await tokenForBinding(binding), artifact, repoPath);
+            return {
+                ok: true,
+                mode: 'hub',
+                repo: repoPath,
+                pool: pool.pool,
+                artifact,
+                id: extractId(response),
+                url: extractUrl(response),
+                savedPath: null,
+                warning: null,
+                response,
+            };
+        }
+        catch (error) {
+            const warning = `Hub submit failed; saved locally instead. ${error instanceof Error ? error.message : String(error)}`;
+            const savedPath = await savePoolArtifact(pool, artifact, repoPath, source);
+            return { ok: true, mode: 'local', repo: repoPath, pool: pool.pool, artifact, id: null, url: null, savedPath, warning };
+        }
+    }
+    const reason = !binding
+        ? 'No Orbit project binding found; saved locally instead.'
+        : `Hub pool endpoint for ${pool.kind} is not available in this CLI; saved locally instead.`;
+    const savedPath = await savePoolArtifact(pool, artifact, repoPath, source);
+    return { ok: true, mode: 'local', repo: repoPath, pool: pool.pool, artifact, id: null, url: null, savedPath, warning: reason };
+}
+function printPoolSubmit(result) {
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+    }
+    console.log(`${result.artifact.kind}: ${result.artifact.title}`);
+    console.log(`mode: ${result.mode}`);
+    if (result.id)
+        console.log(`id: ${result.id}`);
+    if (result.url)
+        console.log(`url: ${result.url}`);
+    if (result.savedPath)
+        console.log(`savedPath: ${result.savedPath}`);
+    if (result.warning)
+        console.log(`warning: ${result.warning}`);
+}
 async function importPoolArtifact(pool, args, source = `${pool.command} import`) {
     const repoPath = resolveRepoArg();
     const input = await readPoolInput(args);
     const artifact = normalizePoolArtifact(pool, input);
-    const savedPath = hasFlag('--save') ? await savePoolArtifact(pool, artifact, repoPath, source) : null;
-    console.log(JSON.stringify({ ok: true, repo: repoPath, pool: pool.pool, artifact, savedPath }, null, 2));
+    printPoolSubmit(await submitPoolArtifact(pool, repoPath, artifact, source));
 }
 function parsePoolAgentArg(value) {
     if (!value)
@@ -2062,8 +2182,8 @@ async function runPool(pool, args) {
             console.error('--agent current received natural language; generated a template artifact. current mode is intended for Agent-produced artifacts.');
         }
         const artifact = normalizePoolArtifact(pool, input);
-        const savedPath = hasFlag('--save') ? await savePoolArtifact(pool, artifact, repoPath, `${pool.command} run`) : null;
-        console.log(JSON.stringify({ ok: true, repo: repoPath, pool: pool.pool, agent, artifact, savedPath }, null, 2));
+        const result = await submitPoolArtifact(pool, repoPath, artifact, `${pool.command} run`);
+        printPoolSubmit({ ...result, response: result.response ?? { agent } });
         return;
     }
     const binding = await readProjectBinding(repoPath);
@@ -2080,11 +2200,138 @@ async function runPool(pool, args) {
     }, null, 2);
     const output = await runPoolAgent(agent, repoPath, buildPoolAgentPrompt(pool, prepare, input));
     const artifact = normalizePoolArtifact(pool, output);
-    const savedPath = hasFlag('--save') ? await savePoolArtifact(pool, artifact, repoPath, `${pool.command} run`) : null;
-    console.log(JSON.stringify({ ok: true, repo: repoPath, pool: pool.pool, agent, artifact, savedPath }, null, 2));
+    const result = await submitPoolArtifact(pool, repoPath, artifact, `${pool.command} run`);
+    printPoolSubmit({ ...result, response: result.response ?? { agent } });
+}
+function poolDocumentMatches(pool, document) {
+    const source = isJson(document.source) ? document.source : {};
+    const sourceType = safeString(source.type) ?? safeString(document.sourceType);
+    const kind = safeString(source.kind) ?? safeString(document.kind) ?? safeString(document.type);
+    if (pool.kind === 'requirement') {
+        return sourceType === 'requirement' || kind === 'requirement';
+    }
+    return sourceType === pool.kind || kind === pool.kind;
+}
+function asPoolListItem(document) {
+    const source = isJson(document.source) ? document.source : {};
+    return {
+        id: safeString(document.id) ?? safeString(document.uuid) ?? safeString(document.documentId),
+        title: safeString(document.title) ?? safeString(document.name) ?? 'Untitled',
+        kind: safeString(source.kind) ?? safeString(document.kind) ?? safeString(document.type),
+        sourceType: safeString(source.type) ?? safeString(document.sourceType),
+        createdAt: safeString(document.createdAt) ?? safeString(document.created_at),
+        updatedAt: safeString(document.updatedAt) ?? safeString(document.updated_at),
+    };
+}
+function documentArray(payload) {
+    if (Array.isArray(payload))
+        return payload.filter(isJson);
+    if (!isJson(payload))
+        return [];
+    for (const key of ['items', 'documents', 'data', 'rows', 'results']) {
+        const value = payload[key];
+        if (Array.isArray(value))
+            return value.filter(isJson);
+    }
+    return [];
+}
+async function listLocalPoolItems(pool, repoPath) {
+    const dir = path.join(repoPath, pool.defaultDir);
+    let names;
+    try {
+        names = await readdir(dir);
+    }
+    catch {
+        return [];
+    }
+    const items = [];
+    for (const name of names.filter((entry) => entry.endsWith('.md')).sort()) {
+        const filePath = path.join(dir, name);
+        let title = name.replace(/\.md$/, '');
+        try {
+            const content = await readFile(filePath, 'utf8');
+            title = firstMarkdownTitle(content) ?? title;
+        }
+        catch {
+            // Keep filename fallback when a local item cannot be read.
+        }
+        items.push({ id: null, title, kind: pool.kind, sourceType: 'local', path: filePath });
+    }
+    return items;
+}
+async function listPoolItems(pool) {
+    const repoPath = resolveRepoArg();
+    const page = pageArg();
+    const pageSize = pageSizeArg();
+    const binding = await readProjectBinding(repoPath);
+    let mode = 'local';
+    let warning = null;
+    let items = [];
+    if (binding && pool.kind === 'requirement') {
+        const projectId = projectApiId(binding);
+        if (projectId) {
+            try {
+                const query = `?page=${encodeURIComponent(String(page))}&pageSize=${encodeURIComponent(String(pageSize))}`;
+                const payload = await fetchOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/documents${query}`, await tokenForBinding(binding));
+                items = documentArray(payload).filter((entry) => poolDocumentMatches(pool, entry)).map(asPoolListItem);
+                mode = 'hub';
+            }
+            catch (error) {
+                warning = `Hub list failed; showing local items instead. ${error instanceof Error ? error.message : String(error)}`;
+                items = await listLocalPoolItems(pool, repoPath);
+            }
+        }
+        else {
+            warning = 'Project binding has no projectId/projectUuid; showing local items instead.';
+            items = await listLocalPoolItems(pool, repoPath);
+        }
+    }
+    else {
+        warning = binding ? `Hub pool endpoint for ${pool.kind} is not available in this CLI; showing local items.` : null;
+        items = await listLocalPoolItems(pool, repoPath);
+    }
+    const payload = { ok: true, mode, repo: repoPath, pool: pool.pool, bound: Boolean(binding), page, pageSize, items, warning };
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+    }
+    console.log(`${pool.displayName}: ${items.length} item(s)`);
+    for (const item of items)
+        console.log(`- ${item.id ? `${item.id} ` : ''}${item.title}${item.path ? ` (${item.path})` : ''}`);
+    if (warning)
+        console.log(`warning: ${warning}`);
+}
+async function deletePoolItem(pool, id) {
+    const repoPath = resolveRepoArg();
+    const payload = {
+        ok: false,
+        repo: repoPath,
+        pool: pool.pool,
+        id,
+        error: {
+            code: 'unsupported',
+            message: `Delete is not supported yet for ${pool.displayName}; Orbit Hub has no confirmed pool/document delete API in this CLI.`,
+        },
+    };
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+    }
+    else {
+        console.error(payload.error.message);
+    }
+    process.exit(2);
 }
 async function handlePoolCommand(pool, args) {
     const subcommand = args[0];
+    if (hasFlag('--list')) {
+        await listPoolItems(pool);
+        return;
+    }
+    const deleteId = getArg('--delete');
+    if (deleteId) {
+        await deletePoolItem(pool, deleteId);
+        return;
+    }
     if (subcommand === 'prepare') {
         await preparePool(pool);
         return;

@@ -5,18 +5,20 @@ description: Use when turning an optimization, improvement request, or product s
 
 # Orbit Suggestion
 
-Use this skill to convert improvement ideas into Orbit suggestion artifacts. The CLI owns repo context, persistence, and import.
+Use this skill to convert improvement ideas into Orbit suggestion artifacts. User-facing CLI calls such as `orbit-sug "优化按钮文案"` create and submit/fallback automatically; `prepare` and `import` are the internal Agent protocol.
 
 ## Flow
 
 1. Run `orbit-sug prepare --json` in the target repo to read safe project binding context.
 2. Clarify the current pain, proposed improvement, expected benefit, affected users, risks, and measurement signal.
 3. Produce an `orbit.pool.artifact.v1` JSON artifact with `kind: "suggestion"`.
-4. Import or save through the CLI:
+4. Import through the CLI:
 
 ```bash
-orbit-sug import --stdin --save
+orbit-sug import --stdin
 ```
+
+`import` tries to submit to the bound Orbit pool first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
 When this skill is already running inside an Agent, use `--agent current` only for `orbit-sug run` handoffs where the Agent has already produced the semantic artifact. Do not ask the CLI to start another Agent from inside this skill.
 

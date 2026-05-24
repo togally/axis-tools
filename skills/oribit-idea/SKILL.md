@@ -5,7 +5,15 @@ description: Use when a user wants to incubate an idea through the Oribit Idea w
 
 # Oribit Idea
 
-Use this skill to incubate an early idea through the Oribit Idea workflow and turn it into Orbit-ready office-hours artifacts. This skill depends on gstack's `office-hours` capability/skill and internally calls it to run the office-hours discussion.
+Use this skill to incubate an early idea through the Oribit Idea workflow and turn it into Orbit-ready artifacts. User-facing CLI calls such as `orbit-ide "AI宠物健康顾问"` create and submit/fallback automatically; `prepare` and `import` are the internal Agent protocol. This skill depends on gstack's `office-hours` capability/skill when a deeper office-hours discussion is needed.
+
+For an Agent-produced idea-pool artifact, hand it back through:
+
+```bash
+orbit-ide import --stdin
+```
+
+`import` tries the bound Orbit pool first and falls back locally when the Hub endpoint is unavailable. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
 ## Required Binding
 

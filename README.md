@@ -149,6 +149,26 @@ orbit bind
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.orbit/project.json`。项目或产品线绑定由 `bind` 完成。
 
+### Pool CLI
+
+四个池命令是业务入口，默认会把自然语言输入整理成 artifact 并尝试入池：
+
+```bash
+orbit-req "商品评价支持图片"
+orbit-bug "登录失败"
+orbit-sug "优化按钮文案"
+orbit-ide "AI宠物健康顾问"
+```
+
+通用查询/删除形态：
+
+```bash
+orbit-req --list --page 1 --page-size 20 --json
+orbit-bug --delete bug-1 --yes --json
+```
+
+默认 create/import/run 会先尝试 Orbit Hub。当前 requirement 使用 `POST /api/projects/{projectId}/requirements`；list 使用 documents API 过滤 requirement 文档。idea/bug/suggestion 如果 Hub 没有对应池 API，会明确返回 local fallback 并保存到 `docs/ideas`、`docs/bugs` 或 `docs/suggestions`。`--local`/`--save-local` 强制本地保存，`--save` 作为旧别名保留；`--dry-run` 只生成 artifact，不提交也不保存。`prepare/import/run` 仍保留为 Agent/skill 内部协议。
+
 ### 绑定本地目录
 
 ```bash

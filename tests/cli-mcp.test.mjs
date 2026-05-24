@@ -1068,9 +1068,10 @@ await withTempDir(async (dir) => {
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
   const input = '{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Smoke Test","markdown":"# Smoke Test\\n"}';
-  const result = await runInteractive(['orbit-req', 'import', '--repo', repo, '--stdin', '--save'], `${input}\n`);
+  const result = await runInteractive(['orbit-req', 'import', '--repo', repo, '--stdin', '--local', '--json'], `${input}\n`);
   const imported = JSON.parse(result.stdout);
   assert.equal(imported.ok, true);
+  assert.equal(imported.mode, 'local');
   assert.equal(imported.artifact.kind, 'requirement');
   assert.match(imported.savedPath, /docs\/requirements\/\d{8}-req-smoke-test\.md$/);
   const saved = await readFile(imported.savedPath, 'utf8');
@@ -1082,9 +1083,10 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--save']);
+  const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--local', '--json']);
   const imported = JSON.parse(result.stdout);
   assert.equal(imported.ok, true);
+  assert.equal(imported.mode, 'local');
   assert.equal(imported.artifact.kind, 'bug');
   assert.equal(imported.artifact.title, '登录失败');
   assert.match(imported.savedPath, /docs\/bugs\/\d{8}-bug-orbit-item\.md$/);
@@ -1092,6 +1094,63 @@ await withTempDir(async (dir) => {
   assert.match(saved, /kind: bug/);
   assert.match(saved, /source: orbit-bug run/);
   assert.match(saved, /# 登录失败/);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const result = await run(['orbit-req', 'Smoke', '--repo', repo, '--agent', 'none', '--local', '--json']);
+  const created = JSON.parse(result.stdout);
+  assert.equal(created.ok, true);
+  assert.equal(created.mode, 'local');
+  assert.equal(created.pool, 'req');
+  assert.equal(created.artifact.kind, 'requirement');
+  assert.equal(created.artifact.title, 'Smoke');
+  assert.match(created.savedPath, /docs\/requirements\/\d{8}-req-smoke\.md$/);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'bound-repo');
+  await mkdir(path.join(repo, '.orbit'), { recursive: true });
+  await writeFile(path.join(repo, '.orbit', 'project.json'), JSON.stringify({
+    backendUrl: 'https://orbit.example.com',
+    projectId: 'proj-id',
+    token: 'secret-token',
+    repo,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+  }, null, 2));
+
+  const result = await run(['orbit-req', 'Smoke', '--repo', repo, '--agent', 'none', '--dry-run', '--json']);
+  const created = JSON.parse(result.stdout);
+  assert.equal(created.ok, true);
+  assert.equal(created.mode, 'dry-run');
+  assert.equal(created.savedPath, null);
+  await assert.rejects(readFile(path.join(repo, 'docs', 'requirements', `${new Date().getFullYear()}-unused.md`), 'utf8'));
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'unbound-repo');
+  const result = await run(['orbit-req', '--list', '--repo', repo, '--json']);
+  const listed = JSON.parse(result.stdout);
+  assert.equal(listed.ok, true);
+  assert.equal(listed.mode, 'local');
+  assert.equal(listed.pool, 'req');
+  assert.equal(listed.bound, false);
+  assert.deepEqual(listed.items, []);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  await assert.rejects(
+    run(['orbit-bug', '--delete', 'bug-1', '--repo', repo, '--json']),
+    (error) => {
+      const payload = JSON.parse(error.stdout);
+      assert.equal(payload.ok, false);
+      assert.equal(payload.error.code, 'unsupported');
+      assert.equal(payload.pool, 'bug');
+      assert.equal(payload.id, 'bug-1');
+      return true;
+    },
+  );
 });
 
 await withTempDir(async (dir) => {
