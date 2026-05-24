@@ -112,7 +112,28 @@ interface ProductLineBinding {
 }
 
 type AgentChoice = 'codex' | 'claude-code' | 'none';
+type PoolAgentChoice = AgentChoice | 'current';
 type InstallAgentChoice = 'codex' | 'claude-code' | 'all';
+
+interface PoolConfig {
+  command: string;
+  pool: string;
+  kind: 'requirement' | 'idea' | 'bug' | 'suggestion';
+  displayName: string;
+  skill: string;
+  defaultDir: string;
+}
+
+interface PoolArtifact {
+  schemaVersion: 'orbit.pool.artifact.v1';
+  kind: PoolConfig['kind'];
+  title: string;
+  summary: string;
+  status: string;
+  markdown: string;
+  sections: unknown[];
+  workItems: unknown[];
+}
 
 interface OrbitUser {
   id?: string | null;
@@ -180,6 +201,24 @@ interface ProjectCandidate {
 
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
+const POOLS: Record<string, PoolConfig> = {
+  'orbit-ide': { command: 'orbit-ide', pool: 'ide', kind: 'idea', displayName: '想法池', skill: 'oribit-idea', defaultDir: 'docs/ideas' },
+  'orbit-req': { command: 'orbit-req', pool: 'req', kind: 'requirement', displayName: '需求池', skill: 'orbit-requirement', defaultDir: 'docs/requirements' },
+  'orbit-bug': { command: 'orbit-bug', pool: 'bug', kind: 'bug', displayName: 'Bug池', skill: 'orbit-bug', defaultDir: 'docs/bugs' },
+  'orbit-sug': { command: 'orbit-sug', pool: 'sug', kind: 'suggestion', displayName: '优化池', skill: 'orbit-suggestion', defaultDir: 'docs/suggestions' },
+};
+const SAFE_BINDING_KEYS = [
+  'productLineId',
+  'productLineUuid',
+  'projectId',
+  'projectUuid',
+  'productLineName',
+  'projectName',
+  'backendUrl',
+  'mcpUrl',
+  'selectedAgent',
+  'repo',
+] as const;
 const LOCAL_BINDING_GLOBAL_KEYS = [
   'productLineUuid',
   'projectUuid',
@@ -198,7 +237,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 ];
 
 function printUsage(): void {
-  console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  orbit-ide prepare|import|run\n  orbit-req prepare|import|run\n  orbit-bug prepare|import|run\n  orbit-sug prepare|import|run\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nPool examples:\n  orbit-req "商品评价支持图片" --save\n  orbit-ide prepare --json\n  orbit-bug import --stdin --save\n  orbit-sug run --from notes.md --agent codex --save\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -2128,11 +2167,323 @@ async function showProject(): Promise<void> {
   console.log(`updatedAt: ${binding.updatedAt}`);
 }
 
+function safeProjectBinding(binding: ProjectBinding | null, repoPath: string): Json | null {
+  if (!binding) return null;
+  const safe: Json = {};
+  for (const key of SAFE_BINDING_KEYS) {
+    const value = binding[key];
+    if (value !== undefined && value !== null) safe[key] = value;
+  }
+  if (!safe.repo) safe.repo = repoPath;
+  return safe;
+}
+
+async function preparePool(pool: PoolConfig): Promise<void> {
+  const repoPath = resolveRepoArg();
+  const binding = await readProjectBinding(repoPath);
+  const payload = {
+    schemaVersion: 'orbit.pool.prepare.v1',
+    pool: pool.pool,
+    kind: pool.kind,
+    displayName: pool.displayName,
+    repo: repoPath,
+    bound: Boolean(binding),
+    binding: safeProjectBinding(binding, repoPath),
+    skill: pool.skill,
+    expectedArtifactSchema: 'orbit.pool.artifact.v1',
+    instructions: [
+      `Use ${pool.skill} when available; otherwise produce orbit.pool.artifact.v1 JSON.`,
+      `Artifact kind must be ${pool.kind}.`,
+      `When already running inside an Agent/Skill, generate the artifact yourself and call ${pool.command} import --stdin --save, or use ${pool.command} run --agent current --save for an already generated artifact.`,
+      'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
+    ],
+  };
+  if (hasFlag('--json')) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  console.log(JSON.stringify(payload, null, 2));
+}
+
+function firstMarkdownTitle(markdown: string): string | null {
+  const line = markdown.split(/\r?\n/).find((entry) => /^#\s+/.test(entry.trim()));
+  return line ? line.replace(/^#\s+/, '').trim() || null : null;
+}
+
+function localDateStamp(date = new Date()): string {
+  const year = String(date.getFullYear()).padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+function poolArtifactFromMarkdown(pool: PoolConfig, markdown: string): PoolArtifact {
+  const title = firstMarkdownTitle(markdown) ?? `${pool.displayName} ${localDateStamp()}`;
+  return {
+    schemaVersion: 'orbit.pool.artifact.v1',
+    kind: pool.kind,
+    title,
+    summary: '',
+    status: 'draft',
+    markdown,
+    sections: [],
+    workItems: [],
+  };
+}
+
+function poolArtifactFromText(pool: PoolConfig, text: string): PoolArtifact {
+  const title = text.trim().split(/\r?\n/)[0]?.trim() || `${pool.displayName} ${localDateStamp()}`;
+  const markdown = [
+    `# ${title}`,
+    '',
+    '## Summary',
+    text.trim() || 'Draft artifact generated by Orbit Tools.',
+    '',
+    '## Details',
+    '',
+    '## Acceptance Criteria',
+    '',
+    '## WorkItems',
+    '',
+  ].join('\n');
+  return {
+    schemaVersion: 'orbit.pool.artifact.v1',
+    kind: pool.kind,
+    title,
+    summary: text.trim(),
+    status: 'draft',
+    markdown,
+    sections: [],
+    workItems: [],
+  };
+}
+
+function normalizePoolArtifact(pool: PoolConfig, input: string): PoolArtifact {
+  const trimmed = input.trim();
+  if (!trimmed) return poolArtifactFromText(pool, '');
+  if (trimmed.startsWith('{')) {
+    const raw = parseJsonText(trimmed);
+    const kind = safeString(raw.kind);
+    if (kind && kind !== pool.kind) {
+      throw new Error(`Artifact kind ${kind} does not match ${pool.kind}`);
+    }
+    const markdown = safeString(raw.markdown) ?? `# ${safeString(raw.title) ?? `${pool.displayName} ${localDateStamp()}`}\n`;
+    const title = safeString(raw.title) ?? firstMarkdownTitle(markdown) ?? `${pool.displayName} ${localDateStamp()}`;
+    return {
+      schemaVersion: 'orbit.pool.artifact.v1',
+      kind: pool.kind,
+      title,
+      summary: safeString(raw.summary) ?? '',
+      status: safeString(raw.status) ?? 'draft',
+      markdown,
+      sections: Array.isArray(raw.sections) ? raw.sections : [],
+      workItems: Array.isArray(raw.workItems) ? raw.workItems : [],
+    };
+  }
+  if (/^#\s+/m.test(trimmed)) return poolArtifactFromMarkdown(pool, input);
+  return poolArtifactFromText(pool, input);
+}
+
+async function readStdinText(): Promise<string> {
+  let input = '';
+  for await (const chunk of process.stdin) {
+    input += Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+  }
+  return input;
+}
+
+async function readPoolInput(args: string[]): Promise<string> {
+  const fromFile = getArg('--from') ?? getArg('--file');
+  if (fromFile) return readFile(path.resolve(fromFile), 'utf8');
+  if (hasFlag('--stdin')) return readStdinText();
+  return collectFreeText(args);
+}
+
+function collectFreeText(args: string[]): string {
+  const flagsWithValue = new Set(['--repo', '--from', '--file', '--agent']);
+  const text: string[] = [];
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (flagsWithValue.has(arg)) {
+      index++;
+      continue;
+    }
+    if (arg === '--save' || arg === '--stdin' || arg === '--json') continue;
+    if (arg.startsWith('--')) continue;
+    text.push(arg);
+  }
+  return text.join(' ').trim();
+}
+
+function yamlScalar(value: string): string {
+  if (value && /^[A-Za-z0-9_./:@ -]+$/.test(value)) return value;
+  return JSON.stringify(value);
+}
+
+async function savePoolArtifact(pool: PoolConfig, artifact: PoolArtifact, repoPath: string, source: string): Promise<string> {
+  const binding = await readProjectBinding(repoPath);
+  const targetDir = path.join(repoPath, pool.defaultDir);
+  ensureDir(targetDir);
+  const fileName = `${localDateStamp()}-${pool.pool}-${safeSlug(artifact.title)}.md`;
+  const filePath = path.join(targetDir, fileName);
+  const metadata = [
+    '---',
+    `kind: ${artifact.kind}`,
+    `source: ${yamlScalar(source)}`,
+    `command: ${pool.command}`,
+    `project: ${yamlScalar(binding?.projectName ?? binding?.projectUuid ?? binding?.projectId ?? '')}`,
+    `productLine: ${yamlScalar(binding?.productLineName ?? binding?.productLineUuid ?? binding?.productLineId ?? '')}`,
+    `repo: ${yamlScalar(repoPath)}`,
+    `createdAt: ${new Date().toISOString()}`,
+    '---',
+    '',
+  ].join('\n');
+  await writeFile(filePath, `${metadata}${artifact.markdown.replace(/\s*$/, '\n')}`, 'utf8');
+  return filePath;
+}
+
+async function importPoolArtifact(pool: PoolConfig, args: string[], source = `${pool.command} import`): Promise<void> {
+  const repoPath = resolveRepoArg();
+  const input = await readPoolInput(args);
+  const artifact = normalizePoolArtifact(pool, input);
+  const savedPath = hasFlag('--save') ? await savePoolArtifact(pool, artifact, repoPath, source) : null;
+  console.log(JSON.stringify({ ok: true, repo: repoPath, pool: pool.pool, artifact, savedPath }, null, 2));
+}
+
+function parsePoolAgentArg(value: string | null): PoolAgentChoice | null {
+  if (!value) return null;
+  if (value === 'current' || value === 'codex' || value === 'claude-code' || value === 'none') return value;
+  if (value === 'cc') return 'claude-code';
+  throw new Error('--agent must be one of: codex, claude-code, current, none');
+}
+
+async function commandAvailable(command: string): Promise<boolean> {
+  try {
+    await execFileAsync('sh', ['-lc', `command -v ${command}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolvePoolAgent(repoPath: string): Promise<PoolAgentChoice> {
+  const explicit = parsePoolAgentArg(getArg('--agent'));
+  if (explicit) return explicit;
+  const binding = await readProjectBinding(repoPath);
+  if (binding?.selectedAgent) return binding.selectedAgent;
+  const [codex, claude] = await Promise.all([commandAvailable('codex'), commandAvailable('claude')]);
+  if (codex && !claude) return 'codex';
+  if (claude && !codex) return 'claude-code';
+  if (codex && claude && process.stdin.isTTY) {
+    const prompt = await createPromptSession();
+    try {
+      return await promptAgent(prompt);
+    } finally {
+      prompt.close();
+    }
+  }
+  if (codex && claude) {
+    console.error('Both codex and claude are available; non-TTY defaulting to --agent none. Pass --agent to choose.');
+  }
+  return 'none';
+}
+
+function buildPoolAgentPrompt(pool: PoolConfig, prepare: string, userInput: string): string {
+  const fallback = pool.kind === 'bug' || pool.kind === 'suggestion'
+    ? `If packaged skill ${pool.skill} is unavailable, output only valid orbit.pool.artifact.v1 JSON for kind ${pool.kind}.`
+    : `Use packaged skill ${pool.skill} when available and output only valid orbit.pool.artifact.v1 JSON.`;
+  return [
+    `You are generating an Orbit ${pool.displayName} artifact.`,
+    fallback,
+    'Do not write files directly. Return only the final JSON artifact.',
+    '',
+    'Prepare context:',
+    prepare,
+    '',
+    'User input:',
+    userInput,
+  ].join('\n');
+}
+
+async function runPoolAgent(agent: Exclude<PoolAgentChoice, 'current' | 'none'>, repoPath: string, prompt: string): Promise<string> {
+  const command = agent === 'codex' ? 'codex' : 'claude';
+  if (!await commandAvailable(command)) {
+    throw new Error(`agent not found: ${command}`);
+  }
+  const args = agent === 'codex' ? ['exec', prompt] : ['-p', prompt];
+  try {
+    const result = await execFileAsync(command, args, { cwd: repoPath, maxBuffer: 20 * 1024 * 1024 });
+    return result.stdout.trim();
+  } catch (error) {
+    const message = summarizeCommandError(error);
+    throw new Error(`${command} command failed: ${message}`);
+  }
+}
+
+async function runPool(pool: PoolConfig, args: string[]): Promise<void> {
+  const repoPath = resolveRepoArg();
+  const input = await readPoolInput(args);
+  const agent = await resolvePoolAgent(repoPath);
+  if (agent === 'none' || agent === 'current') {
+    if (agent === 'current' && input.trim() && !input.trim().startsWith('{') && !/^#\s+/m.test(input)) {
+      console.error('--agent current received natural language; generated a template artifact. current mode is intended for Agent-produced artifacts.');
+    }
+    const artifact = normalizePoolArtifact(pool, input);
+    const savedPath = hasFlag('--save') ? await savePoolArtifact(pool, artifact, repoPath, `${pool.command} run`) : null;
+    console.log(JSON.stringify({ ok: true, repo: repoPath, pool: pool.pool, agent, artifact, savedPath }, null, 2));
+    return;
+  }
+
+  const binding = await readProjectBinding(repoPath);
+  const prepare = JSON.stringify({
+    schemaVersion: 'orbit.pool.prepare.v1',
+    pool: pool.pool,
+    kind: pool.kind,
+    displayName: pool.displayName,
+    repo: repoPath,
+    bound: Boolean(binding),
+    binding: safeProjectBinding(binding, repoPath),
+    skill: pool.skill,
+    expectedArtifactSchema: 'orbit.pool.artifact.v1',
+  }, null, 2);
+  const output = await runPoolAgent(agent, repoPath, buildPoolAgentPrompt(pool, prepare, input));
+  const artifact = normalizePoolArtifact(pool, output);
+  const savedPath = hasFlag('--save') ? await savePoolArtifact(pool, artifact, repoPath, `${pool.command} run`) : null;
+  console.log(JSON.stringify({ ok: true, repo: repoPath, pool: pool.pool, agent, artifact, savedPath }, null, 2));
+}
+
+async function handlePoolCommand(pool: PoolConfig, args: string[]): Promise<void> {
+  const subcommand = args[0];
+  if (subcommand === 'prepare') {
+    await preparePool(pool);
+    return;
+  }
+  if (subcommand === 'import') {
+    await importPoolArtifact(pool, args.slice(1));
+    return;
+  }
+  if (subcommand === 'run') {
+    await runPool(pool, args.slice(1));
+    return;
+  }
+  await runPool(pool, args);
+}
+
 async function main(): Promise<void> {
   const [, , group, command] = process.argv;
+  const invoked = path.basename(process.argv[1] ?? '');
+  if (POOLS[invoked]) {
+    await handlePoolCommand(POOLS[invoked], process.argv.slice(2));
+    return;
+  }
   if (!group || group === '--help' || group === '-h') {
     printUsage();
     process.exit(0);
+  }
+
+  if (POOLS[group]) {
+    await handlePoolCommand(POOLS[group], process.argv.slice(3));
+    return;
   }
 
   if (group === 'login') {

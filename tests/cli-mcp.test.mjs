@@ -609,9 +609,9 @@ await withTempDir(async (dir) => {
   const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
   const installJson = JSON.parse(install.stdout);
   assert.equal(installJson.ok, true);
-  assert.equal(installJson.installed.length, 11);
+  assert.equal(installJson.installed.length, 17);
 
-  for (const skill of ['orbit-requirement', 'orbit-workflow', 'oribit-idea']) {
+  for (const skill of ['orbit-bug', 'orbit-requirement', 'orbit-suggestion', 'orbit-workflow', 'oribit-idea']) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
     const codexSkill = await readFile(path.join(home, '.codex', 'skills', skill, 'SKILL.md'), 'utf8');
     const claudeSkill = await readFile(path.join(home, '.claude', 'skills', skill, 'SKILL.md'), 'utf8');
@@ -1025,6 +1025,73 @@ await withTempDir(async (dir) => {
     assert.equal(consoleProject.repositoryUrl, bareRepo);
     assert.match(await readFile(path.join(consoleProjectPath, 'README.md'), 'utf8'), /Fixture/);
   }, { repoPath: '/home/jasperWei/orbit/orbit-flow', repositoryUrl: bareRepo });
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  await mkdir(path.join(repo, '.orbit'), { recursive: true });
+  await writeFile(path.join(repo, '.orbit', 'project.json'), JSON.stringify({
+    backendUrl: 'https://orbit.example.com',
+    mcpUrl: 'https://orbit.example.com/api/mcp',
+    token: 'secret-token',
+    key: 'secret-key',
+    session: 'secret-session',
+    password: 'secret-password',
+    productLineUuid: 'pl-uuid',
+    projectUuid: 'proj-uuid',
+    productLineId: 'pl-id',
+    projectId: 'proj-id',
+    productLineName: 'Orbit',
+    projectName: 'Orbit Tools',
+    selectedAgent: 'codex',
+    repo,
+  }, null, 2));
+
+  const result = await run(['orbit-req', 'prepare', '--repo', repo, '--json']);
+  const prepare = JSON.parse(result.stdout);
+  assert.equal(prepare.schemaVersion, 'orbit.pool.prepare.v1');
+  assert.equal(prepare.pool, 'req');
+  assert.equal(prepare.kind, 'requirement');
+  assert.equal(prepare.displayName, '需求池');
+  assert.equal(prepare.bound, true);
+  assert.equal(prepare.skill, 'orbit-requirement');
+  assert.equal(prepare.binding.backendUrl, 'https://orbit.example.com');
+  assert.equal(prepare.binding.productLineUuid, 'pl-uuid');
+  assert.equal(prepare.binding.projectUuid, 'proj-uuid');
+  assert.equal(prepare.binding.selectedAgent, 'codex');
+  assert.equal(prepare.binding.token, undefined);
+  assert.equal(prepare.binding.key, undefined);
+  assert.equal(prepare.binding.session, undefined);
+  assert.doesNotMatch(result.stdout, /secret-/);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const input = '{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Smoke Test","markdown":"# Smoke Test\\n"}';
+  const result = await runInteractive(['orbit-req', 'import', '--repo', repo, '--stdin', '--save'], `${input}\n`);
+  const imported = JSON.parse(result.stdout);
+  assert.equal(imported.ok, true);
+  assert.equal(imported.artifact.kind, 'requirement');
+  assert.match(imported.savedPath, /docs\/requirements\/\d{8}-req-smoke-test\.md$/);
+  const saved = await readFile(imported.savedPath, 'utf8');
+  assert.match(saved, /kind: requirement/);
+  assert.match(saved, /source: orbit-req import/);
+  assert.match(saved, /command: orbit-req/);
+  assert.match(saved, /# Smoke Test/);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--save']);
+  const imported = JSON.parse(result.stdout);
+  assert.equal(imported.ok, true);
+  assert.equal(imported.artifact.kind, 'bug');
+  assert.equal(imported.artifact.title, '登录失败');
+  assert.match(imported.savedPath, /docs\/bugs\/\d{8}-bug-orbit-item\.md$/);
+  const saved = await readFile(imported.savedPath, 'utf8');
+  assert.match(saved, /kind: bug/);
+  assert.match(saved, /source: orbit-bug run/);
+  assert.match(saved, /# 登录失败/);
 });
 
 await withTempDir(async (dir) => {
