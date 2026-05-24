@@ -76,6 +76,15 @@ orbit-req import --stdin
 
 `import` tries `POST /api/projects/{projectId}/requirements` first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
+For user-facing pool management, prefer the interactive commands:
+
+```bash
+orbit-req --list
+orbit-req --delete
+```
+
+`--list` paginates interactively and offers delete/quit actions. `--delete` without an id lets the user choose an item, then requires typing `yes`; `--yes` is only for scripts/CI and `--json` machine mode.
+
 1. Read `.orbit/project.json` from the target repo when available.
 2. Use `projectUuid`/`projectId` and `productLineUuid`/`productLineId` from that binding. Prefer UUID fields.
 3. Use `backendUrl` from `.orbit/project.json`; if missing, check `~/.orbit/config.json`.

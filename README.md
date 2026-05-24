@@ -163,6 +163,15 @@ orbit-ide "AI宠物健康顾问"
 通用查询/删除形态：
 
 ```bash
+orbit-req --list
+orbit-bug --delete
+```
+
+普通用户直接运行 `--list` 会进入交互分页，默认每页 10 条，可输入 `n`/`p` 翻页、`d` 删除某条、`q` 退出。直接运行 `--delete` 会先列出当前池子条目供选择；`--delete <id>` 会展示目标并要求输入 `yes` 才会删除，默认不删除。`--yes` 只用于脚本/CI 的非交互删除确认。
+
+机器模式保留 `--json`：
+
+```bash
 orbit-req --list --page 1 --page-size 20 --json
 orbit-bug --delete bug-1 --yes --json
 ```

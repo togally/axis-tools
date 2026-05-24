@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
-import { appendFile, copyFile, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { execFile, spawn } from 'node:child_process';
@@ -154,6 +154,7 @@ interface PoolListItem {
   kind: string | null;
   sourceType: string | null;
   path?: string;
+  status?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 }
@@ -261,6 +262,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 
 function printUsage(): void {
   console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  orbit-req <text> [--repo <path>] [--agent <codex|claude-code|current|none>] [--json]\n  orbit-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  orbit-req --delete <id> [--repo <path>] [--yes] [--json]\n  orbit-ide|orbit-bug|orbit-sug use the same create/list/delete flags\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nPool examples:\n  orbit-req "商品评价支持图片"\n  orbit-bug "登录失败" --agent none --local\n  orbit-sug "优化按钮文案" --dry-run --json\n  orbit-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local save instead of Hub submit\n  --save = deprecated alias for --local\n  --dry-run = generate artifact only; do not submit or save\n  --from <file> / --stdin = read input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  orbit-ide prepare|import|run\n  orbit-req prepare|import|run\n  orbit-bug prepare|import|run\n  orbit-sug prepare|import|run\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`Pool interactive defaults:\n  orbit-req --list = interactive pagination, default 10 items/page\n  orbit-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 
 function getArg(flag: string): string | null {
@@ -1130,8 +1132,8 @@ function pageArg(): number {
 }
 
 function pageSizeArg(): number {
-  const value = Number.parseInt(getArg('--page-size') ?? '20', 10);
-  return Number.isFinite(value) && value > 0 ? Math.min(value, 100) : 20;
+  const value = Number.parseInt(getArg('--page-size') ?? '10', 10);
+  return Number.isFinite(value) && value > 0 ? Math.min(value, 100) : 10;
 }
 
 function extractId(payload: unknown): string | null {
@@ -2619,6 +2621,7 @@ function asPoolListItem(document: Json): PoolListItem {
     title: safeString(document.title) ?? safeString(document.name) ?? 'Untitled',
     kind: safeString(source.kind) ?? safeString(document.kind) ?? safeString(document.type),
     sourceType: safeString(source.type) ?? safeString(document.sourceType),
+    status: safeString(document.status),
     createdAt: safeString(document.createdAt) ?? safeString(document.created_at),
     updatedAt: safeString(document.updatedAt) ?? safeString(document.updated_at),
   };
@@ -2645,22 +2648,43 @@ async function listLocalPoolItems(pool: PoolConfig, repoPath: string): Promise<P
   const items: PoolListItem[] = [];
   for (const name of names.filter((entry) => entry.endsWith('.md')).sort()) {
     const filePath = path.join(dir, name);
+    const fallbackId = name.replace(/\.md$/, '');
+    let id: string | null = fallbackId;
     let title = name.replace(/\.md$/, '');
+    let status: string | null = null;
     try {
       const content = await readFile(filePath, 'utf8');
-      title = firstMarkdownTitle(content) ?? title;
+      const frontmatter = parseSimpleFrontmatter(content);
+      id = frontmatter.id ?? fallbackId;
+      title = frontmatter.title ?? firstMarkdownTitle(content) ?? title;
+      status = frontmatter.status ?? null;
     } catch {
       // Keep filename fallback when a local item cannot be read.
     }
-    items.push({ id: null, title, kind: pool.kind, sourceType: 'local', path: filePath });
+    items.push({ id, title, kind: pool.kind, sourceType: 'local', path: filePath, status });
   }
   return items;
 }
 
-async function listPoolItems(pool: PoolConfig): Promise<void> {
-  const repoPath = resolveRepoArg();
-  const page = pageArg();
-  const pageSize = pageSizeArg();
+function parseSimpleFrontmatter(content: string): Record<string, string> {
+  if (!content.startsWith('---\n')) return {};
+  const end = content.indexOf('\n---', 4);
+  if (end === -1) return {};
+  const values: Record<string, string> = {};
+  for (const line of content.slice(4, end).split(/\r?\n/)) {
+    const match = /^([A-Za-z][A-Za-z0-9_-]*)\s*:\s*(.*)$/.exec(line);
+    if (!match) continue;
+    values[match[1]] = match[2].replace(/^"(.*)"$/, '$1').trim();
+  }
+  return values;
+}
+
+async function loadPoolItems(pool: PoolConfig, repoPath: string, page: number, pageSize: number): Promise<{
+  mode: 'hub' | 'local';
+  warning: string | null;
+  items: PoolListItem[];
+  bound: boolean;
+}> {
   const binding = await readProjectBinding(repoPath);
   let mode: 'hub' | 'local' = 'local';
   let warning: string | null = null;
@@ -2687,18 +2711,154 @@ async function listPoolItems(pool: PoolConfig): Promise<void> {
     items = await listLocalPoolItems(pool, repoPath);
   }
 
-  const payload = { ok: true, mode, repo: repoPath, pool: pool.pool, bound: Boolean(binding), page, pageSize, items, warning };
+  if (mode === 'local') {
+    items = items.slice((page - 1) * pageSize, page * pageSize);
+  }
+
+  return { mode, warning, items, bound: Boolean(binding) };
+}
+
+function poolItemDisplayId(item: PoolListItem): string {
+  if (item.id) return item.id;
+  if (item.path) return path.basename(item.path, '.md');
+  return 'unknown';
+}
+
+function formatPoolItemLine(item: PoolListItem, index: number): string {
+  const status = item.status ? ` — ${item.status}` : '';
+  return `${index}. [${poolItemDisplayId(item)}] ${item.title}${status}`;
+}
+
+async function listPoolItems(pool: PoolConfig): Promise<void> {
+  const repoPath = resolveRepoArg();
+  const page = pageArg();
+  const pageSize = pageSizeArg();
+  const loaded = await loadPoolItems(pool, repoPath, page, pageSize);
+  const { mode, warning, items, bound } = loaded;
+
+  const payload = { ok: true, mode, repo: repoPath, pool: pool.pool, bound, page, pageSize, items, warning };
   if (hasFlag('--json')) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
-  console.log(`${pool.displayName}: ${items.length} item(s)`);
-  for (const item of items) console.log(`- ${item.id ? `${item.id} ` : ''}${item.title}${item.path ? ` (${item.path})` : ''}`);
-  if (warning) console.log(`warning: ${warning}`);
+  await interactivePoolList(pool, repoPath, page, pageSize, items, warning);
 }
 
-async function deletePoolItem(pool: PoolConfig, id: string): Promise<void> {
+async function interactivePoolList(pool: PoolConfig, repoPath: string, startPage: number, pageSize: number, initialItems: PoolListItem[], initialWarning: string | null): Promise<void> {
+  let page = startPage;
+  let items = initialItems;
+  let warning = initialWarning;
+  const prompt = await createPromptSession();
+  try {
+    while (true) {
+      if (items.length === 0) {
+        console.log(`${pool.displayName}暂无条目`);
+      } else {
+        console.log(`${pool.displayName} 第 ${page} 页，每页 ${pageSize} 条`);
+        items.forEach((item, index) => console.log(formatPoolItemLine(item, index + 1)));
+      }
+      if (warning) console.log(`warning: ${warning}`);
+      console.log('操作: [n]下一页 [p]上一页 [d]删除 [q]退出');
+
+      const answer = (await prompt.question('> ')).trim().toLowerCase();
+      if (answer === 'q' || answer === '') return;
+      if (answer === 'n') {
+        page += 1;
+        const loaded = await loadPoolItems(pool, repoPath, page, pageSize);
+        items = loaded.items;
+        warning = loaded.warning;
+        continue;
+      }
+      if (answer === 'p') {
+        page = Math.max(1, page - 1);
+        const loaded = await loadPoolItems(pool, repoPath, page, pageSize);
+        items = loaded.items;
+        warning = loaded.warning;
+        continue;
+      }
+      if (answer === 'd') {
+        const selected = await prompt.question('输入编号或 id: ');
+        const item = findPoolItem(items, selected);
+        if (!item) {
+          console.log('未找到该条目');
+          continue;
+        }
+        const deleted = await deletePoolItem(pool, poolItemDisplayId(item), { item, prompt });
+        if (deleted) {
+          const loaded = await loadPoolItems(pool, repoPath, page, pageSize);
+          items = loaded.items;
+          warning = loaded.warning;
+        }
+        continue;
+      }
+      console.log('请输入 n、p、d 或 q。');
+    }
+  } finally {
+    prompt.close();
+  }
+}
+
+function findPoolItem(items: PoolListItem[], input: string): PoolListItem | null {
+  const value = input.trim();
+  const index = Number.parseInt(value, 10);
+  if (Number.isInteger(index) && index >= 1 && index <= items.length) return items[index - 1];
+  return items.find((item) => poolItemDisplayId(item) === value || item.id === value || item.path === value) ?? null;
+}
+
+async function confirmDelete(pool: PoolConfig, id: string, prompt?: PromptSession): Promise<boolean> {
+  if (hasFlag('--yes')) return true;
+  if (hasFlag('--json')) {
+    printDeletePayload({
+      ok: false,
+      repo: resolveRepoArg(),
+      pool: pool.pool,
+      id,
+      error: {
+        code: 'confirmation_required',
+        message: 'Delete requires --yes in --json/non-interactive mode, or an interactive terminal confirmation.',
+      },
+    });
+    process.exit(2);
+  }
+  console.log(`将删除 ${pool.displayName} 条目: ${id}`);
+  const ownsPrompt = !prompt;
+  const session = prompt ?? await createPromptSession();
+  try {
+    const answer = (await session.question('确认删除？输入 yes 确认: ')).trim();
+    if (answer === 'yes') return true;
+    if (!process.stdin.isTTY && answer === '') {
+      throw new Error('Delete requires --yes or an interactive terminal confirmation.');
+    }
+    console.log('已取消删除');
+    return false;
+  } finally {
+    if (ownsPrompt) session.close();
+  }
+}
+
+function printDeletePayload(payload: Json): void {
+  if (hasFlag('--json')) {
+    console.log(JSON.stringify(payload, null, 2));
+  } else if (isJson(payload.error)) {
+    console.error(safeString(payload.error.message) ?? 'Delete failed');
+  }
+}
+
+async function deletePoolItem(pool: PoolConfig, id: string, options: { item?: PoolListItem; prompt?: PromptSession } = {}): Promise<boolean> {
   const repoPath = resolveRepoArg();
+  const localItems = options.item ? [options.item] : await listLocalPoolItems(pool, repoPath);
+  const localItem = localItems.find((item) => poolItemDisplayId(item) === id || item.id === id || item.path === id) ?? null;
+  const confirmed = await confirmDelete(pool, id, options.prompt);
+  if (!confirmed) return false;
+
+  if (localItem?.path) {
+    await unlink(localItem.path);
+    const payload = { ok: true, mode: 'local', repo: repoPath, pool: pool.pool, id: poolItemDisplayId(localItem), deletedPath: localItem.path };
+    if (hasFlag('--json')) console.log(JSON.stringify(payload, null, 2));
+    else console.log(`deleted: ${localItem.path}`);
+    return true;
+  }
+
   const payload = {
     ok: false,
     repo: repoPath,
@@ -2717,15 +2877,69 @@ async function deletePoolItem(pool: PoolConfig, id: string): Promise<void> {
   process.exit(2);
 }
 
+function getPoolDeleteId(args: string[]): string | null {
+  const index = args.indexOf('--delete');
+  if (index === -1) return null;
+  const next = args[index + 1];
+  if (!next || next.startsWith('--')) return null;
+  return next;
+}
+
+async function selectAndDeletePoolItem(pool: PoolConfig): Promise<void> {
+  if (hasFlag('--json')) {
+    const repoPath = resolveRepoArg();
+    printDeletePayload({
+      ok: false,
+      repo: repoPath,
+      pool: pool.pool,
+      id: null,
+      error: {
+        code: 'id_required',
+        message: 'Delete in --json mode requires an id and --yes.',
+      },
+    });
+    process.exit(2);
+  }
+  const repoPath = resolveRepoArg();
+  const pageSize = pageSizeArg();
+  const loaded = await loadPoolItems(pool, repoPath, 1, pageSize);
+  const items = loaded.items;
+  if (items.length === 0) {
+    console.log(`${pool.displayName}暂无条目`);
+    return;
+  }
+  const prompt = await createPromptSession();
+  try {
+    console.log(`${pool.displayName} 第 1 页，每页 ${pageSize} 条`);
+    items.forEach((item, index) => console.log(formatPoolItemLine(item, index + 1)));
+    const selected = await prompt.question('输入编号或 id: ');
+    if (!process.stdin.isTTY && selected.trim() === '') {
+      throw new Error('Delete requires an id, --yes for scripts, or an interactive terminal selection.');
+    }
+    const item = findPoolItem(items, selected);
+    if (!item) {
+      console.log('未找到该条目');
+      return;
+    }
+    await deletePoolItem(pool, poolItemDisplayId(item), { item, prompt });
+  } finally {
+    prompt.close();
+  }
+}
+
 async function handlePoolCommand(pool: PoolConfig, args: string[]): Promise<void> {
   const subcommand = args[0];
   if (hasFlag('--list')) {
     await listPoolItems(pool);
     return;
   }
-  const deleteId = getArg('--delete');
-  if (deleteId) {
-    await deletePoolItem(pool, deleteId);
+  if (hasFlag('--delete')) {
+    const deleteId = getPoolDeleteId(args);
+    if (deleteId) {
+      await deletePoolItem(pool, deleteId);
+    } else {
+      await selectAndDeletePoolItem(pool);
+    }
     return;
   }
   if (subcommand === 'prepare') {

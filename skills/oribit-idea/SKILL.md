@@ -15,6 +15,15 @@ orbit-ide import --stdin
 
 `import` tries the bound Orbit pool first and falls back locally when the Hub endpoint is unavailable. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
+For user-facing idea-pool management, prefer:
+
+```bash
+orbit-ide --list
+orbit-ide --delete
+```
+
+`--list` paginates interactively and offers delete/quit actions. `--delete` without an id lets the user choose an item, then requires typing `yes`; `--yes` is only for scripts/CI and `--json` machine mode.
+
 ## Required Binding
 
 1. Read `.orbit/project.json` from the target repo.

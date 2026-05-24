@@ -20,6 +20,15 @@ orbit-sug import --stdin
 
 `import` tries to submit to the bound Orbit pool first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
 
+For user-facing suggestion-pool management, prefer:
+
+```bash
+orbit-sug --list
+orbit-sug --delete
+```
+
+`--list` paginates interactively and offers delete/quit actions. `--delete` without an id lets the user choose an item, then requires typing `yes`; `--yes` is only for scripts/CI and `--json` machine mode.
+
 When this skill is already running inside an Agent, use `--agent current` only for `orbit-sug run` handoffs where the Agent has already produced the semantic artifact. Do not ask the CLI to start another Agent from inside this skill.
 
 ## Artifact Shape

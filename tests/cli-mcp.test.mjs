@@ -1140,12 +1140,44 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
+  const created = JSON.parse((await run(['orbit-req', 'Interactive list item', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
+  const result = await runInteractive(['orbit-req', '--list', '--repo', repo], 'q\n');
+
+  assert.match(result.stdout, /需求池 第 1 页，每页 10 条/);
+  assert.match(result.stdout, /1\. \[[^\]]+\] Interactive list item/);
+  assert.match(result.stdout, /操作: \[n\]下一页 \[p\]上一页 \[d\]删除 \[q\]退出/);
+  assert.equal(await readFile(created.savedPath, 'utf8').then(() => true), true);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const created = JSON.parse((await run(['orbit-req', 'Keep me', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
+  const id = path.basename(created.savedPath, '.md');
+  const result = await runInteractive(['orbit-req', '--delete', id, '--repo', repo], 'no\n');
+
+  assert.match(result.stdout, /确认删除\？输入 yes 确认:/);
+  assert.match(result.stdout, /已取消删除/);
+  assert.equal(await readFile(created.savedPath, 'utf8').then(() => true), true);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const created = JSON.parse((await run(['orbit-req', 'Delete me', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
+  const id = path.basename(created.savedPath, '.md');
+  const result = await runInteractive(['orbit-req', '--delete', id, '--repo', repo], 'yes\n');
+
+  assert.match(result.stdout, /deleted:/);
+  await assert.rejects(readFile(created.savedPath, 'utf8'));
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
   await assert.rejects(
     run(['orbit-bug', '--delete', 'bug-1', '--repo', repo, '--json']),
     (error) => {
       const payload = JSON.parse(error.stdout);
       assert.equal(payload.ok, false);
-      assert.equal(payload.error.code, 'unsupported');
+      assert.equal(payload.error.code, 'confirmation_required');
       assert.equal(payload.pool, 'bug');
       assert.equal(payload.id, 'bug-1');
       return true;
