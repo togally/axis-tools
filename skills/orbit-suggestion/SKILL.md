@@ -5,11 +5,11 @@ description: Use when turning an optimization, improvement request, or product s
 
 # Orbit Suggestion
 
-Use this skill to convert improvement ideas into Orbit suggestion artifacts. User-facing CLI calls such as `orbit-sug "优化按钮文案"` create and submit/fallback automatically; `prepare` and `import` are the internal Agent protocol.
+Use this skill to convert a simple improvement seed into an Orbit suggestion artifact. User-facing CLI calls such as `orbit-sug "优化按钮文案"` fetch the cloud template/context, create the artifact, submit it to Hub, and keep a local cache automatically; `prepare` and `import` are the internal Agent protocol.
 
 ## Flow
 
-1. Run `orbit-sug prepare --json` in the target repo to read safe project binding context.
+1. Run `orbit-sug prepare --json` in the target repo to read the cloud template, safe project binding context, and recent documents/WorkItems.
 2. Clarify the current pain, proposed improvement, expected benefit, affected users, risks, and measurement signal.
 3. Produce an `orbit.pool.artifact.v1` JSON artifact with `kind: "suggestion"`.
 4. Import through the CLI:
@@ -18,7 +18,9 @@ Use this skill to convert improvement ideas into Orbit suggestion artifacts. Use
 orbit-sug import --stdin
 ```
 
-`import` tries to submit to the bound Orbit pool first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
+Build the artifact from user seed + `template.markdownTemplate` + `projectContext`.
+
+`import` tries to submit to the bound Orbit pool through `/pool-documents` first. Use `--local` only for local-only debug output, `--no-doc` to skip the local hub-cache after a successful upload, and `--save` as a deprecated alias for `--local`.
 
 For user-facing suggestion-pool management, prefer:
 

@@ -351,6 +351,135 @@ async function withProductServer(fn, options = {}) {
   }
 }
 
+async function writeProjectBinding(repo, backendUrl, extra = {}) {
+  await mkdir(path.join(repo, '.orbit'), { recursive: true });
+  await writeFile(path.join(repo, '.orbit', 'project.json'), JSON.stringify({
+    backendUrl,
+    token: 'orbit-dev-token',
+    key: 'orbit-dev-key',
+    session: 'orbit-dev-session',
+    productLineId: 'pl_2',
+    productLineUuid: '8f938fdc-f2be-44d6-8c48-91bc9156836d',
+    productLineName: 'Hermes',
+    projectId: 'proj_1',
+    projectUuid: '71533d74-80e3-4e7e-adbb-69c42a25db0c',
+    projectName: 'Hermes Console',
+    owner: 'orbit-user',
+    repo,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...extra,
+  }, null, 2));
+}
+
+async function withPoolServer(fn, options = {}) {
+  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0 };
+  const server = http.createServer((req, res) => {
+    res.setHeader('content-type', 'application/json');
+    state.requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
+    const requireAuth = () => {
+      if (req.headers.authorization !== 'Bearer orbit-dev-token') {
+        res.statusCode = 401;
+        res.end(JSON.stringify({ error: 'auth required' }));
+        return false;
+      }
+      return true;
+    };
+    const readJson = () => new Promise((resolve) => {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString('utf8');
+      });
+      req.on('end', () => resolve(body ? JSON.parse(body) : {}));
+    });
+
+    if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/pool-templates')) {
+      if (!requireAuth()) return;
+      const url = new URL(req.url, 'http://127.0.0.1');
+      const kind = url.searchParams.get('kind') ?? 'requirement';
+      res.end(JSON.stringify({
+        schemaVersion: 'orbit.pool.template.v1',
+        kind,
+        displayName: kind === 'bug' ? 'Bug池' : '需求池',
+        templateVersion: 'test-template',
+        markdownTemplate: `# {{title}}\n\n## 云端模板 ${kind}\n`,
+        artifactSchema: 'orbit.pool.artifact.v1',
+        requiredSections: ['云端模板'],
+        instructions: ['用 seed 生成标准文档 artifact'],
+        project: { id: 'proj_1', name: 'Hermes Console', summary: 'Console project' },
+        runtime: { store: 'mock' },
+      }));
+      return;
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/documents')) {
+      if (!requireAuth()) return;
+      res.end(JSON.stringify({
+        documents: [
+          { id: 'doc-old', title: 'Existing requirement', source: { type: 'requirement' }, status: 'draft' },
+        ],
+        runtime: { store: 'mock' },
+      }));
+      return;
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/work-items')) {
+      if (!requireAuth()) return;
+      res.end(JSON.stringify({
+        items: [
+          { id: 'wi-old', title: 'Existing item', type: 'requirement', status: 'ready' },
+        ],
+        runtime: { store: 'mock' },
+      }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/projects/proj_1/pool-documents') {
+      if (!requireAuth()) return;
+      if (options.poolDocuments404) {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'not found' }));
+        return;
+      }
+      readJson().then((payload) => {
+        state.poolDocuments++;
+        state.lastPoolDocument = payload;
+        const document = { id: 'doc-pool-1', title: payload.title, source: { type: payload.kind }, status: payload.status };
+        state.documents.push(document);
+        res.statusCode = 201;
+        res.end(JSON.stringify({
+          document,
+          items: [{ id: 'wi-pool-1', title: payload.workItems?.[0]?.title ?? 'Generated item', sourceArtifactId: document.id }],
+          project: { id: 'proj_1', name: 'Hermes Console' },
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/projects/proj_1/requirements') {
+      if (!requireAuth()) return;
+      readJson().then((payload) => {
+        state.requirements++;
+        state.lastRequirement = payload;
+        res.statusCode = 201;
+        res.end(JSON.stringify({
+          document: { id: 'doc-req-1', title: payload.title, source: { type: 'requirement' }, status: payload.status ?? 'draft' },
+          items: [],
+          project: { id: 'proj_1', name: 'Hermes Console' },
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
+    res.statusCode = 404;
+    res.end(JSON.stringify({ error: 'not found' }));
+  });
+
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  try {
+    await fn(`http://127.0.0.1:${address.port}`, state);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
 {
   const usage = await run([]);
   const longHelp = await run(['--help']);
@@ -1062,7 +1191,106 @@ await withTempDir(async (dir) => {
   assert.equal(prepare.binding.token, undefined);
   assert.equal(prepare.binding.key, undefined);
   assert.equal(prepare.binding.session, undefined);
+  assert.equal(prepare.template.kind, 'requirement');
+  assert.equal(prepare.template.source, 'local-fallback');
+  assert.equal(prepare.projectContext.bound, true);
+  assert.equal(prepare.projectContext.token, undefined);
   assert.doesNotMatch(result.stdout, /secret-/);
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['orbit-bug', 'prepare', '--repo', repo, '--json']);
+    const prepare = JSON.parse(result.stdout);
+    assert.equal(prepare.template.source, 'hub');
+    assert.equal(prepare.template.kind, 'bug');
+    assert.match(prepare.template.markdownTemplate, /云端模板 bug/);
+    assert.equal(prepare.projectContext.project.name, 'Hermes Console');
+    assert.equal(prepare.projectContext.documents.length, 1);
+    assert.equal(prepare.projectContext.workItems.length, 1);
+    assert.doesNotMatch(result.stdout, /orbit-dev-token|orbit-dev-key|orbit-dev-session/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.ok, true);
+    assert.equal(created.mode, 'hub');
+    assert.equal(created.id, 'doc-pool-1');
+    assert.equal(created.itemsCount, 1);
+    assert.match(created.savedPath, /docs\/bugs\/\d{8}-bug-orbit-item\.md$/);
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.lastPoolDocument.kind, 'bug');
+    assert.equal(state.lastPoolDocument.sourceId, 'orbit-bug');
+    const saved = await readFile(created.savedPath, 'utf8');
+    assert.match(saved, /source: hub-cache/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const input = '{"schemaVersion":"orbit.pool.artifact.v1","kind":"suggestion","title":"Button Copy","markdown":"# Button Copy\\n","workItems":[{"title":"Update copy"}]}';
+    const result = await runInteractive(['orbit-sug', 'import', '--repo', repo, '--stdin', '--json'], `${input}\n`);
+    const imported = JSON.parse(result.stdout);
+    assert.equal(imported.mode, 'hub');
+    assert.equal(imported.id, 'doc-pool-1');
+    assert.match(imported.savedPath, /docs\/suggestions\/\d{8}-sug-button-copy\.md$/);
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.lastPoolDocument.kind, 'suggestion');
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--no-doc', '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.mode, 'hub');
+    assert.equal(created.savedPath, null);
+    assert.equal(state.poolDocuments, 1);
+    await assert.rejects(readFile(path.join(repo, 'docs', 'bugs', `${new Date().getFullYear()}-unused.md`), 'utf8'));
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['orbit-req', '商品评价支持图片', '--repo', repo, '--agent', 'none', '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.mode, 'hub');
+    assert.equal(created.id, 'doc-req-1');
+    assert.equal(state.poolDocuments, 0);
+    assert.equal(state.requirements, 1);
+    assert.equal(state.lastRequirement.title, '商品评价支持图片');
+  }, { poolDocuments404: true });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['orbit-sug', '优化按钮文案', '--repo', repo, '--agent', 'none', '--local', '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.mode, 'local');
+    assert.equal(state.poolDocuments, 0);
+    assert.match(created.savedPath, /docs\/suggestions\/\d{8}-sug-orbit-item\.md$/);
+  });
 });
 
 await withTempDir(async (dir) => {

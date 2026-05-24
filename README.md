@@ -144,14 +144,14 @@ orbit bind
 当前 packaged skills：
 
 - `orbit-workflow`: 通过 Orbit MCP 处理 discussion、requirement、bug、improvement 池和 WorkItem 生命周期。
-- `orbit-requirement`: 把产品/项目想法或用户请求整理成 Orbit requirement/spec Markdown，并可生成 requirement 池 WorkItems 和 Orbit Hub import payload。
-- `oribit-idea`: 保留现有拼写，使用 gstack office-hours 孵化早期想法并生成 Orbit-ready artifacts。
+- `orbit-requirement`: 把用户 seed 结合云端模板和项目上下文整理成 requirement 文档，并生成可入池 WorkItems。
+- `oribit-idea`: 保留现有拼写，把早期想法结合云端模板整理成 Orbit-ready artifact。
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.orbit/project.json`。项目或产品线绑定由 `bind` 完成。
 
 ### Pool CLI
 
-四个池命令是业务入口，默认会把自然语言输入整理成 artifact 并尝试入池：
+四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定，优先从 Orbit Hub 拉取对应池子的云端模板和项目上下文，交给 Agent 生成 `orbit.pool.artifact.v1`，再把标准文档上传到云端文档库并创建 WorkItems。云端文档是主资产，本地 Markdown 是缓存或兜底。
 
 ```bash
 orbit-req "商品评价支持图片"
@@ -176,7 +176,13 @@ orbit-req --list --page 1 --page-size 20 --json
 orbit-bug --delete bug-1 --yes --json
 ```
 
-默认 create/import/run 会先尝试 Orbit Hub。当前 requirement 使用 `POST /api/projects/{projectId}/requirements`；list 使用 documents API 过滤 requirement 文档。idea/bug/suggestion 如果 Hub 没有对应池 API，会明确返回 local fallback 并保存到 `docs/ideas`、`docs/bugs` 或 `docs/suggestions`。`--local`/`--save-local` 强制本地保存，`--save` 作为旧别名保留；`--dry-run` 只生成 artifact，不提交也不保存。`prepare/import/run` 仍保留为 Agent/skill 内部协议。
+默认 create/import/run 会先尝试 Orbit Hub：
+
+- 模板：`GET /api/projects/{projectId}/pool-templates?kind=requirement|idea|bug|suggestion`，失败时使用 CLI 内置中文 fallback 模板。
+- 上传：优先 `POST /api/projects/{projectId}/pool-documents`；老 Hub 对 requirement 返回 404 时 fallback 到 `POST /api/projects/{projectId}/requirements`。
+- 缓存：Hub 上传成功后默认保存一份 `source: hub-cache` 到 `docs/requirements`、`docs/ideas`、`docs/bugs` 或 `docs/suggestions`；`--no-doc` 跳过缓存。
+
+`--local`/`--save-local` 强制只保存本地，`--save` 作为旧别名保留；`--dry-run` 只生成 artifact，不提交也不保存。`prepare/import/run` 保留为 Agent/skill 内部协议，不建议最终用户直接使用。
 
 ### 绑定本地目录
 

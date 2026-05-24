@@ -5,7 +5,7 @@ description: Use when converting a product/project idea or user request into a s
 
 # Orbit Requirement
 
-Use this skill to turn an idea, user request, issue, or conversation into an Orbit Hub project requirement document and optional requirement-pool WorkItems. User-facing CLI calls such as `orbit-req "商品评价支持图片"` create and submit automatically; `prepare` and `import` are the internal Agent protocol.
+Use this skill to turn a simple user seed into an Orbit Hub project requirement document and optional requirement-pool WorkItems. User-facing CLI calls such as `orbit-req "商品评价支持图片"` fetch the cloud template/context, create the artifact, submit it to Hub, and keep a local cache automatically; `prepare` and `import` are the internal Agent protocol.
 
 ## Trigger Conditions
 
@@ -74,7 +74,9 @@ When this skill is running inside an Agent, prefer handing the artifact to the C
 orbit-req import --stdin
 ```
 
-`import` tries `POST /api/projects/{projectId}/requirements` first. Use `--local` only for fallback/debug local files; `--save` remains a deprecated alias for `--local`.
+`prepare` includes the cloud template, safe project context, and recent documents/WorkItems. Build the artifact from user seed + `template.markdownTemplate` + `projectContext`.
+
+`import` tries `POST /api/projects/{projectId}/pool-documents` first and falls back to legacy `/requirements` when needed. Use `--local` only for local-only debug output, `--no-doc` to skip the local hub-cache after a successful upload, and `--save` as a deprecated alias for `--local`.
 
 For user-facing pool management, prefer the interactive commands:
 
