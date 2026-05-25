@@ -6,9 +6,14 @@ AXIS_TOOLS_REPO="${AXIS_TOOLS_REPO:-${ORBIT_TOOLS_REPO:-https://github.com/togal
 AXIS_TOOLS_BRANCH="${AXIS_TOOLS_BRANCH:-${ORBIT_TOOLS_BRANCH:-main}}"
 AXIS_TOOLS_FORCE="${AXIS_TOOLS_FORCE:-${ORBIT_TOOLS_FORCE:-0}}"
 AXIS_TOOLS_VERIFY_COMPAT="${AXIS_TOOLS_VERIFY_COMPAT:-${ORBIT_TOOLS_VERIFY_COMPAT:-1}}"
+AXIS_TOOLS_BINS="axis axis-tools axis-ide axis-req axis-bug axis-sug orbit orbit-tools orbit-ide orbit-req orbit-bug orbit-sug"
 
 log() {
   printf '[axis-tools] %s\n' "$*"
+}
+
+warn() {
+  printf '[axis-tools] WARNING: %s\n' "$*" >&2
 }
 
 die() {
@@ -133,6 +138,39 @@ install_cli() {
 
   log "Linking global axis command"
   (cd "$AXIS_TOOLS_DIR" && npm link --force)
+
+  npm_bin="$(npm prefix -g)/bin"
+  expose_linked_bins "$npm_bin"
+}
+
+expose_linked_bins() {
+  npm_bin="$1"
+  if command -v axis >/dev/null 2>&1 || [ ! -e "$npm_bin/axis" ]; then
+    return 0
+  fi
+
+  local_bin="$HOME/.local/bin"
+  log "axis is linked under $npm_bin but is not in PATH; exposing commands in $local_bin"
+  mkdir -p "$local_bin"
+
+  for bin in $AXIS_TOOLS_BINS; do
+    source_path="$npm_bin/$bin"
+    target_path="$local_bin/$bin"
+
+    if [ ! -e "$source_path" ]; then
+      warn "Skipping $target_path because $source_path does not exist."
+      continue
+    fi
+
+    if [ -e "$target_path" ] && [ ! -L "$target_path" ]; then
+      warn "Skipping $target_path because it exists and is not a symlink."
+      continue
+    fi
+
+    ln -sfn "$source_path" "$target_path"
+  done
+
+  hash -r 2>/dev/null || true
 }
 
 verify_command() {
@@ -152,30 +190,60 @@ verify_command() {
   log "Verified $label $command_name"
 }
 
+verify_available_command() {
+  command_name="$1"
+  label="$2"
+  fallback_path="$3"
+
+  if command -v "$command_name" >/dev/null 2>&1; then
+    verify_command "$command_name" "$label"
+  elif [ -n "$fallback_path" ] && [ -e "$fallback_path" ]; then
+    verify_command "$fallback_path" "direct $label"
+  else
+    die "Global $command_name command was not available after npm link."
+  fi
+}
+
 verify_compat_command() {
   command_name="$1"
+  fallback_path="$2"
   tmp_output="$(mktemp)"
-  if "$command_name" --help >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
+  if command -v "$command_name" >/dev/null 2>&1 && "$command_name" --help >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
     log "Verified compatibility alias $command_name"
+  elif [ -n "$fallback_path" ] && [ -e "$fallback_path" ] && "$fallback_path" --help >"$tmp_output" 2>&1 && [ -s "$tmp_output" ]; then
+    log "Verified direct compatibility alias $fallback_path"
   else
     log "Compatibility alias $command_name was not available"
   fi
   rm -f "$tmp_output"
 }
 
+path_contains_dir() {
+  dir="$1"
+  case ":$PATH:" in
+    *":$dir:"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 verify_cli() {
   log "Verifying axis command"
-  verify_command axis "primary command"
+  npm_bin="$(npm prefix -g)/bin"
+  local_bin="$HOME/.local/bin"
 
-  if axis-tools --help >/dev/null 2>&1; then
-    log "Verified primary alias axis-tools"
-  else
-    die "Global axis-tools alias was not available after npm link."
+  if ! command -v axis >/dev/null 2>&1; then
+    warn "axis is installed at $npm_bin/axis but is not discoverable in PATH."
+    if ! path_contains_dir "$local_bin"; then
+      warn "Add $local_bin to PATH, then open a new shell or run: export PATH=\"$local_bin:\$PATH\""
+    fi
   fi
 
+  verify_available_command axis "primary command" "$npm_bin/axis"
+  verify_available_command axis-tools "primary alias" "$npm_bin/axis-tools"
+
   if [ "$AXIS_TOOLS_VERIFY_COMPAT" = "1" ]; then
-    verify_compat_command orbit
-    verify_compat_command orbit-tools
+    verify_compat_command orbit "$npm_bin/orbit"
+    verify_compat_command orbit-tools "$npm_bin/orbit-tools"
   fi
 }
 

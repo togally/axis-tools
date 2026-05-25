@@ -80,6 +80,12 @@ npm run build
 npm link
 ```
 
+如果 `npm link` 的全局 bin 目录不在 `PATH` 里，安装脚本会把 Axis 命令链接到 `~/.local/bin`。如果安装后当前 shell 仍找不到 `axis`，把 `~/.local/bin` 加到 `PATH` 后重新打开 shell，或运行：
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
 本地已有脚本时也可以直接运行：
 
 ```bash
