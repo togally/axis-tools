@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/jasperWei/orbit/orbit-tools"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PLUGIN_DIR="$HOME/.codex/plugins/local/observability"
 CONFIG_FILE="$HOME/.codex/config.toml"
 CLI_PATH="$ROOT/dist/cli.js"
@@ -14,7 +14,7 @@ TMP_CONFIG="$(mktemp)"
 mkdir -p "$PLUGIN_DIR/.codex-plugin"
 
 if [ ! -f "$CLI_PATH" ]; then
-  echo "[orbit-tools] dist/cli.js not found, building..."
+  echo "[axis-tools] dist/cli.js not found, building..."
   (cd "$ROOT" && npm run build >/dev/null)
 fi
 
@@ -37,21 +37,21 @@ cat > "$PLUGIN_JSON" <<'JSON'
 {
   "name": "orbit-observability",
   "version": "0.1.0",
-  "description": "Local Codex observability hooks for Orbit via orbit-tools CLI.",
+  "description": "Local Codex observability hooks for Orbit via axis-tools CLI.",
   "author": {
     "name": "Jasper",
     "email": "local@orbit",
     "url": "https://orbit.local"
   },
-  "homepage": "https://orbit.local/orbit-tools",
-  "repository": "https://orbit.local/orbit-tools",
+  "homepage": "https://orbit.local/axis-tools",
+  "repository": "https://orbit.local/axis-tools",
   "license": "UNLICENSED",
   "keywords": ["orbit", "codex", "hooks", "observability"],
   "hooks": "./hooks.json",
   "interface": {
     "displayName": "Orbit Observability",
     "shortDescription": "Local hooks that stream Codex progress into .codex-status",
-    "longDescription": "Installs local Codex hooks that forward official hook events into orbit-tools so Orbit can observe Codex progress.",
+    "longDescription": "Installs local Codex hooks that forward official hook events into axis-tools so Orbit can observe Codex progress.",
     "developerName": "Orbit",
     "category": "Coding",
     "capabilities": ["Read", "Write"],
@@ -81,7 +81,7 @@ Path(tmp_path).write_text(text, encoding='utf-8')
 PY
 mv "$TMP_CONFIG" "$CONFIG_FILE"
 
-echo "[orbit-tools] Codex observability hook installed"
+echo "[axis-tools] Codex observability hook installed"
 echo "plugin_dir=$PLUGIN_DIR"
 echo "config=$CONFIG_FILE"
 echo "hooks=$HOOKS_DST"

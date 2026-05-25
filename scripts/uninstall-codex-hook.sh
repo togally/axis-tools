@@ -29,5 +29,5 @@ Path(tmp_path).write_text(text, encoding='utf-8')
 PY
 mv "$TMP_CONFIG" "$CONFIG_FILE"
 
-echo "[orbit-tools] Codex observability hook removed"
+echo "[axis-tools] Codex observability hook removed"
 echo "plugin_dir=$PLUGIN_DIR"

@@ -1,8 +1,8 @@
-# orbit-tools
+# axis-tools
 
 AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisNode MCP / 项目绑定配置。
 
-公共 CLI 主命令是 `axis`。`axis-tools` 是同入口别名，`orbit` 和 `orbit-tools` 仍作为兼容别名保留；仓库名和 npm package 名仍是 `orbit-tools`。
+公共 CLI 主命令是 `axis`。`axis-tools` 是同入口别名，`orbit` 和 `orbit-tools` 仍作为兼容别名保留；仓库名和 npm package 名是 `axis-tools`。
 
 ## 当前能力
 
@@ -46,7 +46,7 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
 ## 仓库结构
 
 ```text
-orbit-tools/
+axis-tools/
 ├── examples/
 │   ├── hooks.json
 │   ├── sample-pretool.json
@@ -69,10 +69,10 @@ orbit-tools/
 新电脑推荐一键安装 / 更新（macOS 和 Linux）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/togally/orbit-tools/main/scripts/install-orbit-tools.sh | bash
+curl -fsSL https://raw.githubusercontent.com/togally/axis-tools/main/scripts/install-axis-tools.sh | bash
 ```
 
-脚本默认把仓库安装到 `~/orbit-tools`，如果目录不存在会 clone；如果目录已经是 `https://github.com/togally/orbit-tools.git` 的 git repo，会安全更新到 `origin/main`，然后自动执行：
+脚本默认把仓库安装到 `~/axis-tools`，如果目录不存在会 clone；如果目录已经是 `https://github.com/togally/axis-tools.git` 的 git repo，会安全更新到 `origin/main`，然后自动执行：
 
 ```bash
 npm install
@@ -83,28 +83,30 @@ npm link
 本地已有脚本时也可以直接运行：
 
 ```bash
-bash scripts/install-orbit-tools.sh
+bash scripts/install-axis-tools.sh
 ```
 
 可选环境变量：
 
 ```bash
-ORBIT_TOOLS_DIR="$HOME/orbit-tools" \
-ORBIT_TOOLS_REPO="https://github.com/togally/orbit-tools.git" \
-ORBIT_TOOLS_BRANCH="main" \
-bash scripts/install-orbit-tools.sh
+AXIS_TOOLS_DIR="$HOME/axis-tools" \
+AXIS_TOOLS_REPO="https://github.com/togally/axis-tools.git" \
+AXIS_TOOLS_BRANCH="main" \
+bash scripts/install-axis-tools.sh
 ```
+
+`AXIS_TOOLS_REPO` 默认使用预期的新仓库 `https://github.com/togally/axis-tools.git`。如果当前 checkout 仍托管在旧地址或私有 fork，请显式覆盖 `AXIS_TOOLS_REPO`。旧的 `ORBIT_TOOLS_*` 环境变量仍作为兼容 fallback 生效，`scripts/install-orbit-tools.sh` 也保留为调用 Axis installer 的兼容入口。
 
 默认不会覆盖本地修改。如果本地 repo 有未提交修改、未跟踪文件、本地提交或分叉历史，脚本会停止并提示先 commit/stash。确认要丢弃本地变更时，可以显式使用：
 
 ```bash
-ORBIT_TOOLS_FORCE=1 bash scripts/install-orbit-tools.sh
+AXIS_TOOLS_FORCE=1 bash scripts/install-axis-tools.sh
 ```
 
 手动安装：
 
 ```bash
-cd /home/jasperWei/orbit/orbit-tools
+cd /home/jasperWei/orbit/axis-tools
 npm install
 npm run build
 bash scripts/install-codex-hook.sh
@@ -113,7 +115,7 @@ bash scripts/install-codex-hook.sh
 如果你只想安装 CLI 而不立刻接 hook：
 
 ```bash
-cd /home/jasperWei/orbit/orbit-tools
+cd /home/jasperWei/orbit/axis-tools
 npm install
 npm run build
 npm link
@@ -124,6 +126,8 @@ npm link
 ```bash
 axis codex-status current --repo /home/jasperWei/orbit/orbit-hub
 ```
+
+旧命令 `orbit`、`orbit-tools`、`orbit-req`、`orbit-bug`、`orbit-sug`、`orbit-ide` 仅作为兼容别名保留；新文档和脚本应优先使用 `axis` / `axis-tools` / `axis-*`。
 
 ## AxisNode 登录、初始化、绑定与 Pull
 
@@ -269,7 +273,7 @@ axis project bind \
 
 ```bash
 axis project bind \
-  --repo /home/jasperWei/orbit/orbit-tools \
+  --repo /home/jasperWei/orbit/axis-tools \
   --backend-url http://117.72.14.134:18081 \
   --product-line-uuid 8f938fdc-f2be-44d6-8c48-91bc9156836d \
   --project-uuid 71533d74-80e3-4e7e-adbb-69c42a25db0c \
@@ -283,7 +287,7 @@ axis login \
   --backend-url http://127.0.0.1:18081
 
 axis init \
-  --repo /home/jasperWei/orbit/orbit-tools \
+  --repo /home/jasperWei/orbit/axis-tools \
   --backend-url http://127.0.0.1:18081
 
 cd /home/team/orbit/product-line-root
@@ -339,7 +343,7 @@ curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/complet
 ## 本地自测
 
 ```bash
-cd /home/jasperWei/orbit/orbit-tools
+cd /home/jasperWei/orbit/axis-tools
 npm run test:mcp
 npm run test:sample
 ```
@@ -355,14 +359,14 @@ npm run test:sample
 ### 方式一：一键安装脚本（推荐）
 
 ```bash
-cd /home/jasperWei/orbit/orbit-tools
+cd /home/jasperWei/orbit/axis-tools
 bash scripts/install-codex-hook.sh
 ```
 
 卸载：
 
 ```bash
-cd /home/jasperWei/orbit/orbit-tools
+cd /home/jasperWei/orbit/axis-tools
 bash scripts/uninstall-codex-hook.sh
 ```
 
@@ -376,10 +380,10 @@ bash scripts/uninstall-codex-hook.sh
 ```
 
 ### 方式二：把命令改成绝对路径，减少 PATH 依赖
-如果担心 Codex hook 环境拿不到 `orbit`，把 `examples/hooks.json` 里的 command 改成：
+如果担心 Codex hook 环境拿不到 `axis`，把 `examples/hooks.json` 里的 command 改成：
 
 ```bash
-node /home/jasperWei/orbit/orbit-tools/dist/cli.js codex-hook ingest
+node /home/jasperWei/orbit/axis-tools/dist/cli.js codex-hook ingest
 ```
 ```
 

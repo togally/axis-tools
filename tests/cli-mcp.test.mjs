@@ -11,6 +11,17 @@ import { readHiddenLine } from '../dist/cli.js';
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
 const TEST_PASSWORD = 'test-password-for-hidden-prompt';
+const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+
+{
+  assert.equal(packageJson.name, 'axis-tools');
+  for (const bin of ['axis', 'axis-tools', 'axis-ide', 'axis-req', 'axis-bug', 'axis-sug']) {
+    assert.equal(packageJson.bin[bin], './dist/cli.js');
+  }
+  for (const bin of ['orbit', 'orbit-tools', 'orbit-ide', 'orbit-req', 'orbit-bug', 'orbit-sug']) {
+    assert.equal(packageJson.bin[bin], './dist/cli.js');
+  }
+}
 
 class FakeTtyInput extends EventEmitter {
   constructor() {
@@ -122,7 +133,7 @@ async function runInteractive(args, input, options = {}) {
 }
 
 async function withTempDir(fn) {
-  const dir = await mkdtemp(path.join(tmpdir(), 'orbit-tools-mcp-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'axis-tools-mcp-'));
   try {
     return await fn(dir);
   } finally {
@@ -132,7 +143,7 @@ async function withTempDir(fn) {
 
 async function runViaLinkedBin(args) {
   return withTempDir(async (dir) => {
-    const binPath = path.join(dir, 'orbit');
+    const binPath = path.join(dir, 'axis');
     await symlink(cli, binPath);
     return execFileAsync(binPath, args, {
       env: {
@@ -145,7 +156,20 @@ async function runViaLinkedBin(args) {
 
 async function runViaLinkedAlias(args) {
   return withTempDir(async (dir) => {
-    const binPath = path.join(dir, 'orbit-tools');
+    const binPath = path.join(dir, 'axis-tools');
+    await symlink(cli, binPath);
+    return execFileAsync(binPath, args, {
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+      },
+    });
+  });
+}
+
+async function runViaLinkedLegacyAlias(args) {
+  return withTempDir(async (dir) => {
+    const binPath = path.join(dir, 'orbit');
     await symlink(cli, binPath);
     return execFileAsync(binPath, args, {
       env: {
@@ -499,6 +523,7 @@ async function withPoolServer(fn, options = {}) {
   const shortHelp = await run(['-h']);
   const linkedHelp = await runViaLinkedBin(['--help']);
   const aliasHelp = await runViaLinkedAlias(['--help']);
+  const legacyHelp = await runViaLinkedLegacyAlias(['--help']);
   assert.match(usage.stdout, /^axis\n/);
   assert.match(usage.stdout, /Aliases: axis-tools, orbit, orbit-tools/);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
@@ -506,6 +531,7 @@ async function withPoolServer(fn, options = {}) {
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.equal(linkedHelp.stdout, usage.stdout);
   assert.equal(aliasHelp.stdout, usage.stdout);
+  assert.equal(legacyHelp.stdout, usage.stdout);
   assert.match(usage.stdout, /init = packaged skill setup only/);
   assert.match(usage.stdout, /login = prompt for AxisNode account and hidden password; cache session/);
   assert.match(usage.stdout, /me = show current AxisNode user/);
