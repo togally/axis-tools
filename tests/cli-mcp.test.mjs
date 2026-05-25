@@ -409,7 +409,7 @@ async function writeProjectBinding(repo, backendUrl, extra = {}) {
 }
 
 async function withPoolServer(fn, options = {}) {
-  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0 };
+  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0 };
   const server = http.createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
     state.requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
@@ -465,6 +465,33 @@ async function withPoolServer(fn, options = {}) {
         ],
         runtime: { store: 'mock' },
       }));
+      return;
+    }
+    if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/pool-seeds')) {
+      if (!requireAuth()) return;
+      res.end(JSON.stringify({
+        items: [
+          { id: 'seed-old', kind: 'idea', title: 'Existing idea seed', status: 'pending-confirmation' },
+        ],
+        runtime: { store: 'mock' },
+      }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/projects/proj_1/pool-seeds') {
+      if (!requireAuth()) return;
+      readJson().then((payload) => {
+        state.poolSeeds++;
+        state.lastPoolSeed = payload;
+        res.statusCode = 201;
+        res.end(JSON.stringify({
+          id: 'seed-1',
+          title: payload.title,
+          kind: payload.kind,
+          status: payload.status,
+          url: `/projects/proj_1/pool/seeds/seed-1`,
+          runtime: { store: 'mock' },
+        }));
+      });
       return;
     }
     if (req.method === 'POST' && req.url === '/api/projects/proj_1/pool-documents') {
@@ -1306,7 +1333,7 @@ await withTempDir(async (dir) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
-    const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--json']);
+    const result = await run(['orbit-bug', 'run', '登录失败', '--repo', repo, '--agent', 'none', '--json']);
     const created = JSON.parse(result.stdout);
     assert.equal(created.ok, true);
     assert.equal(created.mode, 'hub');
@@ -1319,6 +1346,60 @@ await withTempDir(async (dir) => {
     const saved = await readFile(created.savedPath, 'utf8');
     assert.match(saved, /source: hub-cache/);
   });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+
+    const result = await runViaLinkedAxisPool('axis-ide', ['测试想法', '--repo', repo, '--agent', 'codex', '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.ok, true);
+    assert.equal(created.mode, 'hub-seed');
+    assert.equal(created.id, 'seed-1');
+    assert.equal(created.status, 'pending-confirmation');
+    assert.equal(created.kind, 'idea');
+    assert.equal(created.title, '测试想法');
+    assert.equal(state.poolSeeds, 1);
+    assert.equal(state.poolDocuments, 0);
+    assert.equal(state.lastPoolSeed.kind, 'idea');
+    assert.equal(state.lastPoolSeed.title, '测试想法');
+    assert.equal(state.lastPoolSeed.seed, '测试想法');
+    assert.equal(state.lastPoolSeed.status, 'pending-confirmation');
+    assert.equal(state.lastPoolSeed.source, 'CLI');
+    assert.equal(state.lastPoolSeed.sourceId, 'axis-ide');
+    assert.equal(state.lastPoolSeed.repo, repo);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['work', 'once', '--repo', repo, '--json']);
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'probe');
+    assert.equal(payload.repo, repo);
+    assert.equal(payload.spawn, false);
+    assert.equal(payload.lanes.refine.description, 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.');
+    assert.equal(payload.lanes.execute.description, 'Execute confirmed/ready requirements and work-items.');
+    assert.equal(payload.lanes.refine.items[0].id, 'seed-old');
+    assert.equal(payload.lanes.execute.items[0].id, 'wi-old');
+    assert.match(payload.plan[0], /Probe Hub queues/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const result = await runViaLinkedAxisPool('axis-ide', ['--help', '--repo', repo]);
+
+  assert.match(result.stdout, /axis-req <text>/);
+  assert.doesNotMatch(result.stdout, /Select agent/);
+  await assert.rejects(readFile(path.join(repo, '.axis', 'pool-seeds'), 'utf8'));
+  await assert.rejects(readFile(path.join(repo, 'docs', 'ideas'), 'utf8'));
 });
 
 await withTempDir(async (dir) => {
@@ -1342,7 +1423,7 @@ await withTempDir(async (dir) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
-    const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--no-doc', '--json']);
+    const result = await run(['orbit-bug', 'run', '登录失败', '--repo', repo, '--agent', 'none', '--no-doc', '--json']);
     const created = JSON.parse(result.stdout);
     assert.equal(created.mode, 'hub');
     assert.equal(created.savedPath, null);
@@ -1356,7 +1437,7 @@ await withTempDir(async (dir) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
-    const result = await run(['orbit-req', '商品评价支持图片', '--repo', repo, '--agent', 'none', '--json']);
+    const result = await run(['orbit-req', 'run', '商品评价支持图片', '--repo', repo, '--agent', 'none', '--json']);
     const created = JSON.parse(result.stdout);
     assert.equal(created.mode, 'hub');
     assert.equal(created.id, 'doc-req-1');
@@ -1371,7 +1452,7 @@ await withTempDir(async (dir) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
-    const result = await run(['orbit-sug', '优化按钮文案', '--repo', repo, '--agent', 'none', '--local', '--json']);
+    const result = await run(['orbit-sug', 'run', '优化按钮文案', '--repo', repo, '--agent', 'none', '--local', '--json']);
     const created = JSON.parse(result.stdout);
     assert.equal(created.mode, 'local');
     assert.equal(state.poolDocuments, 0);
@@ -1397,7 +1478,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const result = await run(['orbit-bug', '登录失败', '--repo', repo, '--agent', 'none', '--local', '--json']);
+  const result = await run(['orbit-bug', 'run', '登录失败', '--repo', repo, '--agent', 'none', '--local', '--json']);
   const imported = JSON.parse(result.stdout);
   assert.equal(imported.ok, true);
   assert.equal(imported.mode, 'local');
@@ -1412,7 +1493,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const result = await runViaLinkedAxisPool('axis-bug', ['登录失败', '--repo', repo, '--agent', 'none', '--local', '--json']);
+  const result = await runViaLinkedAxisPool('axis-bug', ['run', '登录失败', '--repo', repo, '--agent', 'none', '--local', '--json']);
   const imported = JSON.parse(result.stdout);
   assert.equal(imported.ok, true);
   assert.equal(imported.mode, 'local');
@@ -1426,7 +1507,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const result = await run(['orbit-req', 'Smoke', '--repo', repo, '--agent', 'none', '--local', '--json']);
+  const result = await run(['orbit-req', 'run', 'Smoke', '--repo', repo, '--agent', 'none', '--local', '--json']);
   const created = JSON.parse(result.stdout);
   assert.equal(created.ok, true);
   assert.equal(created.mode, 'local');
@@ -1447,7 +1528,7 @@ await withTempDir(async (dir) => {
     updatedAt: '2026-01-01T00:00:00.000Z',
   }, null, 2));
 
-  const result = await run(['orbit-req', 'Smoke', '--repo', repo, '--agent', 'none', '--dry-run', '--json']);
+  const result = await run(['orbit-req', 'run', 'Smoke', '--repo', repo, '--agent', 'none', '--dry-run', '--json']);
   const created = JSON.parse(result.stdout);
   assert.equal(created.ok, true);
   assert.equal(created.mode, 'dry-run');
@@ -1468,7 +1549,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const created = JSON.parse((await run(['orbit-req', 'Interactive list item', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
+  const created = JSON.parse((await run(['orbit-req', 'run', 'Interactive list item', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
   const result = await runInteractive(['orbit-req', '--list', '--repo', repo], 'q\n');
 
   assert.match(result.stdout, /需求池 第 1 页，每页 10 条/);
@@ -1479,7 +1560,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const created = JSON.parse((await run(['orbit-req', 'Keep me', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
+  const created = JSON.parse((await run(['orbit-req', 'run', 'Keep me', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
   const id = path.basename(created.savedPath, '.md');
   const result = await runInteractive(['orbit-req', '--delete', id, '--repo', repo], 'no\n');
 
@@ -1490,7 +1571,7 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
-  const created = JSON.parse((await run(['orbit-req', 'Delete me', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
+  const created = JSON.parse((await run(['orbit-req', 'run', 'Delete me', '--repo', repo, '--agent', 'none', '--local', '--json'])).stdout);
   const id = path.basename(created.savedPath, '.md');
   const result = await runInteractive(['orbit-req', '--delete', id, '--repo', repo], 'yes\n');
 

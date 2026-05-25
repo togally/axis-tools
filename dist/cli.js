@@ -55,7 +55,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--agent <codex|claude-code|current|none>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same create/list/delete flags\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败" --agent none --local\n  axis-sug "优化按钮文案" --dry-run --json\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local save instead of Hub submit\n  --save = deprecated alias for --local\n  --no-doc = skip local hub-cache after successful Hub submit\n  --dry-run = generate artifact only; do not submit or save\n  --from <file> / --stdin = read input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run\n  axis-req prepare|import|run\n  axis-bug prepare|import|run\n  axis-sug prepare|import|run\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work once --repo <path> [--json]\n  axis work loop --repo <path> [--iterations <n>] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req run "商品评价支持图片" --agent none --local\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-req prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-bug prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-sug prepare|import|run [--agent <codex|claude-code|current|none>]\n  --no-doc and --dry-run apply to advanced artifact submission\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function getArg(flag) {
@@ -2137,7 +2137,7 @@ function collectFreeText(args) {
             index++;
             continue;
         }
-        if (arg === '--save' || arg === '--local' || arg === '--save-local' || arg === '--no-doc' || arg === '--dry-run' || arg === '--stdin' || arg === '--json' || arg === '--list' || arg === '--yes')
+        if (arg === '--save' || arg === '--local' || arg === '--save-local' || arg === '--no-doc' || arg === '--dry-run' || arg === '--stdin' || arg === '--json' || arg === '--list' || arg === '--yes' || arg === '--help' || arg === '-h')
             continue;
         if (arg.startsWith('--'))
             continue;
@@ -2192,6 +2192,135 @@ function buildPoolPayload(pool, artifact, repoPath) {
         artifact,
         repo: repoPath,
     };
+}
+function poolSeedTitle(pool, seed) {
+    return seed.trim().split(/\r?\n/)[0]?.trim() || `${pool.displayName} ${localDateStamp()}`;
+}
+function buildPoolSeedPayload(pool, seed, repoPath) {
+    const trimmed = seed.trim();
+    const title = poolSeedTitle(pool, trimmed);
+    return {
+        kind: pool.kind,
+        title,
+        seed: trimmed,
+        summary: trimmed,
+        status: 'pending-confirmation',
+        source: 'CLI',
+        sourceId: pool.command,
+        repo: repoPath,
+    };
+}
+function localPoolSeedDir(repoPath) {
+    return path.join(repoPath, '.axis', 'pool-seeds');
+}
+async function savePoolSeed(pool, payload, repoPath) {
+    const dir = localPoolSeedDir(repoPath);
+    ensureDir(dir);
+    const title = safeString(payload.title) ?? poolSeedTitle(pool, '');
+    const filePath = path.join(dir, `${localDateStamp()}-${pool.pool}-${safeSlug(title, 'axis-seed')}.json`);
+    await writeFile(filePath, `${JSON.stringify({ ...payload, savedAt: new Date().toISOString() }, null, 2)}\n`, 'utf8');
+    return filePath;
+}
+async function submitPoolSeedToHub(pool, binding, token, payload) {
+    const projectId = projectApiId(binding);
+    if (!projectId)
+        throw new Error('project binding has no projectId/projectUuid');
+    if (!token)
+        throw new Error('project binding has no token and no cached login session');
+    return postOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/pool-seeds`, payload, token);
+}
+function extractStatus(payload) {
+    if (!isJson(payload))
+        return null;
+    return safeString(payload.status)
+        ?? (isJson(payload.seed) ? extractStatus(payload.seed) : null)
+        ?? (isJson(payload.data) ? extractStatus(payload.data) : null);
+}
+async function submitPoolSeed(pool, repoPath, seed) {
+    const payload = buildPoolSeedPayload(pool, seed, repoPath);
+    const title = safeString(payload.title) ?? poolSeedTitle(pool, seed);
+    const summary = safeString(payload.summary) ?? seed.trim();
+    const status = safeString(payload.status) ?? 'pending-confirmation';
+    if (hasFlag('--dry-run')) {
+        return { ok: true, mode: 'dry-run', repo: repoPath, pool: pool.pool, kind: pool.kind, title, seed: seed.trim(), summary, status, id: null, url: null, savedPath: null, warning: null };
+    }
+    if (shouldUseLocalOnly()) {
+        const savedPath = await savePoolSeed(pool, payload, repoPath);
+        return { ok: true, mode: 'local-seed', repo: repoPath, pool: pool.pool, kind: pool.kind, title, seed: seed.trim(), summary, status, id: null, url: null, savedPath, warning: null };
+    }
+    const binding = await readProjectBinding(repoPath);
+    if (binding) {
+        try {
+            const response = await submitPoolSeedToHub(pool, binding, await tokenForBinding(binding), payload);
+            return {
+                ok: true,
+                mode: 'hub-seed',
+                repo: repoPath,
+                pool: pool.pool,
+                kind: pool.kind,
+                title,
+                seed: seed.trim(),
+                summary,
+                status: extractStatus(response) ?? status,
+                id: extractId(response),
+                url: extractUrl(response),
+                savedPath: null,
+                warning: null,
+                response,
+            };
+        }
+        catch (error) {
+            const savedPath = await savePoolSeed(pool, payload, repoPath);
+            return {
+                ok: true,
+                mode: 'local-seed',
+                repo: repoPath,
+                pool: pool.pool,
+                kind: pool.kind,
+                title,
+                seed: seed.trim(),
+                summary,
+                status,
+                id: null,
+                url: null,
+                savedPath,
+                warning: `AxisNode seed submit failed; seed saved locally instead. ${error instanceof Error ? error.message : String(error)}`,
+            };
+        }
+    }
+    const savedPath = await savePoolSeed(pool, payload, repoPath);
+    return {
+        ok: true,
+        mode: 'local-seed',
+        repo: repoPath,
+        pool: pool.pool,
+        kind: pool.kind,
+        title,
+        seed: seed.trim(),
+        summary,
+        status,
+        id: null,
+        url: null,
+        savedPath,
+        warning: 'No AxisNode project binding found; seed saved locally instead.',
+    };
+}
+function printPoolSeed(result) {
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+    }
+    console.log(`${result.kind}: ${result.title}`);
+    console.log(`mode: ${result.mode}`);
+    if (result.id)
+        console.log(`id: ${result.id}`);
+    console.log(`status: ${result.status}`);
+    if (result.url)
+        console.log(`url: ${result.url}`);
+    if (result.savedPath)
+        console.log(`savedPath: ${result.savedPath}`);
+    if (result.warning)
+        console.log(`warning: ${result.warning}`);
 }
 async function submitRequirementToHub(pool, binding, token, artifact, repoPath) {
     const projectId = projectApiId(binding);
@@ -2675,6 +2804,130 @@ async function deletePoolItem(pool, id, options = {}) {
     }
     process.exit(2);
 }
+function integerArg(flag, fallback, max) {
+    const value = Number.parseInt(getArg(flag) ?? String(fallback), 10);
+    if (!Number.isFinite(value) || value < 1)
+        return fallback;
+    return Math.min(value, max);
+}
+async function probeHubQueue(binding, routePath) {
+    try {
+        const payload = await fetchOrbitJson(binding.backendUrl, routePath, await tokenForBinding(binding));
+        return { items: documentArray(payload), warning: null };
+    }
+    catch (error) {
+        return { items: [], warning: error instanceof Error ? error.message : String(error) };
+    }
+}
+async function buildWorkProbe(repoPath) {
+    const binding = await readProjectBinding(repoPath);
+    const spawn = hasFlag('--spawn');
+    const lanes = {
+        refine: {
+            description: 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.',
+            query: 'pool-seeds?status=pending-confirmation',
+            items: [],
+            warning: null,
+        },
+        execute: {
+            description: 'Execute confirmed/ready requirements and work-items.',
+            query: 'work-items?status=ready',
+            items: [],
+            warning: null,
+        },
+    };
+    if (binding) {
+        const projectId = projectApiId(binding);
+        if (projectId) {
+            const refine = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/pool-seeds?status=pending-confirmation&page=1&pageSize=10`);
+            const execute = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/work-items?status=ready&page=1&pageSize=10`);
+            lanes.refine.items = refine.items;
+            lanes.refine.warning = refine.warning;
+            lanes.execute.items = execute.items;
+            lanes.execute.warning = execute.warning;
+        }
+        else {
+            lanes.refine.warning = 'Project binding has no projectId/projectUuid; Hub queues were not probed.';
+            lanes.execute.warning = 'Project binding has no projectId/projectUuid; Hub queues were not probed.';
+        }
+    }
+    else {
+        lanes.refine.warning = 'No AxisNode project binding found; Hub queues were not probed.';
+        lanes.execute.warning = 'No AxisNode project binding found; Hub queues were not probed.';
+    }
+    return {
+        ok: true,
+        mode: 'probe',
+        repo: repoPath,
+        bound: Boolean(binding),
+        projectId: binding ? projectApiId(binding) : null,
+        spawn,
+        lanes,
+        plan: [
+            'Probe Hub queues only; do not launch agents by default.',
+            'Refine lane: convert pending-confirmation seeds into confirmed requirements or work-items after human confirmation.',
+            'Execute lane: claim confirmed/ready work-items, run implementation in an isolated workspace, verify, then write back status.',
+            'TODO: add explicit --spawn refine and --spawn execute subagent launchers after Hub lifecycle APIs are stable.',
+        ],
+        warning: spawn ? '--spawn is reserved for a future explicit launcher; this skeleton did not start agents.' : null,
+    };
+}
+function printWorkProbe(payload) {
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+    }
+    console.log(`repo: ${payload.repo}`);
+    console.log(`mode: ${payload.mode}`);
+    console.log(`spawn: ${payload.spawn ? 'requested-not-started' : 'false'}`);
+    const lanes = isJson(payload.lanes) ? payload.lanes : {};
+    for (const laneName of ['refine', 'execute']) {
+        const lane = isJson(lanes[laneName]) ? lanes[laneName] : {};
+        const items = Array.isArray(lane.items) ? lane.items : [];
+        console.log(`${laneName}: ${items.length} item(s)`);
+        if (safeString(lane.warning))
+            console.log(`${laneName} warning: ${lane.warning}`);
+    }
+    if (safeString(payload.warning))
+        console.log(`warning: ${payload.warning}`);
+}
+async function handleWorkCommand(command) {
+    if (!command || command === '--help' || command === '-h') {
+        printUsage();
+        return;
+    }
+    const repoPath = resolveRepoArg();
+    if (command === 'once') {
+        printWorkProbe(await buildWorkProbe(repoPath));
+        return;
+    }
+    if (command === 'loop') {
+        const iterations = integerArg('--iterations', 1, 20);
+        const results = [];
+        for (let index = 0; index < iterations; index++) {
+            results.push({ iteration: index + 1, ...await buildWorkProbe(repoPath) });
+        }
+        const payload = {
+            ok: true,
+            mode: 'loop-skeleton',
+            repo: repoPath,
+            iterations,
+            results,
+            warning: 'Loop skeleton is bounded and does not sleep or launch agents yet.',
+        };
+        if (hasFlag('--json'))
+            console.log(JSON.stringify(payload, null, 2));
+        else {
+            console.log(`repo: ${repoPath}`);
+            console.log(`mode: loop-skeleton`);
+            console.log(`iterations: ${iterations}`);
+            console.log(payload.warning);
+        }
+        return;
+    }
+    printUsage();
+    process.exit(1);
+}
 function getPoolDeleteId(args) {
     const index = args.indexOf('--delete');
     if (index === -1)
@@ -2728,6 +2981,10 @@ async function selectAndDeletePoolItem(pool) {
 }
 async function handlePoolCommand(pool, args) {
     const subcommand = args[0];
+    if (hasFlag('--help') || hasFlag('-h')) {
+        printUsage();
+        return;
+    }
     if (hasFlag('--list')) {
         await listPoolItems(pool);
         return;
@@ -2754,7 +3011,9 @@ async function handlePoolCommand(pool, args) {
         await runPool(pool, args.slice(1));
         return;
     }
-    await runPool(pool, args);
+    const repoPath = resolveRepoArg();
+    const input = await readPoolInput(args);
+    printPoolSeed(await submitPoolSeed(pool, repoPath, input));
 }
 async function main() {
     const [, , group, command] = process.argv;
@@ -2793,6 +3052,10 @@ async function main() {
     }
     if (group === 'pull') {
         await pullCloudStructure();
+        return;
+    }
+    if (group === 'work') {
+        await handleWorkCommand(command);
         return;
     }
     if (group === 'install') {

@@ -42,6 +42,8 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 高级非交互式绑定命令，保留给自动化脚本使用
 - `axis project show`
   - 查看当前 repo 的 AxisNode 绑定
+- `axis work once` / `axis work loop`
+  - 探测 Hub 队列并展示 refine / execute 两条工作 lane；默认不启动 Agent
 
 ## 仓库结构
 
@@ -161,7 +163,7 @@ axis bind
 
 ### Pool CLI
 
-四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定，优先从 AxisNode 拉取对应池子的云端模板和项目上下文，交给 Agent 生成 `orbit.pool.artifact.v1`，再把标准文档上传到云端文档库并创建 WorkItems。云端文档是主资产，本地 Markdown 是缓存或兜底。
+四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定和登录 token，优先提交到 AxisNode Hub 的 `/api/projects/{projectId}/pool-seeds`，状态为 `pending-confirmation`，然后立即返回。默认不会提示选择 Agent，也不会启动 Codex / Claude Code。
 
 ```bash
 axis-req "商品评价支持图片"
@@ -169,6 +171,8 @@ axis-bug "登录失败"
 axis-sug "优化按钮文案"
 axis-ide "AI宠物健康顾问"
 ```
+
+默认输出会包含 `kind`、`title`、`mode=hub-seed`、`id`、`status` 和 `url`；`--json` 输出机器可读 JSON。没有绑定、没有登录 token 或 Hub 不可用时，CLI 会把 seed 保存到本地 `.axis/pool-seeds/`，并明确输出 `mode=local-seed` 和 “seed saved locally” 类 warning。
 
 通用查询/删除形态：
 
@@ -186,13 +190,39 @@ axis-req --list --page 1 --page-size 20 --json
 axis-bug --delete bug-1 --yes --json
 ```
 
-默认 create/import/run 会先尝试 AxisNode：
+高级 artifact 流程保留给 Agent/skill 或调试场景，必须显式使用 `run`、`prepare` 或 `import`：
+
+```bash
+axis-req run "商品评价支持图片" --agent none
+axis-bug run "登录失败" --agent codex
+axis-sug import --stdin
+axis-ide prepare --json
+```
+
+`run` / `import` 会先尝试 AxisNode：
 
 - 模板：`GET /api/projects/{projectId}/pool-templates?kind=requirement|idea|bug|suggestion`，失败时使用 CLI 内置中文 fallback 模板。
 - 上传：优先 `POST /api/projects/{projectId}/pool-documents`；老 Hub 对 requirement 返回 404 时 fallback 到 `POST /api/projects/{projectId}/requirements`。
 - 缓存：Hub 上传成功后默认保存一份 `source: hub-cache` 到 `docs/requirements`、`docs/ideas`、`docs/bugs` 或 `docs/suggestions`；`--no-doc` 跳过缓存。
 
-`--local`/`--save-local` 强制只保存本地，`--save` 作为旧别名保留；`--dry-run` 只生成 artifact，不提交也不保存。`prepare/import/run` 保留为 Agent/skill 内部协议，不建议最终用户直接使用。
+默认 seed 提交流程中 `--local`/`--save-local` 强制只保存本地 seed，`--save` 作为旧别名保留。高级 artifact 流程中 `--local`/`--save-local` 强制只保存本地 artifact，`--dry-run` 只生成 artifact，不提交也不保存。`--agent` 只在显式 `run` 路径生效。
+
+### Work CLI Skeleton
+
+`axis work` 是后续自动化开发循环的命令契约，目前只做安全探测，不启动 Agent，也不会常驻后台：
+
+```bash
+axis work once --repo /path/to/repo
+axis work once --repo /path/to/repo --json
+axis work loop --repo /path/to/repo --iterations 1 --json
+```
+
+代码和输出里固定建模两条 lane：
+
+- `refine`: 读取 `pending-confirmation` 的 pool seeds，未来由 refine 子 Agent 整理成可确认 requirement / work-item。
+- `execute`: 读取 confirmed / ready requirements 或 work-items，未来由 execute 子 Agent claim、实现、验证并写回状态。
+
+`--spawn` 目前只是显式保留契约，会返回 warning，不会启动子进程。后续接入 Hub lifecycle API 后，再把 spawn 做成 opt-in 的 refine/execute launcher。
 
 ### 绑定本地目录
 
