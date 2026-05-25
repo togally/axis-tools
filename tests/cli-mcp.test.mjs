@@ -408,6 +408,23 @@ async function writeProjectBinding(repo, backendUrl, extra = {}) {
   }, null, 2));
 }
 
+async function writeProductLineBinding(root, backendUrl, extra = {}) {
+  await mkdir(path.join(root, '.orbit'), { recursive: true });
+  await writeFile(path.join(root, '.orbit', 'product-line.json'), JSON.stringify({
+    backendUrl,
+    token: 'orbit-dev-token',
+    key: 'orbit-dev-key',
+    session: 'orbit-dev-session',
+    productLineId: 'pl_2',
+    productLineUuid: '8f938fdc-f2be-44d6-8c48-91bc9156836d',
+    productLineName: 'Hermes',
+    owner: 'orbit-user',
+    rootPath: root,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...extra,
+  }, null, 2));
+}
+
 async function withPoolServer(fn, options = {}) {
   const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0 };
   const server = http.createServer((req, res) => {
@@ -1371,6 +1388,83 @@ await withTempDir(async (dir) => {
     assert.equal(state.lastPoolSeed.sourceId, 'axis-ide');
     assert.equal(state.lastPoolSeed.repo, repo);
   });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const root = path.join(dir, 'pull-root');
+    const productRoot = path.join(root, 'hermes');
+    const project = path.join(productRoot, 'hermes-console');
+    await writeProductLineBinding(productRoot, backendUrl);
+    await writeProjectBinding(project, backendUrl);
+
+    const result = await runViaLinkedAxisPool('axis-bug', ['登录失败', '--repo', root, '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.ok, true);
+    assert.equal(created.mode, 'hub-seed');
+    assert.equal(created.repo, project);
+    assert.equal(created.id, 'seed-1');
+    assert.equal(created.kind, 'bug');
+    assert.match(created.warning, /resolved/i);
+    assert.equal(state.poolSeeds, 1);
+    assert.equal(state.lastPoolSeed.kind, 'bug');
+    assert.equal(state.lastPoolSeed.repo, project);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const root = path.join(dir, 'pull-root');
+    const first = path.join(root, 'hermes', 'hermes-console');
+    const second = path.join(root, 'apollo', 'apollo-console');
+    await writeProductLineBinding(path.join(root, 'hermes'), backendUrl, { productLineName: 'Hermes' });
+    await writeProductLineBinding(path.join(root, 'apollo'), backendUrl, { productLineName: 'Apollo' });
+    await writeProjectBinding(first, backendUrl, { productLineName: 'Hermes', projectName: 'Hermes Console' });
+    await writeProjectBinding(second, backendUrl, { productLineName: 'Apollo', projectName: 'Apollo Console', projectId: 'proj_2' });
+
+    const result = await runViaLinkedAxisPool('orbit-req', ['商品评价支持图片', '--repo', root, '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.ok, true);
+    assert.equal(created.mode, 'local-seed');
+    assert.equal(created.repo, root);
+    assert.equal(created.id, null);
+    assert.equal(state.poolSeeds, 0);
+    assert.match(created.savedPath, /pull-root\/\.axis\/pool-seeds\/\d{8}-req-/);
+    assert.match(created.warning, /Multiple AxisNode project bindings found/);
+    assert.match(created.warning, /Hermes Console/);
+    assert.match(created.warning, /Apollo Console/);
+    assert.match(created.warning, /--repo/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const root = path.join(dir, 'product-root');
+    await writeProductLineBinding(root, backendUrl);
+
+    const result = await runViaLinkedAxisPool('axis-req', ['商品评价支持图片', '--repo', root, '--json']);
+    const created = JSON.parse(result.stdout);
+    assert.equal(created.ok, true);
+    assert.equal(created.mode, 'local-seed');
+    assert.equal(created.repo, root);
+    assert.equal(state.poolSeeds, 0);
+    assert.match(created.warning, /product-line binding/);
+    assert.match(created.warning, /no project binding/);
+    assert.match(created.warning, /Run inside a project directory/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  const root = path.join(dir, 'empty-root');
+  await mkdir(root, { recursive: true });
+
+  const result = await runViaLinkedAxisPool('axis-sug', ['优化按钮文案', '--repo', root, '--json']);
+  const created = JSON.parse(result.stdout);
+  assert.equal(created.ok, true);
+  assert.equal(created.mode, 'local-seed');
+  assert.equal(created.repo, root);
+  assert.match(created.savedPath, /empty-root\/\.axis\/pool-seeds\/\d{8}-sug-/);
+  assert.match(created.warning, /No AxisNode project binding found/);
 });
 
 await withTempDir(async (dir) => {

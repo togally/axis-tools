@@ -16,6 +16,26 @@ class OrbitHttpError extends Error {
 }
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
+const POOL_SEED_DISCOVERY_MAX_DEPTH = 2;
+const POOL_SEED_DISCOVERY_MAX_DIRS = 80;
+const POOL_SEED_DISCOVERY_MAX_CHILDREN = 60;
+const POOL_SEED_DISCOVERY_MAX_CANDIDATES = 20;
+const POOL_SEED_DISCOVERY_EXCLUDED_DIRS = new Set([
+    '.axis',
+    '.cache',
+    '.git',
+    '.hg',
+    '.next',
+    '.orbit',
+    '.svn',
+    'build',
+    'cache',
+    'coverage',
+    'dist',
+    'node_modules',
+    'target',
+    'vendor',
+]);
 const POOLS = {
     'axis-ide': { command: 'axis-ide', pool: 'ide', kind: 'idea', displayName: '想法池', skill: 'oribit-idea', defaultDir: 'docs/ideas' },
     'axis-req': { command: 'axis-req', pool: 'req', kind: 'requirement', displayName: '需求池', skill: 'orbit-requirement', defaultDir: 'docs/requirements' },
@@ -232,9 +252,31 @@ async function writeGlobalOrbitConfig(values) {
     await writeFile(filePath, `${JSON.stringify(cleanGlobalOrbitConfig({ ...current, ...values, updatedAt: new Date().toISOString() }), null, 2)}\n`, 'utf8');
 }
 async function readProjectBinding(repoPath) {
+    return (await readProjectBindingWithPath(repoPath))?.binding ?? null;
+}
+async function readProjectBindingWithPath(repoPath) {
     for (const filePath of [axisProjectConfigPath(repoPath), legacyProjectConfigPath(repoPath)]) {
         try {
-            return JSON.parse(await readFile(filePath, 'utf8'));
+            return {
+                repoPath,
+                configPath: filePath,
+                binding: JSON.parse(await readFile(filePath, 'utf8')),
+            };
+        }
+        catch {
+            // Try the next supported binding path.
+        }
+    }
+    return null;
+}
+async function readProductLineBindingWithPath(rootPath) {
+    for (const filePath of [axisProductLineConfigPath(rootPath), legacyProductLineConfigPath(rootPath)]) {
+        try {
+            return {
+                rootPath,
+                configPath: filePath,
+                binding: JSON.parse(await readFile(filePath, 'utf8')),
+            };
         }
         catch {
             // Try the next supported binding path.
@@ -2210,6 +2252,160 @@ function buildPoolSeedPayload(pool, seed, repoPath) {
         repo: repoPath,
     };
 }
+function canPromptForPoolSeedTarget() {
+    return process.stdin.isTTY === true && !hasFlag('--json');
+}
+function shouldScanPoolSeedDir(entryName) {
+    if (POOL_SEED_DISCOVERY_EXCLUDED_DIRS.has(entryName))
+        return false;
+    if (entryName.startsWith('.') || entryName === '')
+        return false;
+    return true;
+}
+function bindingDisplayName(binding) {
+    const product = binding.productLineName ?? binding.productLineUuid ?? binding.productLineId ?? 'Unknown product line';
+    const project = binding.projectName ?? binding.projectUuid ?? binding.projectId ?? 'Unknown project';
+    return `${product} / ${project}`;
+}
+function productLineDisplayName(binding) {
+    return binding.productLineName ?? binding.productLineUuid ?? binding.productLineId ?? 'Unknown product line';
+}
+function describeDiscoveredProject(candidate) {
+    return `${bindingDisplayName(candidate.binding)} - ${candidate.repoPath}`;
+}
+function describeDiscoveredProductLine(candidate) {
+    return `${productLineDisplayName(candidate.binding)} - ${candidate.rootPath}`;
+}
+function discoveryList(items, describe, limit = 8) {
+    const shown = items.slice(0, limit).map(describe);
+    const hidden = items.length - shown.length;
+    return hidden > 0 ? `${shown.join('; ')}; and ${hidden} more` : shown.join('; ');
+}
+async function discoverPoolSeedBindings(rootPath) {
+    const projects = [];
+    const productLines = [];
+    const seenProjectConfigs = new Set();
+    const seenProductLineConfigs = new Set();
+    const queue = [{ dirPath: rootPath, depth: 0 }];
+    let scannedDirs = 0;
+    let capped = false;
+    while (queue.length > 0) {
+        if (scannedDirs >= POOL_SEED_DISCOVERY_MAX_DIRS) {
+            capped = true;
+            break;
+        }
+        const current = queue.shift();
+        if (!current)
+            break;
+        const { dirPath, depth } = current;
+        scannedDirs++;
+        const project = await readProjectBindingWithPath(dirPath);
+        if (project && !seenProjectConfigs.has(project.configPath)) {
+            seenProjectConfigs.add(project.configPath);
+            projects.push(project);
+            if (projects.length >= POOL_SEED_DISCOVERY_MAX_CANDIDATES) {
+                capped = true;
+                break;
+            }
+        }
+        const productLine = await readProductLineBindingWithPath(dirPath);
+        if (productLine && !seenProductLineConfigs.has(productLine.configPath)) {
+            seenProductLineConfigs.add(productLine.configPath);
+            productLines.push(productLine);
+        }
+        if (depth >= POOL_SEED_DISCOVERY_MAX_DEPTH)
+            continue;
+        let entries;
+        try {
+            entries = await readdir(dirPath, { withFileTypes: true });
+        }
+        catch {
+            continue;
+        }
+        const directories = entries
+            .filter((entry) => entry.isDirectory() && shouldScanPoolSeedDir(entry.name))
+            .sort((left, right) => left.name.localeCompare(right.name));
+        if (directories.length > POOL_SEED_DISCOVERY_MAX_CHILDREN) {
+            capped = true;
+        }
+        for (const entry of directories.slice(0, POOL_SEED_DISCOVERY_MAX_CHILDREN)) {
+            queue.push({ dirPath: path.join(dirPath, entry.name), depth: depth + 1 });
+        }
+    }
+    return { projects, productLines, scannedDirs, capped };
+}
+function multiplePoolSeedTargetsWarning(repoPath, discovery) {
+    const capText = discovery.capped ? ` Discovery was capped after scanning ${discovery.scannedDirs} directories.` : '';
+    return [
+        `Multiple AxisNode project bindings found under ${repoPath}; seed saved locally instead.`,
+        'Run inside a specific project or pass --repo <project-path>.',
+        `Candidates: ${discoveryList(discovery.projects, describeDiscoveredProject)}.`,
+        capText.trim(),
+    ].filter(Boolean).join(' ');
+}
+function cappedPoolSeedDiscoveryWarning(repoPath, discovery) {
+    const candidateText = discovery.projects.length > 0
+        ? ` Discovered candidates: ${discoveryList(discovery.projects, describeDiscoveredProject)}.`
+        : '';
+    return `AxisNode project binding discovery under ${repoPath} was capped after scanning ${discovery.scannedDirs} directories; seed saved locally instead. Run inside a specific project or pass --repo <project-path>.${candidateText}`;
+}
+function productLineOnlyPoolSeedWarning(repoPath, discovery) {
+    const productLines = discoveryList(discovery.productLines, describeDiscoveredProductLine);
+    const capText = discovery.capped ? ` Discovery was capped after scanning ${discovery.scannedDirs} directories.` : '';
+    return [
+        `AxisNode product-line binding found under ${repoPath}, but no project binding was discovered; seed saved locally instead.`,
+        `Product lines: ${productLines}.`,
+        'Run inside a project directory or pass --repo <project-path>.',
+        capText.trim(),
+    ].filter(Boolean).join(' ');
+}
+async function promptPoolSeedTarget(discovery) {
+    const prompt = await createPromptSession();
+    try {
+        if (discovery.capped) {
+            console.log(`AxisNode project discovery was capped after scanning ${discovery.scannedDirs} directories.`);
+        }
+        return await promptSelect(prompt, 'Select AxisNode project for this seed:', discovery.projects, describeDiscoveredProject);
+    }
+    finally {
+        prompt.close();
+    }
+}
+async function resolvePoolSeedTarget(repoPath) {
+    const direct = await readProjectBinding(repoPath);
+    if (direct)
+        return { repoPath, binding: direct, warning: null };
+    const discovery = await discoverPoolSeedBindings(repoPath);
+    if (discovery.projects.length === 1 && !discovery.capped) {
+        const candidate = discovery.projects[0];
+        return {
+            repoPath: candidate.repoPath,
+            binding: candidate.binding,
+            warning: `Resolved AxisNode project binding from ${repoPath} to ${candidate.repoPath}.`,
+        };
+    }
+    if (discovery.projects.length > 0) {
+        if (canPromptForPoolSeedTarget()) {
+            const candidate = await promptPoolSeedTarget(discovery);
+            return {
+                repoPath: candidate.repoPath,
+                binding: candidate.binding,
+                warning: `Resolved AxisNode project binding from ${repoPath} to ${candidate.repoPath}.`,
+            };
+        }
+        const warning = discovery.projects.length > 1
+            ? multiplePoolSeedTargetsWarning(repoPath, discovery)
+            : cappedPoolSeedDiscoveryWarning(repoPath, discovery);
+        return { repoPath, binding: null, warning };
+    }
+    if (discovery.productLines.length > 0) {
+        return { repoPath, binding: null, warning: productLineOnlyPoolSeedWarning(repoPath, discovery) };
+    }
+    if (discovery.capped) {
+        return { repoPath, binding: null, warning: cappedPoolSeedDiscoveryWarning(repoPath, discovery) };
+    }
+    return { repoPath, binding: null, warning: 'No AxisNode project binding found; seed saved locally instead.' };
+}
 function localPoolSeedDir(repoPath) {
     return path.join(repoPath, '.axis', 'pool-seeds');
 }
@@ -2237,25 +2433,26 @@ function extractStatus(payload) {
         ?? (isJson(payload.data) ? extractStatus(payload.data) : null);
 }
 async function submitPoolSeed(pool, repoPath, seed) {
-    const payload = buildPoolSeedPayload(pool, seed, repoPath);
-    const title = safeString(payload.title) ?? poolSeedTitle(pool, seed);
-    const summary = safeString(payload.summary) ?? seed.trim();
-    const status = safeString(payload.status) ?? 'pending-confirmation';
+    const initialPayload = buildPoolSeedPayload(pool, seed, repoPath);
+    const title = safeString(initialPayload.title) ?? poolSeedTitle(pool, seed);
+    const summary = safeString(initialPayload.summary) ?? seed.trim();
+    const status = safeString(initialPayload.status) ?? 'pending-confirmation';
     if (hasFlag('--dry-run')) {
         return { ok: true, mode: 'dry-run', repo: repoPath, pool: pool.pool, kind: pool.kind, title, seed: seed.trim(), summary, status, id: null, url: null, savedPath: null, warning: null };
     }
     if (shouldUseLocalOnly()) {
-        const savedPath = await savePoolSeed(pool, payload, repoPath);
+        const savedPath = await savePoolSeed(pool, initialPayload, repoPath);
         return { ok: true, mode: 'local-seed', repo: repoPath, pool: pool.pool, kind: pool.kind, title, seed: seed.trim(), summary, status, id: null, url: null, savedPath, warning: null };
     }
-    const binding = await readProjectBinding(repoPath);
-    if (binding) {
+    const target = await resolvePoolSeedTarget(repoPath);
+    const payload = buildPoolSeedPayload(pool, seed, target.repoPath);
+    if (target.binding) {
         try {
-            const response = await submitPoolSeedToHub(pool, binding, await tokenForBinding(binding), payload);
+            const response = await submitPoolSeedToHub(pool, target.binding, await tokenForBinding(target.binding), payload);
             return {
                 ok: true,
                 mode: 'hub-seed',
-                repo: repoPath,
+                repo: target.repoPath,
                 pool: pool.pool,
                 kind: pool.kind,
                 title,
@@ -2265,16 +2462,17 @@ async function submitPoolSeed(pool, repoPath, seed) {
                 id: extractId(response),
                 url: extractUrl(response),
                 savedPath: null,
-                warning: null,
+                warning: target.warning,
                 response,
             };
         }
         catch (error) {
-            const savedPath = await savePoolSeed(pool, payload, repoPath);
+            const savedPath = await savePoolSeed(pool, payload, target.repoPath);
+            const submitWarning = `AxisNode seed submit failed; seed saved locally instead. ${error instanceof Error ? error.message : String(error)}`;
             return {
                 ok: true,
                 mode: 'local-seed',
-                repo: repoPath,
+                repo: target.repoPath,
                 pool: pool.pool,
                 kind: pool.kind,
                 title,
@@ -2284,15 +2482,15 @@ async function submitPoolSeed(pool, repoPath, seed) {
                 id: null,
                 url: null,
                 savedPath,
-                warning: `AxisNode seed submit failed; seed saved locally instead. ${error instanceof Error ? error.message : String(error)}`,
+                warning: target.warning ? `${target.warning} ${submitWarning}` : submitWarning,
             };
         }
     }
-    const savedPath = await savePoolSeed(pool, payload, repoPath);
+    const savedPath = await savePoolSeed(pool, payload, target.repoPath);
     return {
         ok: true,
         mode: 'local-seed',
-        repo: repoPath,
+        repo: target.repoPath,
         pool: pool.pool,
         kind: pool.kind,
         title,
@@ -2302,7 +2500,7 @@ async function submitPoolSeed(pool, repoPath, seed) {
         id: null,
         url: null,
         savedPath,
-        warning: 'No AxisNode project binding found; seed saved locally instead.',
+        warning: target.warning,
     };
 }
 function printPoolSeed(result) {
