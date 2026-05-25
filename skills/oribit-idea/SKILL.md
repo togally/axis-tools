@@ -1,37 +1,37 @@
 ---
 name: oribit-idea
-description: Use when a user wants to incubate an idea through the Oribit Idea workflow, internally call gstack office-hours, turn the discussion into artifacts, and import or upload the result to the bound Orbit Hub project.
+description: Use when a user wants to incubate an idea through the Oribit Idea workflow, internally call gstack office-hours, turn the discussion into artifacts, and import or upload the result to the bound AxisNode project.
 ---
 
 # Oribit Idea
 
-Use this skill to incubate a simple idea seed through the Oribit Idea workflow and turn it into Orbit-ready artifacts. User-facing CLI calls such as `orbit-ide "AI宠物健康顾问"` fetch the cloud template/context, create the artifact, submit it to Hub, and keep a local cache automatically; `prepare` and `import` are the internal Agent protocol. This skill depends on gstack's `office-hours` capability/skill when a deeper office-hours discussion is needed.
+Use this skill to incubate a simple idea seed through the Oribit Idea workflow and turn it into AxisNode-ready artifacts. User-facing CLI calls such as `axis-ide "AI宠物健康顾问"` fetch the cloud template/context, create the artifact, submit it to Hub, and keep a local cache automatically; `prepare` and `import` are the internal Agent protocol. This skill depends on gstack's `office-hours` capability/skill when a deeper office-hours discussion is needed.
 
 For an Agent-produced idea-pool artifact, hand it back through:
 
 ```bash
-orbit-ide import --stdin
+axis-ide import --stdin
 ```
 
 `prepare` includes the cloud template, safe project context, and recent documents/WorkItems. Build the artifact from user seed + `template.markdownTemplate` + `projectContext`.
 
-`import` tries the bound Orbit pool through `/pool-documents` first and falls back locally when Hub upload is unavailable. Use `--local` only for local-only debug output, `--no-doc` to skip the local hub-cache after a successful upload, and `--save` as a deprecated alias for `--local`.
+`import` tries the bound AxisNode pool through `/pool-documents` first and falls back locally when Hub upload is unavailable. Use `--local` only for local-only debug output, `--no-doc` to skip the local hub-cache after a successful upload, and `--save` as a deprecated alias for `--local`.
 
 For user-facing idea-pool management, prefer:
 
 ```bash
-orbit-ide --list
-orbit-ide --delete
+axis-ide --list
+axis-ide --delete
 ```
 
 `--list` paginates interactively and offers delete/quit actions. `--delete` without an id lets the user choose an item, then requires typing `yes`; `--yes` is only for scripts/CI and `--json` machine mode.
 
 ## Required Binding
 
-1. Read `.orbit/project.json` from the target repo.
+1. Read `.axis/project.json (or legacy .orbit/project.json)` from the target repo.
 2. Confirm it includes `backendUrl`, `token`, `productLineUuid`, and `projectUuid`.
-3. Prefer `productLineUuid` and `projectUuid` for Orbit Hub association. Preserve legacy `productLineId` and `projectId` in metadata when present.
-4. If `token` is missing, ask the user to run `orbit-tools init --login` to refresh the session cache, then `orbit-tools bind` if the repo still lacks a project binding.
+3. Prefer `productLineUuid` and `projectUuid` for AxisNode association. Preserve legacy `productLineId` and `projectId` in metadata when present.
+4. If `token` is missing, ask the user to run `axis init --login` to refresh the session cache, then `axis bind` if the repo still lacks a project binding.
 
 ## Discussion Flow
 
@@ -42,7 +42,7 @@ orbit-ide --delete
    - `summary.md`: the idea, context, participants, date, and key decisions.
    - `requirements.md`: concrete requirements and acceptance criteria.
    - `risks.md`: open questions, assumptions, dependencies, and rollout risks.
-   - `orbit-import.json`: structured import payload for Orbit Hub.
+   - `orbit-import.json`: structured import payload for AxisNode.
 
 ## Import Payload
 
@@ -51,8 +51,8 @@ Build `orbit-import.json` with this shape:
 ```json
 {
   "kind": "office-hours",
-  "productLineUuid": "<productLineUuid from .orbit/project.json>",
-  "projectUuid": "<projectUuid from .orbit/project.json>",
+  "productLineUuid": "<productLineUuid from .axis/project.json (or legacy .orbit/project.json)>",
+  "projectUuid": "<projectUuid from .axis/project.json (or legacy .orbit/project.json)>",
   "source": {
     "tool": "gstack office-hours",
     "repo": "<repo path>",
@@ -74,9 +74,9 @@ Build `orbit-import.json` with this shape:
 
 Use item types `requirement`, `BUG`, and `improvement`. Put speculative follow-ups into `improvement` unless the user explicitly scopes them as current requirements.
 
-## Orbit Hub Import
+## AxisNode Import
 
-Use the bound backend and token from `.orbit/project.json`.
+Use the bound backend and token from `.axis/project.json (or legacy .orbit/project.json)`.
 
 1. First try the existing office-hours artifact import API:
 
@@ -107,4 +107,4 @@ When import/upload is unavailable, the work is still useful if these files exist
 - `risks.md` with unresolved questions and dependencies.
 - `orbit-import.json` with the structured payload ready for later upload.
 
-Do not mark Orbit work items complete from this skill. This skill only creates and imports office-hours artifacts.
+Do not mark AxisNode work items complete from this skill. This skill only creates and imports office-hours artifacts.

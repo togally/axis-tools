@@ -156,6 +156,19 @@ async function runViaLinkedAlias(args) {
   });
 }
 
+async function runViaLinkedAxisPool(alias, args) {
+  return withTempDir(async (dir) => {
+    const binPath = path.join(dir, alias);
+    await symlink(cli, binPath);
+    return execFileAsync(binPath, args, {
+      env: {
+        ...process.env,
+        NO_COLOR: '1',
+      },
+    });
+  });
+}
+
 async function createBareGitFixture(dir) {
   const source = path.join(dir, 'source-repo');
   const bare = path.join(dir, 'source-repo.git');
@@ -486,18 +499,18 @@ async function withPoolServer(fn, options = {}) {
   const shortHelp = await run(['-h']);
   const linkedHelp = await runViaLinkedBin(['--help']);
   const aliasHelp = await runViaLinkedAlias(['--help']);
-  assert.match(usage.stdout, /^orbit\n/);
-  assert.match(usage.stdout, /Alias: orbit-tools/);
+  assert.match(usage.stdout, /^axis\n/);
+  assert.match(usage.stdout, /Aliases: axis-tools, orbit, orbit-tools/);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.equal(linkedHelp.stdout, usage.stdout);
   assert.equal(aliasHelp.stdout, usage.stdout);
   assert.match(usage.stdout, /init = packaged skill setup only/);
-  assert.match(usage.stdout, /login = prompt for Orbit account and hidden password; cache session/);
-  assert.match(usage.stdout, /me = show current Orbit Hub user/);
+  assert.match(usage.stdout, /login = prompt for AxisNode account and hidden password; cache session/);
+  assert.match(usage.stdout, /me = show current AxisNode user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
-  assert.match(usage.stdout, /pull = clone\/pull maintained repos from Orbit Hub/);
+  assert.match(usage.stdout, /pull = clone\/pull maintained repos from AxisNode/);
   assert.doesNotMatch(usage.stdout, /\bregister\b/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
   await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);
@@ -691,7 +704,7 @@ await withTempDir(async (dir) => {
 
     assert.equal(state.loginCount, 1);
     assert.doesNotMatch(loginResult.stdout, new RegExp(TEST_PASSWORD));
-    assert.match(loginResult.stdout, /Orbit password: \n/);
+    assert.match(loginResult.stdout, /AxisNode password: \n/);
     const config = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(config.sessions[backendUrl].account, 'orbit-user');
     assert.equal(config.sessions[backendUrl].mcpUrl, undefined);
@@ -707,7 +720,7 @@ await withTempDir(async (dir) => {
     ], '3\n', { env: { HOME: home } });
     assert.equal(state.loginCount, 1);
     await assert.rejects(readFile(path.join(repoOne, '.orbit', 'project.json'), 'utf8'));
-    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'), /Orbit/);
+    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'), /AxisNode/);
 
     await runInteractive([
       'init',
@@ -740,11 +753,18 @@ await withTempDir(async (dir) => {
   assert.equal(installJson.ok, true);
   assert.equal(installJson.installed.length, 17);
 
-  for (const skill of ['orbit-bug', 'orbit-requirement', 'orbit-suggestion', 'orbit-workflow', 'oribit-idea']) {
+  const expectedSkillHeadings = new Map([
+    ['orbit-bug', /# AxisNode Bug/i],
+    ['orbit-requirement', /# AxisNode Requirement/i],
+    ['orbit-suggestion', /# AxisNode Suggestion/i],
+    ['orbit-workflow', /# AxisNode Workflow/i],
+    ['oribit-idea', /# Oribit Idea/i],
+  ]);
+  for (const [skill, heading] of expectedSkillHeadings) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
     const codexSkill = await readFile(path.join(home, '.codex', 'skills', skill, 'SKILL.md'), 'utf8');
     const claudeSkill = await readFile(path.join(home, '.claude', 'skills', skill, 'SKILL.md'), 'utf8');
-    assert.match(orbitSkill, new RegExp(`# ${skill.replace(/-/g, ' ')}`, 'i'));
+    assert.match(orbitSkill, heading);
     assert.equal(codexSkill, orbitSkill);
     assert.equal(claudeSkill, orbitSkill);
   }
@@ -790,7 +810,7 @@ await withTempDir(async (dir) => {
       backendUrl,
     ], '1\n', { env: { HOME: home } });
 
-    assert.doesNotMatch(result.stdout, /Orbit account/);
+    assert.doesNotMatch(result.stdout, /AxisNode account/);
     assert.doesNotMatch(result.stdout, /Select product line/);
     assert.doesNotMatch(result.stdout, /Select project/);
     assert.match(result.stdout, /Select agent/);
@@ -798,10 +818,10 @@ await withTempDir(async (dir) => {
     await assert.rejects(readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
     const skillPath = path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md');
     const agentSkillPath = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
-    assert.match(await readFile(skillPath, 'utf8'), /Orbit/);
-    assert.match(await readFile(agentSkillPath, 'utf8'), /Orbit/);
-    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /Orbit Requirement/);
-    assert.match(await readFile(path.join(home, '.codex', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /Orbit Requirement/);
+    assert.match(await readFile(skillPath, 'utf8'), /AxisNode/);
+    assert.match(await readFile(agentSkillPath, 'utf8'), /AxisNode/);
+    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /AxisNode Requirement/);
+    assert.match(await readFile(path.join(home, '.codex', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /AxisNode Requirement/);
 
     const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(globalConfig.selectedAgent, 'codex');
@@ -1022,7 +1042,7 @@ await withTempDir(async (dir) => {
         '--backend-url',
         backendUrl,
       ], '1\n', { env: { HOME: home } }),
-      /run orbit login --backend-url/,
+      /run axis login --backend-url/,
     );
 
     await assert.rejects(readFile(path.join(root, 'hermes', '.orbit', 'product-line.json'), 'utf8'));
@@ -1055,7 +1075,7 @@ await withTempDir(async (dir) => {
         '--backend-url',
         backendUrl,
       ], '1\n', { env: { HOME: home } }),
-      (error) => /run orbit login --backend-url/.test(error.stderr)
+      (error) => /run axis login --backend-url/.test(error.stderr)
         && /verify account has product\/project access/.test(error.stderr)
         && !/Create a product line first/.test(error.stderr),
     );
@@ -1199,6 +1219,46 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  await mkdir(path.join(repo, '.axis'), { recursive: true });
+  await mkdir(path.join(repo, '.orbit'), { recursive: true });
+  await writeFile(path.join(repo, '.axis', 'project.json'), JSON.stringify({
+    backendUrl: 'https://axis.example.com',
+    mcpUrl: 'https://axis.example.com/api/mcp',
+    token: 'axis-secret-token',
+    key: 'axis-secret-key',
+    session: 'axis-secret-session',
+    productLineUuid: 'axis-pl-uuid',
+    projectUuid: 'axis-proj-uuid',
+    productLineId: 'axis-pl-id',
+    projectId: 'axis-proj-id',
+    productLineName: 'AxisNode',
+    projectName: 'Axis Tools',
+    selectedAgent: 'codex',
+    repo,
+  }, null, 2));
+  await writeFile(path.join(repo, '.orbit', 'project.json'), JSON.stringify({
+    backendUrl: 'https://orbit.example.com',
+    productLineUuid: 'orbit-pl-uuid',
+    projectUuid: 'orbit-proj-uuid',
+    repo,
+  }, null, 2));
+
+  const result = await runViaLinkedAxisPool('axis-req', ['prepare', '--repo', repo, '--json']);
+  const prepare = JSON.parse(result.stdout);
+  assert.equal(prepare.schemaVersion, 'orbit.pool.prepare.v1');
+  assert.equal(prepare.pool, 'req');
+  assert.equal(prepare.bound, true);
+  assert.equal(prepare.binding.backendUrl, 'https://axis.example.com');
+  assert.equal(prepare.binding.productLineUuid, 'axis-pl-uuid');
+  assert.equal(prepare.binding.projectUuid, 'axis-proj-uuid');
+  assert.equal(prepare.binding.token, undefined);
+  assert.equal(prepare.binding.key, undefined);
+  assert.equal(prepare.binding.session, undefined);
+  assert.doesNotMatch(result.stdout, /axis-secret-/);
+});
+
+await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
@@ -1322,6 +1382,20 @@ await withTempDir(async (dir) => {
   assert.match(saved, /kind: bug/);
   assert.match(saved, /source: orbit-bug run/);
   assert.match(saved, /# 登录失败/);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'repo');
+  const result = await runViaLinkedAxisPool('axis-bug', ['登录失败', '--repo', repo, '--agent', 'none', '--local', '--json']);
+  const imported = JSON.parse(result.stdout);
+  assert.equal(imported.ok, true);
+  assert.equal(imported.mode, 'local');
+  assert.equal(imported.artifact.kind, 'bug');
+  assert.equal(imported.artifact.title, '登录失败');
+  assert.match(imported.savedPath, /docs\/bugs\/\d{8}-bug-axis-item\.md$/);
+  const saved = await readFile(imported.savedPath, 'utf8');
+  assert.match(saved, /source: axis-bug run/);
+  assert.match(saved, /command: axis-bug/);
 });
 
 await withTempDir(async (dir) => {

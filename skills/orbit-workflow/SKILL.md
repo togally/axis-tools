@@ -1,26 +1,26 @@
 ---
 name: orbit-workflow
-description: Use when routing OfficeHours discussions, requirements, bugs, and improvements through Orbit DB project pools via the configured Orbit MCP.
+description: Use when routing OfficeHours discussions, requirements, bugs, and improvements through AxisNode project pools via the configured AxisNode MCP.
 ---
 
-# Orbit Workflow
+# AxisNode Workflow
 
-Use this skill when the repo has an Orbit project binding in `.orbit/project.json` or when Hermes has the `orbit` MCP server configured.
+Use this skill when the repo has an AxisNode project binding in `.axis/project.json (or legacy .orbit/project.json)` or when Hermes has the `orbit` MCP server configured.
 
 ## Required Context
 
-1. Run `orbit-tools project show --json` from the target repo.
+1. Run `axis project show --json` from the target repo.
 2. Confirm the binding has `backendUrl`, `productLineUuid`, `projectUuid`, and `owner`. Treat `mcpUrl` as optional and preserve it when it already exists.
-3. If legacy `productLineId` or `projectId` fields are present, preserve them for compatibility but prefer UUID fields for new Orbit association.
-4. Use the configured Orbit MCP server for Orbit DB mutations. Do not edit Orbit DB files directly.
-5. If authentication is missing or expired, run `orbit-tools init --login` to refresh the cached session in `~/.orbit/config.json`.
+3. If legacy `productLineId` or `projectId` fields are present, preserve them for compatibility but prefer UUID fields for new AxisNode association.
+4. Use the configured AxisNode MCP server for AxisNode mutations. Do not edit AxisNode files directly.
+5. If authentication is missing or expired, run `axis init --login` to refresh the cached session in `~/.orbit/config.json`.
 
 ## OfficeHours Intake
 
 When an OfficeHours discussion produces actionable work:
 
-1. If the user wants a fresh idea discussion, use the `oribit-idea` skill first. It internally calls gstack's `office-hours` capability/skill, produces office-hours docs, and imports/uploads them to Orbit Hub using the project binding.
-2. Submit the discussion summary to Orbit DB under the bound `productLineUuid` and `projectUuid`.
+1. If the user wants a fresh idea discussion, use the `oribit-idea` skill first. It internally calls gstack's `office-hours` capability/skill, produces office-hours docs, and imports/uploads them to AxisNode using the project binding.
+2. Submit the discussion summary to AxisNode under the bound `productLineUuid` and `projectUuid`.
 3. Preserve the original discussion link, participants, owner, and date when available.
 4. Split the discussion into requirement items. Each item should have a title, description, source discussion, acceptance criteria, and type.
 5. Use these item types: `requirement`, `BUG`, `improvement`.
@@ -31,7 +31,7 @@ When an OfficeHours discussion produces actionable work:
 For implementation work:
 
 1. Pick from the requirement, BUG, or improvement pool for the bound project.
-2. Claim the item in Orbit DB before starting development by calling `orbit_work_item_lifecycle` with `action: "claim"`.
+2. Claim the item in AxisNode before starting development by calling `orbit_work_item_lifecycle` with `action: "claim"`.
 3. Mark the item as started by calling `orbit_work_item_lifecycle` with `action: "start"` and keep the branch or worktree path in the work note/writeback record when that API is available.
 4. Implement in the repo that owns the binding.
 5. Push the development branch when requested by the user or by the team workflow.
@@ -49,73 +49,73 @@ For implementation work:
 
 ## Local Commands
 
-Install Orbit MCP into Hermes:
+Install AxisNode MCP into Hermes:
 
 ```bash
-orbit-tools mcp install --backend-url http://117.72.14.134:18081 --mcp-url http://117.72.14.134:18081/api/mcp
+axis mcp install --backend-url http://117.72.14.134:18081 --mcp-url http://117.72.14.134:18081/api/mcp
 ```
 
-Initialize local Orbit CLI state and packaged skills:
+Initialize local AxisNode CLI state and packaged skills:
 
 ```bash
-orbit-tools init
+axis init
 ```
 
-The command logs in to the shared Orbit Hub backend by default, refreshes the session cache, and installs packaged Orbit skills for the selected agent. Login sessions are cached by `backendUrl` in `~/.orbit/config.json`; pass `--login` or `--force-login` to prompt for account/password again. For local development only, override the backend with `--backend-url http://127.0.0.1:18081` or `ORBIT_BACKEND_URL`.
+The command logs in to the shared AxisNode backend by default, refreshes the session cache, and installs packaged AxisNode skills for the selected agent. Login sessions are cached by `backendUrl` in `~/.orbit/config.json`; pass `--login` or `--force-login` to prompt for account/password again. For local development only, override the backend with `--backend-url http://127.0.0.1:18081` or `ORBIT_BACKEND_URL`.
 
 Bind the current repo to a product-line project:
 
 ```bash
-orbit-tools bind
+axis bind
 ```
 
-`bind` writes `.orbit/project.json` for a repo binding or `.orbit/product-line.json` plus child project bindings for a product-line root. Use `--repo <repo-path>` for a single repo or `--root <root-path>` for a product-line root. It uses the cached session from `orbit-tools init`; pass `--login` first if the session is missing or expired.
+`bind` writes `.axis/project.json (or legacy .orbit/project.json)` for a repo binding or `.axis/product-line.json (or legacy .orbit/product-line.json)` plus child project bindings for a product-line root. Use `--repo <repo-path>` for a single repo or `--root <root-path>` for a product-line root. It uses the cached session from `axis init`; pass `--login` first if the session is missing or expired.
 
-Create local folders from Orbit Hub and clone maintained repos:
+Create local folders from AxisNode and clone maintained repos:
 
 ```bash
-orbit-tools pull
+axis pull
 ```
 
-`pull` creates product-line and project folders from cloud state, writes the corresponding `.orbit/product-line.json` and `.orbit/project.json` files, and clones maintained repositories when repo URLs are available.
+`pull` creates product-line and project folders from cloud state, writes the corresponding `.axis/product-line.json (or legacy .orbit/product-line.json)` and `.axis/project.json (or legacy .orbit/project.json)` files, and clones maintained repositories when repo URLs are available.
 
 Clear cached login/session data:
 
 ```bash
-orbit-tools logout
-orbit-tools logout --backend-url http://117.72.14.134:18081
+axis logout
+axis logout --backend-url http://117.72.14.134:18081
 ```
 
-For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly to `orbit-tools bind` instead of using interactive selection.
+For automation, pass `--product-line-uuid <uuid> --project-uuid <uuid>` directly to `axis bind` instead of using interactive selection.
 
 Compatibility alias:
 
 ```bash
-orbit-tools init-product-line
+axis init-product-line
 ```
 
-`init-product-line` remains available for older scripts, but new workflows should use `orbit-tools bind --root <root-path>` for product-line binding.
+`init-product-line` remains available for older scripts, but new workflows should use `axis bind --root <root-path>` for product-line binding.
 
 Advanced/local development overrides:
 
 ```bash
-orbit-tools init --repo <repo-path> --backend-url http://127.0.0.1:18081
-orbit-tools bind --root <root-path> --backend-url http://127.0.0.1:18081 --owner <owner>
+axis init --repo <repo-path> --backend-url http://127.0.0.1:18081
+axis bind --root <root-path> --backend-url http://127.0.0.1:18081 --owner <owner>
 ```
 
 Show the active binding:
 
 ```bash
-orbit-tools project show --json
+axis project show --json
 ```
 
 ## MCP WorkItem Lifecycle
 
-`orbit-tools` does not implement lifecycle CLI commands. Use the configured Orbit MCP server tools:
+`axis-tools` does not implement lifecycle CLI commands. Use the configured AxisNode MCP server tools:
 
 - List pools: `orbit_work_items_list` with `{ "projectId": "<projectUuid>", "pool": "requirement" }`, `{ "projectId": "<projectUuid>", "pool": "bug" }`, or `{ "projectId": "<projectUuid>", "pool": "improvement" }`.
 - Claim / 认领: `orbit_work_item_lifecycle` with `{ "workItemId": "<workItemId>", "action": "claim", "owner": "<owner>" }`.
 - Develop / 开发: `orbit_work_item_lifecycle` with `{ "workItemId": "<workItemId>", "action": "start", "owner": "<owner>" }`.
 - Fix / 修复: use the same `claim` then `start` flow for a BUG-pool item and preserve repro/fix evidence in the writeback note when available.
 - Complete / 完成: `orbit_work_item_lifecycle` with `{ "workItemId": "<workItemId>", "action": "complete", "owner": "<owner>" }`.
-- Push/writeback / 回写: push the requested branch or commit, then record commit hash, verification command, and result through the Orbit Hub MCP/API writeback capability currently exposed by the server. If no separate writeback tool is listed by MCP discovery, include that evidence in the completion note or handoff message.
+- Push/writeback / 回写: push the requested branch or commit, then record commit hash, verification command, and result through the AxisNode MCP/API writeback capability currently exposed by the server. If no separate writeback tool is listed by MCP discovery, include that evidence in the completion note or handoff message.

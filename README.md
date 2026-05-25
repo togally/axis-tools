@@ -1,47 +1,47 @@
 # orbit-tools
 
-Orbit 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 Orbit MCP / 项目绑定配置。
+AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisNode MCP / 项目绑定配置。
 
-公共 CLI 主命令是 `orbit`。`orbit-tools` 仍作为兼容别名保留；仓库名和 npm package 名仍是 `orbit-tools`。
+公共 CLI 主命令是 `axis`。`axis-tools` 是同入口别名，`orbit` 和 `orbit-tools` 仍作为兼容别名保留；仓库名和 npm package 名仍是 `orbit-tools`。
 
 ## 当前能力
 
-- `orbit codex-hook ingest`
+- `axis codex-hook ingest`
   - 从 Codex 官方 hook stdin JSON 读取事件
   - 写入 `<repo>/.codex-status/latest.json`
   - 追加 `<repo>/.codex-status/events.jsonl`
-- `orbit codex-status current`
+- `axis codex-status current`
   - 查看当前状态
-- `orbit codex-status tail`
+- `axis codex-status tail`
   - 查看最近事件流
-- `orbit codex-status summary`
+- `axis codex-status summary`
   - 输出简版摘要
-- `orbit mcp install`
-  - 把 Orbit HTTP MCP 写入 Hermes 配置
+- `axis mcp install`
+  - 把 AxisNode HTTP MCP 写入 Hermes 配置
   - 同步保存 `~/.orbit/config.json`
-- `orbit login`
-  - 提示账号和隐藏密码，登录共享 Orbit Hub backend，缓存 bearer token/session
-- `orbit me`
+- `axis login`
+  - 提示账号和隐藏密码，登录共享 AxisNode backend，缓存 bearer token/session
+- `axis me`
   - 调用 `/api/me` 查看当前账号、显示名、角色和权限
-- `orbit init`
+- `axis init`
   - 选择 Agent，并安装 packaged skills
-  - 不选择产品线/项目，也不写 `.orbit/project.json`
-- `orbit bind`
+  - 不选择产品线/项目，也不写 `.axis/project.json (or legacy .orbit/project.json)`
+- `axis bind`
   - 绑定单个项目 repo，或绑定一个产品线根目录及其直接子目录
-  - 写入 `.orbit/project.json` / `.orbit/product-line.json`
-- `orbit pull`
-  - 从 Orbit Hub 拉取产品线/项目结构，只为可 clone 的维护仓库创建本地目录
+  - 写入 `.axis/project.json (or legacy .orbit/project.json)` / `.axis/product-line.json (or legacy .orbit/product-line.json)`
+- `axis pull`
+  - 从 AxisNode 拉取产品线/项目结构，只为可 clone 的维护仓库创建本地目录
   - 项目维护了 clone URL 时会 clone；已有 git repo 时会安全 fetch/pull
-- `orbit init-product-line`
-  - 兼容旧入口；新文档推荐使用 `orbit bind`
-- `orbit install`
+- `axis init-product-line`
+  - 兼容旧入口；新文档推荐使用 `axis bind`
+- `axis install`
   - 安装本包 `skills/*/SKILL.md` 到 `~/.orbit/skills`，并按 `--agent` 同步到 Codex / Claude Code skill 目录
-- `orbit logout`
+- `axis logout`
   - 清理 `~/.orbit/config.json` 中缓存的登录 token/session
-- `orbit project bind`
+- `axis project bind`
   - 高级非交互式绑定命令，保留给自动化脚本使用
-- `orbit project show`
-  - 查看当前 repo 的 Orbit 绑定
+- `axis project show`
+  - 查看当前 repo 的 AxisNode 绑定
 
 ## 仓库结构
 
@@ -122,20 +122,20 @@ npm link
 安装后可直接用：
 
 ```bash
-orbit codex-status current --repo /home/jasperWei/orbit/orbit-hub
+axis codex-status current --repo /home/jasperWei/orbit/orbit-hub
 ```
 
-## Orbit 登录、初始化、绑定与 Pull
+## AxisNode 登录、初始化、绑定与 Pull
 
 推荐新流程：
 
 ```bash
-orbit login
-orbit init
-orbit bind
+axis login
+axis init
+axis bind
 ```
 
-账号创建只在 Orbit Hub Web UI 完成；CLI 不提供注册命令。
+账号创建只在 AxisNode Web UI 完成；CLI 不提供注册命令。
 
 `login` 会提示 account 和隐藏输入的 password，调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
 
@@ -143,28 +143,28 @@ orbit bind
 
 当前 packaged skills：
 
-- `orbit-workflow`: 通过 Orbit MCP 处理 discussion、requirement、bug、improvement 池和 WorkItem 生命周期。
+- `orbit-workflow`: 通过 AxisNode MCP 处理 discussion、requirement、bug、improvement 池和 WorkItem 生命周期。
 - `orbit-requirement`: 把用户 seed 结合云端模板和项目上下文整理成 requirement 文档，并生成可入池 WorkItems。
-- `oribit-idea`: 保留现有拼写，把早期想法结合云端模板整理成 Orbit-ready artifact。
+- `oribit-idea`: 保留现有拼写，把早期想法结合云端模板整理成 AxisNode-ready artifact。
 
-`init` 不会询问产品线/项目，也不会写当前 repo 的 `.orbit/project.json`。项目或产品线绑定由 `bind` 完成。
+`init` 不会询问产品线/项目，也不会写当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`。项目或产品线绑定由 `bind` 完成。
 
 ### Pool CLI
 
-四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定，优先从 Orbit Hub 拉取对应池子的云端模板和项目上下文，交给 Agent 生成 `orbit.pool.artifact.v1`，再把标准文档上传到云端文档库并创建 WorkItems。云端文档是主资产，本地 Markdown 是缓存或兜底。
+四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定，优先从 AxisNode 拉取对应池子的云端模板和项目上下文，交给 Agent 生成 `orbit.pool.artifact.v1`，再把标准文档上传到云端文档库并创建 WorkItems。云端文档是主资产，本地 Markdown 是缓存或兜底。
 
 ```bash
-orbit-req "商品评价支持图片"
-orbit-bug "登录失败"
-orbit-sug "优化按钮文案"
-orbit-ide "AI宠物健康顾问"
+axis-req "商品评价支持图片"
+axis-bug "登录失败"
+axis-sug "优化按钮文案"
+axis-ide "AI宠物健康顾问"
 ```
 
 通用查询/删除形态：
 
 ```bash
-orbit-req --list
-orbit-bug --delete
+axis-req --list
+axis-bug --delete
 ```
 
 普通用户直接运行 `--list` 会进入交互分页，默认每页 10 条，可输入 `n`/`p` 翻页、`d` 删除某条、`q` 退出。直接运行 `--delete` 会先列出当前池子条目供选择；`--delete <id>` 会展示目标并要求输入 `yes` 才会删除，默认不删除。`--yes` 只用于脚本/CI 的非交互删除确认。
@@ -172,11 +172,11 @@ orbit-bug --delete
 机器模式保留 `--json`：
 
 ```bash
-orbit-req --list --page 1 --page-size 20 --json
-orbit-bug --delete bug-1 --yes --json
+axis-req --list --page 1 --page-size 20 --json
+axis-bug --delete bug-1 --yes --json
 ```
 
-默认 create/import/run 会先尝试 Orbit Hub：
+默认 create/import/run 会先尝试 AxisNode：
 
 - 模板：`GET /api/projects/{projectId}/pool-templates?kind=requirement|idea|bug|suggestion`，失败时使用 CLI 内置中文 fallback 模板。
 - 上传：优先 `POST /api/projects/{projectId}/pool-documents`；老 Hub 对 requirement 返回 404 时 fallback 到 `POST /api/projects/{projectId}/requirements`。
@@ -187,24 +187,24 @@ orbit-bug --delete bug-1 --yes --json
 ### 绑定本地目录
 
 ```bash
-orbit bind
+axis bind
 ```
 
-`bind` 需要已经登录；如果本地没有 session，或 cached token 被 Orbit Hub 返回 401/403 拒绝，CLI 会提示重新执行 `orbit login` 或联系 owner/admin 授权。
+`bind` 需要已经登录；如果本地没有 session，或 cached token 被 AxisNode 返回 401/403 拒绝，CLI 会提示重新执行 `axis login` 或联系 owner/admin 授权。
 
 `bind` 会先确认绑定目标：
 
-- 单个项目 repo：选择产品线，再选择项目，写入当前 repo 的 `.orbit/project.json`
-- 产品线根目录：选择产品线，写入根目录 `.orbit/product-line.json`，扫描直接子目录并逐个绑定或跳过
+- 单个项目 repo：选择产品线，再选择项目，写入当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`
+- 产品线根目录：选择产品线，写入根目录 `.axis/product-line.json (or legacy .orbit/product-line.json)`，扫描直接子目录并逐个绑定或跳过
 
 绑定 JSON 会写入 `backendUrl`、登录/session 信息、产品线/项目 id/name、`repo`、`owner` 和更新时间。`mcpUrl` 默认不再写入；只有显式传 `--mcp-url`，或已有绑定里本来有 `mcpUrl` 时才会保留。
 
-旧的 `orbit init-product-line` 仍作为兼容入口保留，行为等同于产品线根目录绑定；新使用方式请优先用 `orbit bind`。
+旧的 `axis init-product-line` 仍作为兼容入口保留，行为等同于产品线根目录绑定；新使用方式请优先用 `axis bind`。
 
 ### Pull 云端结构
 
 ```bash
-orbit pull
+axis pull
 ```
 
 `pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。只有项目维护了 clone URL 时才会创建本地项目目录：`repositoryAddress`、`repositoryUrl`、`gitUrl`、`remoteUrl`、`githubRepo` 或 `sourceRepo`。仅有旧机器上的绝对 `repoPath` 不会被当成可 clone 地址。
@@ -212,16 +212,16 @@ orbit pull
 - 目标目录不存在或为空：执行 `git clone`
 - 目标目录已经是 git repo：执行 `git fetch --all --prune` 和 `git pull --ff-only`
 - 目标目录非空且不是 git repo：不覆盖，不写入绑定配置，并在 summary 中标记跳过 clone
-- 项目没有 clone URL：标记为 `skipped-no-repo`，不创建项目目录或 `.orbit/project.json`
+- 项目没有 clone URL：标记为 `skipped-no-repo`，不创建项目目录或 `.axis/project.json (or legacy .orbit/project.json)`
 
-`pull` 只会在该产品线至少有一个项目成功 clone/pull 后写产品线目录的 `.orbit/product-line.json`，并只为成功 clone/pull 的项目写 `.orbit/project.json`。owner 默认使用当前登录账号；`mcpUrl` 同样只在显式传入时写入。
+`pull` 只会在该产品线至少有一个项目成功 clone/pull 后写产品线目录的 `.axis/product-line.json (or legacy .orbit/product-line.json)`，并只为成功 clone/pull 的项目写 `.axis/project.json (or legacy .orbit/project.json)`。owner 默认使用当前登录账号；`mcpUrl` 同样只在显式传入时写入。
 
-### Orbit MCP
+### AxisNode MCP
 
-安装 Orbit HTTP MCP 到 Hermes：
+安装 AxisNode HTTP MCP 到 Hermes：
 
 ```bash
-orbit mcp install \
+axis mcp install \
   --backend-url http://117.72.14.134:18081 \
   --mcp-url http://117.72.14.134:18081/api/mcp
 ```
@@ -235,40 +235,40 @@ MCP install 是独立步骤，仍允许使用显式 `--mcp-url`，未传时会�
 也可以单独安装技能：
 
 ```bash
-orbit install --agent all
-orbit install --agent codex
-orbit install --agent claude-code
-orbit install --agent cc
+axis install --agent all
+axis install --agent codex
+axis install --agent claude-code
+axis install --agent cc
 ```
 
-`orbit install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。这个不覆盖规则同样适用于 `gstack-office-hours` 依赖技能。
+`axis install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。这个不覆盖规则同样适用于 `gstack-office-hours` 依赖技能。
 
 清理缓存登录：
 
 ```bash
-orbit me
-orbit logout
-orbit logout --backend-url http://117.72.14.134:18081
+axis me
+axis logout
+axis logout --backend-url http://117.72.14.134:18081
 ```
 
 可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
 
 ```bash
-orbit project bind \
+axis project bind \
   --repo /path/to/repo \
   --product-line-uuid <product-line-uuid> \
   --project-uuid <project-uuid> \
   --owner <owner>
 ```
 
-绑定会写入 `/path/to/repo/.orbit/project.json`。字段包括 `backendUrl`、登录/session 信息、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、可选 repo 地址、可选 skill 路径和 `updatedAt`。`mcpUrl` 只有显式传入或已有绑定中存在时才会写入。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
+绑定会写入 `/path/to/repo/.axis/project.json (or legacy .orbit/project.json)`。字段包括 `backendUrl`、登录/session 信息、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、可选 repo 地址、可选 skill 路径和 `updatedAt`。`mcpUrl` 只有显式传入或已有绑定中存在时才会写入。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
 
-产品线和项目元数据只写入当前目录的 `.orbit/product-line.json` / `.orbit/project.json`；`~/.orbit/config.json` 只保存登录、后端地址、MCP 和默认 agent/skill 等全局 CLI 配置。
+产品线和项目元数据只写入当前目录的 `.axis/product-line.json (or legacy .orbit/product-line.json)` / `.axis/project.json (or legacy .orbit/project.json)`；`~/.orbit/config.json` 只保存登录、后端地址、MCP 和默认 agent/skill 等全局 CLI 配置。
 
 高级 UUID 示例：
 
 ```bash
-orbit project bind \
+axis project bind \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://117.72.14.134:18081 \
   --product-line-uuid 8f938fdc-f2be-44d6-8c48-91bc9156836d \
@@ -279,15 +279,15 @@ orbit project bind \
 本地开发示例：
 
 ```bash
-orbit login \
+axis login \
   --backend-url http://127.0.0.1:18081
 
-orbit init \
+axis init \
   --repo /home/jasperWei/orbit/orbit-tools \
   --backend-url http://127.0.0.1:18081
 
 cd /home/team/orbit/product-line-root
-orbit bind \
+axis bind \
   --root /home/team/orbit/product-line-root \
   --backend-url http://127.0.0.1:18081 \
   --owner jasper
@@ -296,13 +296,13 @@ orbit bind \
 查看绑定：
 
 ```bash
-orbit project show --repo /path/to/repo
-orbit project show --repo /path/to/repo --json
+axis project show --repo /path/to/repo
+axis project show --repo /path/to/repo --json
 ```
 
 ## WorkItem 生命周期
 
-`orbit` CLI 目前只负责本地 CLI、Hermes MCP 配置和 repo 绑定；没有实现 `claim/start/complete` 这类生命周期 CLI 子命令。模型或 CLI 侧应通过已配置的 Orbit MCP server 调用 Orbit Hub 工具，或直接调用 Orbit Hub backend API。
+`axis` CLI 目前只负责本地 CLI、Hermes MCP 配置和 repo 绑定；没有实现 `claim/start/complete` 这类生命周期 CLI 子命令。模型或 CLI 侧应通过已配置的 AxisNode MCP server 调用 AxisNode 工具，或直接调用 AxisNode backend API。
 
 MCP 工具：
 
@@ -316,7 +316,7 @@ MCP 工具：
 3. 开发：开始需求/改进开发时调用 `orbit_work_item_lifecycle`，`action: "start"`。
 4. 修复：BUG 池同样先 `claim` 再 `start`，并在说明里保留复现与修复证据。
 5. 完成：验证通过后调用 `orbit_work_item_lifecycle`，`action: "complete"`。
-6. 回写：在完成备注或关联记录里写回 branch/commit、验证命令和结果；当前 `orbit_work_item_lifecycle` 工具负责状态流转，详细 notes/writeback 能力以 Orbit Hub 当前 MCP/API 暴露为准。
+6. 回写：在完成备注或关联记录里写回 branch/commit、验证命令和结果；当前 `orbit_work_item_lifecycle` 工具负责状态流转，详细 notes/writeback 能力以 AxisNode 当前 MCP/API 暴露为准。
 
 对应 backend API：
 
@@ -345,7 +345,7 @@ npm run test:sample
 ```
 
 预期：
-- `test:mcp` 会在临时目录验证 Hermes JSON/YAML 配置写入和 `.orbit/project.json` 绑定
+- `test:mcp` 会在临时目录验证 Hermes JSON/YAML 配置写入和 `.axis/project.json (or legacy .orbit/project.json)` 绑定
 - `/home/jasperWei/orbit/orbit-hub/.codex-status/latest.json` 被写入
 - `/home/jasperWei/orbit/orbit-hub/.codex-status/events.jsonl` 被追加
 - current / tail / summary 都能读取 `--repo /home/jasperWei/orbit/orbit-hub`
@@ -409,4 +409,4 @@ node /home/jasperWei/orbit/orbit-tools/dist/cli.js codex-hook ingest
 - 加 `watch` 命令持续刷状态
 - 加 `--repo auto` 智能回落
 - 加 Claude Code adapter
-- 让 Orbit Hub 直接读取 `.codex-status/latest.json`
+- 让 AxisNode 直接读取 `.codex-status/latest.json`

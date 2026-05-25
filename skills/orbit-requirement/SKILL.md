@@ -1,17 +1,17 @@
 ---
-name: orbit-requirement
-description: Use when converting a product/project idea or user request into a structured Orbit requirement/spec document and linked requirement WorkItems.
+name: axis-requirement
+description: Use when converting a product/project idea or user request into a structured AxisNode requirement/spec document and linked requirement WorkItems.
 ---
 
-# Orbit Requirement
+# AxisNode Requirement
 
-Use this skill to turn a simple user seed into an Orbit Hub project requirement document and optional requirement-pool WorkItems. User-facing CLI calls such as `orbit-req "商品评价支持图片"` fetch the cloud template/context, create the artifact, submit it to Hub, and keep a local cache automatically; `prepare` and `import` are the internal Agent protocol.
+Use this skill to turn a simple user seed into an AxisNode project requirement document and optional requirement-pool WorkItems. User-facing CLI calls such as `axis-req "商品评价支持图片"` fetch the cloud template/context, create the artifact, submit it to Hub, and keep a local cache automatically; `prepare` and `import` are the internal Agent protocol.
 
 ## Trigger Conditions
 
 - The user asks for a requirement, PRD, spec, feature brief, acceptance criteria, or scoped WorkItems.
 - A discussion has enough product intent to preserve as a project document.
-- The repo has `.orbit/project.json`, or the user wants a requirement saved for later Orbit import.
+- The repo has `.axis/project.json (or legacy .orbit/project.json)`, or the user wants a requirement saved for later AxisNode import.
 
 ## Discovery Rules
 
@@ -66,12 +66,12 @@ When deriving WorkItems, use this shape:
 
 Keep WorkItems small enough to implement independently. Do not mark them claimed, started, or done.
 
-## Orbit Import Flow
+## AxisNode Import Flow
 
 When this skill is running inside an Agent, prefer handing the artifact to the CLI:
 
 ```bash
-orbit-req import --stdin
+axis-req import --stdin
 ```
 
 `prepare` includes the cloud template, safe project context, and recent documents/WorkItems. Build the artifact from user seed + `template.markdownTemplate` + `projectContext`.
@@ -81,15 +81,15 @@ orbit-req import --stdin
 For user-facing pool management, prefer the interactive commands:
 
 ```bash
-orbit-req --list
-orbit-req --delete
+axis-req --list
+axis-req --delete
 ```
 
 `--list` paginates interactively and offers delete/quit actions. `--delete` without an id lets the user choose an item, then requires typing `yes`; `--yes` is only for scripts/CI and `--json` machine mode.
 
-1. Read `.orbit/project.json` from the target repo when available.
+1. Read `.axis/project.json (or legacy .orbit/project.json)` from the target repo when available.
 2. Use `projectUuid`/`projectId` and `productLineUuid`/`productLineId` from that binding. Prefer UUID fields.
-3. Use `backendUrl` from `.orbit/project.json`; if missing, check `~/.orbit/config.json`.
+3. Use `backendUrl` from `.axis/project.json (or legacy .orbit/project.json)`; if missing, check `~/.orbit/config.json`.
 4. Read the cached login token from `~/.orbit/config.json` for that `backendUrl` when possible. Prefer `sessions[backendUrl].token`, then top-level `token`.
 5. Build an import payload:
 
@@ -103,16 +103,16 @@ orbit-req --delete
 }
 ```
 
-6. POST to the Orbit Hub requirement endpoint if available:
+6. POST to the AxisNode requirement endpoint if available:
 
 ```bash
 curl -sS -X POST "$backendUrl/api/projects/$projectUuid/requirements" \
   -H "authorization: Bearer $token" \
   -H "content-type: application/json" \
-  --data-binary @orbit-requirement-import.json
+  --data-binary @axis-requirement-import.json
 ```
 
-If that route returns 404 or is unavailable, try the current documented requirement import route if Orbit Hub exposes one. Preserve the failed status and route in the handoff.
+If that route returns 404 or is unavailable, try the current documented requirement import route if AxisNode exposes one. Preserve the failed status and route in the handoff.
 
 ## Fallback Save
 
@@ -122,7 +122,7 @@ If API import is unavailable, save the Markdown under:
 docs/requirements/<slug>.md
 ```
 
-Also save `docs/requirements/<slug>.orbit-import.json` when WorkItems were derived. Tell the user the exact file paths, backend URL, project UUID/id, and that manual Orbit Hub import is needed.
+Also save `docs/requirements/<slug>.orbit-import.json` when WorkItems were derived. Tell the user the exact file paths, backend URL, project UUID/id, and that manual AxisNode import is needed.
 
 ## Guardrails
 

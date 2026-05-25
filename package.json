@@ -4,6 +4,12 @@
   "private": true,
   "type": "module",
   "bin": {
+    "axis": "./dist/cli.js",
+    "axis-tools": "./dist/cli.js",
+    "axis-ide": "./dist/cli.js",
+    "axis-req": "./dist/cli.js",
+    "axis-bug": "./dist/cli.js",
+    "axis-sug": "./dist/cli.js",
     "orbit": "./dist/cli.js",
     "orbit-tools": "./dist/cli.js",
     "orbit-ide": "./dist/cli.js",

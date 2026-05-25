@@ -17,6 +17,10 @@ class OrbitHttpError extends Error {
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
 const POOLS = {
+    'axis-ide': { command: 'axis-ide', pool: 'ide', kind: 'idea', displayName: '想法池', skill: 'oribit-idea', defaultDir: 'docs/ideas' },
+    'axis-req': { command: 'axis-req', pool: 'req', kind: 'requirement', displayName: '需求池', skill: 'orbit-requirement', defaultDir: 'docs/requirements' },
+    'axis-bug': { command: 'axis-bug', pool: 'bug', kind: 'bug', displayName: 'Bug池', skill: 'orbit-bug', defaultDir: 'docs/bugs' },
+    'axis-sug': { command: 'axis-sug', pool: 'sug', kind: 'suggestion', displayName: '优化池', skill: 'orbit-suggestion', defaultDir: 'docs/suggestions' },
     'orbit-ide': { command: 'orbit-ide', pool: 'ide', kind: 'idea', displayName: '想法池', skill: 'oribit-idea', defaultDir: 'docs/ideas' },
     'orbit-req': { command: 'orbit-req', pool: 'req', kind: 'requirement', displayName: '需求池', skill: 'orbit-requirement', defaultDir: 'docs/requirements' },
     'orbit-bug': { command: 'orbit-bug', pool: 'bug', kind: 'bug', displayName: 'Bug池', skill: 'orbit-bug', defaultDir: 'docs/bugs' },
@@ -51,8 +55,8 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`orbit\n\nAlias: orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  orbit-req <text> [--repo <path>] [--agent <codex|claude-code|current|none>] [--json]\n  orbit-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  orbit-req --delete <id> [--repo <path>] [--yes] [--json]\n  orbit-ide|orbit-bug|orbit-sug use the same create/list/delete flags\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for Orbit account and hidden password; cache session\n  me = show current Orbit Hub user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to Orbit Hub\n  pull = clone/pull maintained repos from Orbit Hub\n\nPool examples:\n  orbit-req "商品评价支持图片"\n  orbit-bug "登录失败" --agent none --local\n  orbit-sug "优化按钮文案" --dry-run --json\n  orbit-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local save instead of Hub submit\n  --save = deprecated alias for --local\n  --no-doc = skip local hub-cache after successful Hub submit\n  --dry-run = generate artifact only; do not submit or save\n  --from <file> / --stdin = read input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  orbit-ide prepare|import|run\n  orbit-req prepare|import|run\n  orbit-bug prepare|import|run\n  orbit-sug prepare|import|run\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
-    console.log(`Pool interactive defaults:\n  orbit-req --list = interactive pagination, default 10 items/page\n  orbit-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--agent <codex|claude-code|current|none>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same create/list/delete flags\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败" --agent none --local\n  axis-sug "优化按钮文案" --dry-run --json\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local save instead of Hub submit\n  --save = deprecated alias for --local\n  --no-doc = skip local hub-cache after successful Hub submit\n  --dry-run = generate artifact only; do not submit or save\n  --from <file> / --stdin = read input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run\n  axis-req prepare|import|run\n  axis-bug prepare|import|run\n  axis-sug prepare|import|run\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
@@ -93,10 +97,27 @@ function resolveProductLineRootArg() {
 function orbitDir(repoPath) {
     return path.join(repoPath, '.orbit');
 }
+function axisDir(repoPath) {
+    return path.join(repoPath, '.axis');
+}
 function projectConfigPath(repoPath) {
-    return path.join(orbitDir(repoPath), 'project.json');
+    const axisPath = axisProjectConfigPath(repoPath);
+    return existsSync(axisPath) ? axisPath : legacyProjectConfigPath(repoPath);
 }
 function productLineConfigPath(rootPath) {
+    const axisPath = axisProductLineConfigPath(rootPath);
+    return existsSync(axisPath) ? axisPath : legacyProductLineConfigPath(rootPath);
+}
+function axisProjectConfigPath(repoPath) {
+    return path.join(axisDir(repoPath), 'project.json');
+}
+function legacyProjectConfigPath(repoPath) {
+    return path.join(orbitDir(repoPath), 'project.json');
+}
+function axisProductLineConfigPath(rootPath) {
+    return path.join(axisDir(rootPath), 'product-line.json');
+}
+function legacyProductLineConfigPath(rootPath) {
     return path.join(orbitDir(rootPath), 'product-line.json');
 }
 function cliPackageRoot() {
@@ -211,12 +232,15 @@ async function writeGlobalOrbitConfig(values) {
     await writeFile(filePath, `${JSON.stringify(cleanGlobalOrbitConfig({ ...current, ...values, updatedAt: new Date().toISOString() }), null, 2)}\n`, 'utf8');
 }
 async function readProjectBinding(repoPath) {
-    try {
-        return JSON.parse(await readFile(projectConfigPath(repoPath), 'utf8'));
+    for (const filePath of [axisProjectConfigPath(repoPath), legacyProjectConfigPath(repoPath)]) {
+        try {
+            return JSON.parse(await readFile(filePath, 'utf8'));
+        }
+        catch {
+            // Try the next supported binding path.
+        }
     }
-    catch {
-        return null;
-    }
+    return null;
 }
 function inferPhase(eventName, toolName) {
     if (eventName === 'SessionStart')
@@ -653,10 +677,10 @@ function globalSessions(config) {
 class OrbitCliError extends Error {
 }
 function loginRequiredMessage(backendUrl) {
-    return `请先登录 / Please login: run orbit login --backend-url ${normalizeBackendUrl(backendUrl)}; verify account has product/project access.`;
+    return `请先登录 / Please login: run axis login --backend-url ${normalizeBackendUrl(backendUrl)}; verify account has product/project access.`;
 }
 function insufficientPermissionMessage(backendUrl) {
-    return `权限不足 / Insufficient permission: run orbit login --backend-url ${normalizeBackendUrl(backendUrl)} with the correct account; verify account has product/project access.`;
+    return `权限不足 / Insufficient permission: run axis login --backend-url ${normalizeBackendUrl(backendUrl)} with the correct account; verify account has product/project access.`;
 }
 async function cachedLoginSession(backendUrl) {
     const config = await readGlobalOrbitConfig();
@@ -711,13 +735,13 @@ async function loginCommand() {
     const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
     const prompt = await createPromptSession();
     try {
-        const account = (await prompt.question('Orbit account: ')).trim();
-        const password = (await prompt.question('Orbit password: ', { hidden: true })).trim();
+        const account = (await prompt.question('AxisNode account: ')).trim();
+        const password = (await prompt.question('AxisNode password: ', { hidden: true })).trim();
         if (!account || !password)
-            throw new Error('Orbit account and password are required');
+            throw new Error('AxisNode account and password are required');
         const login = await loginOrbitHub(backendUrl, account, password);
         await saveLoginSession(backendUrl, mcpUrl, account, login);
-        console.log(`Logged in to Orbit Hub as ${login.user.account ?? account}.`);
+        console.log(`Logged in to AxisNode as ${login.user.account ?? account}.`);
     }
     finally {
         prompt.close();
@@ -795,10 +819,10 @@ function isHiddenCatalogRecord(record) {
         || name.startsWith('hermes verify product line')
         || name.startsWith('hermes verify module')
         || name.startsWith('hermes verify project')
-        || name.startsWith('orbit codex product')
-        || name.startsWith('orbit codex product line')
-        || name.startsWith('orbit codex module')
-        || name.startsWith('orbit codex project');
+        || name.startsWith('axis codex product')
+        || name.startsWith('axis codex product line')
+        || name.startsWith('axis codex module')
+        || name.startsWith('axis codex project');
 }
 function visibleProductDetail(entry) {
     if (isHiddenCatalogRecord(entry.product))
@@ -818,21 +842,21 @@ async function fetchOrbitJson(backendUrl, routePath, token) {
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
+        throw new Error(`Cannot reach AxisNode backend at ${url}: ${message}`);
     }
     if (!response.ok) {
         if (response.status === 401)
             throw new OrbitCliError(loginRequiredMessage(backendUrl));
         if (response.status === 403)
             throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
-        throw new OrbitHttpError(response.status, `Orbit Hub backend returned HTTP ${response.status} for ${url}`);
+        throw new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}`);
     }
     try {
         return await response.json();
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Orbit Hub backend returned invalid JSON for ${url}: ${message}`);
+        throw new Error(`AxisNode backend returned invalid JSON for ${url}: ${message}`);
     }
 }
 async function postOrbitJson(backendUrl, routePath, body, token) {
@@ -850,21 +874,21 @@ async function postOrbitJson(backendUrl, routePath, body, token) {
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Cannot reach Orbit Hub backend at ${url}: ${message}`);
+        throw new Error(`Cannot reach AxisNode backend at ${url}: ${message}`);
     }
     if (!response.ok) {
         if (response.status === 401)
             throw new OrbitCliError(loginRequiredMessage(backendUrl));
         if (response.status === 403)
             throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
-        throw new OrbitHttpError(response.status, `Orbit Hub backend returned HTTP ${response.status} for ${url}`);
+        throw new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}`);
     }
     try {
         return await response.json();
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        throw new Error(`Orbit Hub backend returned invalid JSON for ${url}: ${message}`);
+        throw new Error(`AxisNode backend returned invalid JSON for ${url}: ${message}`);
     }
 }
 function pageArg() {
@@ -926,7 +950,7 @@ async function loginOrbitHub(backendUrl, account, password) {
     const payload = await postOrbitJson(backendUrl, '/api/login', { account, password });
     const session = asLoginSession(payload, account);
     if (!session) {
-        throw new Error('Orbit Hub backend response for /api/login did not include token/key/user data');
+        throw new Error('AxisNode backend response for /api/login did not include token/key/user data');
     }
     return session;
 }
@@ -935,14 +959,14 @@ async function fetchCurrentUser(backendUrl, token) {
     const rawUser = isJson(payload) && isJson(payload.user) ? payload.user : payload;
     const user = asOrbitUser(rawUser, '', isJson(payload) ? asPermissionList(payload.permissions) : []);
     if (!user.account) {
-        throw new Error('Orbit Hub backend response for /api/me did not include user.account');
+        throw new Error('AxisNode backend response for /api/me did not include user.account');
     }
     return user;
 }
 async function fetchProductLines(backendUrl, token, options = {}) {
     const payload = await fetchOrbitJson(backendUrl, '/api/products', token);
     if (!isJson(payload) || !Array.isArray(payload.products)) {
-        throw new Error('Orbit Hub backend response for /api/products did not include a products array');
+        throw new Error('AxisNode backend response for /api/products did not include a products array');
     }
     const products = payload.products
         .map(asProductDetail)
@@ -959,7 +983,7 @@ async function fetchProductDetail(backendUrl, productLineId, token, options = {}
     const payload = await fetchOrbitJson(backendUrl, `/api/products/${encodeURIComponent(productLineId)}`, token);
     const detail = asProductDetail(payload);
     if (!detail) {
-        throw new Error(`Orbit Hub backend response for product line ${productLineId} did not include product/modules data`);
+        throw new Error(`AxisNode backend response for product line ${productLineId} did not include product/modules data`);
     }
     const visibleDetail = visibleProductDetail(detail);
     if (!visibleDetail) {
@@ -1121,8 +1145,11 @@ async function promptProjectOrSkip(prompt, title, projects) {
     }
 }
 async function writeProjectBinding(repoPath, binding) {
+    ensureDir(axisDir(repoPath));
     ensureDir(orbitDir(repoPath));
-    await writeFile(projectConfigPath(repoPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
+    const content = `${JSON.stringify(binding, null, 2)}\n`;
+    await writeFile(axisProjectConfigPath(repoPath), content, 'utf8');
+    await writeFile(legacyProjectConfigPath(repoPath), content, 'utf8');
     const globalValues = {
         backendUrl: binding.backendUrl,
         token: binding.token,
@@ -1223,8 +1250,11 @@ function buildProductLineBinding(values) {
     return binding;
 }
 async function writeProductLineBinding(rootPath, binding) {
+    ensureDir(axisDir(rootPath));
     ensureDir(orbitDir(rootPath));
-    await writeFile(productLineConfigPath(rootPath), `${JSON.stringify(binding, null, 2)}\n`, 'utf8');
+    const content = `${JSON.stringify(binding, null, 2)}\n`;
+    await writeFile(axisProductLineConfigPath(rootPath), content, 'utf8');
+    await writeFile(legacyProductLineConfigPath(rootPath), content, 'utf8');
     const globalValues = {
         backendUrl: binding.backendUrl,
         token: binding.token,
@@ -1308,7 +1338,7 @@ async function bindProjectInteractively(repoPath, backendUrl, mcpUrl, owner) {
         account,
     });
     await writeProjectBinding(repoPath, binding);
-    console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
+    console.log(JSON.stringify({ ok: true, config: axisProjectConfigPath(repoPath), legacyConfig: legacyProjectConfigPath(repoPath), binding }, null, 2));
 }
 async function packagedSkillNames() {
     const dir = bundledSkillsDir();
@@ -1370,7 +1400,7 @@ Run the office-hours discussion with:
 gstack office-hours
 \`\`\`
 
-The \`oribit-idea\` skill uses this dependency to incubate ideas through an office-hours discussion, then turns the resulting notes into Orbit-ready artifacts.
+The \`oribit-idea\` skill uses this dependency to incubate ideas through an office-hours discussion, then turns the resulting notes into AxisNode-ready artifacts.
 `;
 }
 function installAgentsForChoice(agent) {
@@ -1601,7 +1631,7 @@ async function bindTopLevel() {
                 account,
             });
             await writeProjectBinding(repoPath, binding);
-            console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
+            console.log(JSON.stringify({ ok: true, config: axisProjectConfigPath(repoPath), legacyConfig: legacyProjectConfigPath(repoPath), binding }, null, 2));
             return;
         }
         await bindProductLineRootWithSession({
@@ -1619,13 +1649,13 @@ async function bindTopLevel() {
         prompt.close();
     }
 }
-function safeSlug(name) {
+function safeSlug(name, fallback = 'orbit-item') {
     const slug = name
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .slice(0, 80);
-    return slug || 'orbit-item';
+    return slug || fallback;
 }
 async function directoryExists(dirPath) {
     try {
@@ -1812,7 +1842,7 @@ async function bindProject() {
     if (projectId)
         binding.projectId = projectId;
     await writeProjectBinding(repoPath, binding);
-    console.log(JSON.stringify({ ok: true, config: projectConfigPath(repoPath), binding }, null, 2));
+    console.log(JSON.stringify({ ok: true, config: axisProjectConfigPath(repoPath), legacyConfig: legacyProjectConfigPath(repoPath), binding }, null, 2));
 }
 async function logoutOrbit() {
     const backendUrl = getArg('--backend-url');
@@ -1841,7 +1871,7 @@ async function showProject() {
     const repoPath = resolveRepoArg();
     const binding = await readProjectBinding(repoPath);
     if (!binding) {
-        console.error(`No Orbit project binding found at ${projectConfigPath(repoPath)}`);
+        console.error(`No AxisNode project binding found at ${axisProjectConfigPath(repoPath)} or ${legacyProjectConfigPath(repoPath)}`);
         process.exit(1);
     }
     if (hasFlag('--json')) {
@@ -1942,7 +1972,7 @@ async function fetchPoolTemplateContext(pool, repoPath) {
         workItems: [],
     };
     if (!binding) {
-        return { template: localPoolTemplate(pool), projectContext, warning: 'No Orbit project binding found; using local fallback template.' };
+        return { template: localPoolTemplate(pool), projectContext, warning: 'No AxisNode project binding found; using local fallback template.' };
     }
     const projectId = projectApiId(binding);
     if (!projectId) {
@@ -1958,21 +1988,21 @@ async function fetchPoolTemplateContext(pool, repoPath) {
             projectContext.project = payload.project;
     }
     catch (error) {
-        warning = `Hub template fetch failed; using local fallback template. ${error instanceof Error ? error.message : String(error)}`;
+        warning = `AxisNode template fetch failed; using local fallback template. ${error instanceof Error ? error.message : String(error)}`;
     }
     try {
         const docsPayload = await fetchOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/documents?page=1&pageSize=10`, token);
         projectContext.documents = documentArray(docsPayload).slice(0, 10).map(compactDocument);
     }
     catch (error) {
-        warning = warning ?? `Hub project documents fetch failed; context is partial. ${error instanceof Error ? error.message : String(error)}`;
+        warning = warning ?? `AxisNode project documents fetch failed; context is partial. ${error instanceof Error ? error.message : String(error)}`;
     }
     try {
         const itemsPayload = await fetchOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/work-items?page=1&pageSize=10`, token);
         projectContext.workItems = documentArray(itemsPayload).slice(0, 10).map(compactWorkItem);
     }
     catch (error) {
-        warning = warning ?? `Hub project workItems fetch failed; context is partial. ${error instanceof Error ? error.message : String(error)}`;
+        warning = warning ?? `AxisNode project workItems fetch failed; context is partial. ${error instanceof Error ? error.message : String(error)}`;
     }
     return { template, projectContext, warning };
 }
@@ -1996,7 +2026,7 @@ async function preparePool(pool) {
             'Use the user seed plus template.markdownTemplate plus projectContext to produce orbit.pool.artifact.v1 JSON.',
             `Artifact kind must be ${pool.kind}; artifactSchema is orbit.pool.artifact.v1.`,
             'If key information is missing, ask clarifying questions or include explicit open questions in the artifact.',
-            `When already running inside an Agent/Skill, generate the artifact yourself and call ${pool.command} import --stdin. This import will try Orbit Hub first; pass --local for local-only fallback/debug output.`,
+            `When already running inside an Agent/Skill, generate the artifact yourself and call ${pool.command} import --stdin. This import will try AxisNode first; pass --local for local-only fallback/debug output.`,
             'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
         ],
         warning: cloud.warning,
@@ -2036,7 +2066,7 @@ function poolArtifactFromText(pool, text) {
         `# ${title}`,
         '',
         '## Summary',
-        text.trim() || 'Draft artifact generated by Orbit Tools.',
+        text.trim() || 'Draft artifact generated by AxisNode Tools.',
         '',
         '## Details',
         '',
@@ -2124,7 +2154,8 @@ async function savePoolArtifact(pool, artifact, repoPath, source) {
     const binding = await readProjectBinding(repoPath);
     const targetDir = path.join(repoPath, pool.defaultDir);
     ensureDir(targetDir);
-    const fileName = `${localDateStamp()}-${pool.pool}-${safeSlug(artifact.title)}.md`;
+    const fallbackSlug = pool.command.startsWith('axis-') ? 'axis-item' : 'orbit-item';
+    const fileName = `${localDateStamp()}-${pool.pool}-${safeSlug(artifact.title, fallbackSlug)}.md`;
     const filePath = path.join(targetDir, fileName);
     const metadata = [
         '---',
@@ -2162,13 +2193,13 @@ function buildPoolPayload(pool, artifact, repoPath) {
         repo: repoPath,
     };
 }
-async function submitRequirementToHub(binding, token, artifact, repoPath) {
+async function submitRequirementToHub(pool, binding, token, artifact, repoPath) {
     const projectId = projectApiId(binding);
     if (!projectId)
         throw new Error('project binding has no projectId/projectUuid');
     if (!token)
         throw new Error('project binding has no token and no cached login session');
-    return postOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/requirements`, buildPoolPayload(POOLS['orbit-req'], artifact, repoPath), token);
+    return postOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/requirements`, buildPoolPayload(pool, artifact, repoPath), token);
 }
 async function submitPoolDocumentToHub(pool, binding, token, artifact, repoPath) {
     const projectId = projectApiId(binding);
@@ -2197,7 +2228,7 @@ async function submitPoolArtifact(pool, repoPath, artifact, source) {
             }
             catch (error) {
                 if (pool.kind === 'requirement' && error instanceof OrbitHttpError && error.status === 404) {
-                    response = await submitRequirementToHub(binding, token, artifact, repoPath);
+                    response = await submitRequirementToHub(pool, binding, token, artifact, repoPath);
                     warning = 'Hub /pool-documents endpoint returned 404; submitted requirement through legacy /requirements endpoint.';
                 }
                 else {
@@ -2220,13 +2251,13 @@ async function submitPoolArtifact(pool, repoPath, artifact, source) {
             };
         }
         catch (error) {
-            const warning = `Hub submit failed; saved locally instead. ${error instanceof Error ? error.message : String(error)}`;
+            const warning = `AxisNode submit failed; saved locally instead. ${error instanceof Error ? error.message : String(error)}`;
             const savedPath = await savePoolArtifact(pool, artifact, repoPath, source);
             return { ok: true, mode: 'local', repo: repoPath, pool: pool.pool, artifact, id: null, url: null, savedPath, warning };
         }
     }
     const reason = !binding
-        ? 'No Orbit project binding found; saved locally instead.'
+        ? 'No AxisNode project binding found; saved locally instead.'
         : `Project binding is not usable for ${pool.kind}; saved locally instead.`;
     const savedPath = await savePoolArtifact(pool, artifact, repoPath, source);
     return { ok: true, mode: 'local', repo: repoPath, pool: pool.pool, artifact, id: null, url: null, savedPath, warning: reason };
@@ -2304,7 +2335,7 @@ function buildPoolAgentPrompt(pool, prepare, userInput) {
         ? `If packaged skill ${pool.skill} is unavailable, output only valid orbit.pool.artifact.v1 JSON for kind ${pool.kind}.`
         : `Use packaged skill ${pool.skill} when available and output only valid orbit.pool.artifact.v1 JSON.`;
     return [
-        `You are generating an Orbit ${pool.displayName} artifact.`,
+        `You are generating an AxisNode ${pool.displayName} artifact.`,
         fallback,
         'Do not write files directly. Return only the final JSON artifact.',
         '',
@@ -2633,7 +2664,7 @@ async function deletePoolItem(pool, id, options = {}) {
         id,
         error: {
             code: 'unsupported',
-            message: `Delete is not supported yet for ${pool.displayName}; Orbit Hub has no confirmed pool/document delete API in this CLI.`,
+            message: `Delete is not supported yet for ${pool.displayName}; AxisNode has no confirmed pool/document delete API in this CLI.`,
         },
     };
     if (hasFlag('--json')) {
