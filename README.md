@@ -130,7 +130,7 @@ npm link
 安装后可直接用：
 
 ```bash
-axis codex-status current --repo /home/jasperWei/orbit/orbit-hub
+axis codex-status current --repo /home/jasperWei/orbit/axis-hub
 ```
 
 旧命令 `orbit`、`orbit-tools`、`orbit-req`、`orbit-bug`、`orbit-sug`、`orbit-ide` 仅作为兼容别名保留；新文档和脚本应优先使用 `axis` / `axis-tools` / `axis-*`。
@@ -356,9 +356,9 @@ npm run test:sample
 
 预期：
 - `test:mcp` 会在临时目录验证 Hermes JSON/YAML 配置写入和 `.axis/project.json (or legacy .orbit/project.json)` 绑定
-- `/home/jasperWei/orbit/orbit-hub/.codex-status/latest.json` 被写入
-- `/home/jasperWei/orbit/orbit-hub/.codex-status/events.jsonl` 被追加
-- current / tail / summary 都能读取 `--repo /home/jasperWei/orbit/orbit-hub`
+- `/home/jasperWei/orbit/axis-hub/.codex-status/latest.json` 被写入
+- `/home/jasperWei/orbit/axis-hub/.codex-status/events.jsonl` 被追加
+- current / tail / summary 都能读取 `--repo /home/jasperWei/orbit/axis-hub`
 
 ## 接入 Codex hook
 
