@@ -222,12 +222,16 @@ axis work loop --repo /path/to/repo --iterations 1 --json
 - `refine`: 读取 `pending-confirmation` 的 pool seeds；显式传 `--spawn` 时启动 refine worker，把 seed 转成 pool document / WorkItems。
 - `execute`: 读取 confirmed / ready requirements 或 work-items，未来由 execute 子 Agent claim、实现、验证并写回状态。
 
-refine worker 会把 seed kind 映射到方法论技能，并把该技能写进传给 Agent 的 prompt/context：
+refine worker 会把 seed kind 映射到方法论技能，并把本机 `SKILL.md` 内容直接注入传给 Agent 的 prompt/context，而不是只写一个技能名：
 
 - idea / `axis-ide`: `plan-ceo-review`；如果 Hermes 中存在 `gstack-plan-ceo-review` 目录，则使用 `gstack-plan-ceo-review`。
 - requirement / `axis-req`: `superpowers:brainstorm`。
 - bug / `axis-bug`: `superpowers:systematic-debugging`。
 - suggestion / `axis-sug`: `superpowers:brainstorm`。
+
+idea 方法论内容按顺序查找：`~/.hermes/skills/gstack-plan-ceo-review/SKILL.md`、`~/.hermes/skills/plan-ceo-review/SKILL.md`、`~/gstack/.hermes/skills/*/SKILL.md` 和 gstack checkout 生成路径。Superpowers 方法论优先使用 `~/.codex/skills/superpowers/{brainstorming,systematic-debugging}/SKILL.md`，找不到时再查 Codex plugin cache 或 `AXIS_CODEX_SUPERPOWERS_SOURCE`。注入内容会做长度上限保护、二进制跳过和明显密钥片段 redaction；`axis work --json` 的每个 refine result 会返回 `methodologySkill`、`methodologySource`、`methodologyPath`、`methodologyInjected`、`methodologyWarning` 和 `methodologyTruncated`。
+
+worker prompt 会把交互式方法论改成一次性自动输出：Agent 不得向用户提问或停下来等确认；如果方法论原本要提问，必须把问题写进 artifact markdown 的 structured Decision block，列出 options、明确 recommended option 和 rationale，然后在同一轮里按 recommended option 继续生成并上传。多个可行路径会被追加/更新到 `可选方案 / 推荐方案` 章节，并标出推荐方案。Hub seed/context 里如果带有已有 document、sourceArtifact、artifact、markdown、selectedOption、feedback 等字段，worker 会把它当成用户编辑反馈来重新 review/refine；用户已经改写或选择的方案优先保留，仍有歧义时继续给出可选方案并选一个推荐默认值。
 
 启动 worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work ... --spawn` 且存在待 refine seeds 时发生；普通 `axis-* "text"` 仍然只提交 raw seed，不启动 Agent。
 

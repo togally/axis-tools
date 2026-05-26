@@ -206,6 +206,23 @@ interface WorkPrerequisiteStep {
   warning?: string;
 }
 
+interface MethodologyCandidate {
+  skill: string;
+  source: string;
+  path: string;
+}
+
+interface MethodologyInjection {
+  skill: string;
+  source: string | null;
+  path: string | null;
+  content: string;
+  injected: boolean;
+  warning: string | null;
+  truncated: boolean;
+  bytes: number;
+}
+
 class OrbitHttpError extends Error {
   status: number;
 
@@ -334,6 +351,7 @@ const POOL_METHODOLOGY_BY_KIND: Record<PoolConfig['kind'], string> = {
   bug: 'superpowers:systematic-debugging',
   suggestion: 'superpowers:brainstorm',
 };
+const METHODOLOGY_INJECTION_MAX_CHARS = 24_000;
 const SAFE_BINDING_KEYS = [
   'productLineId',
   'productLineUuid',
@@ -384,6 +402,11 @@ function parseJsonText(text: string): Json {
 
 function safeString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
+function combineWarnings(...warnings: (string | null | undefined)[]): string | null {
+  const present = warnings.filter((warning): warning is string => Boolean(warning));
+  return present.length > 0 ? present.join(' ') : null;
 }
 
 function ensureDir(dir: string): void {
@@ -2436,17 +2459,164 @@ function poolMethodologyMap(): Record<PoolConfig['kind'], string> {
   return { ...POOL_METHODOLOGY_BY_KIND };
 }
 
+function gstackSkillCheckoutPath(skillName: string): string {
+  return path.join(gstackHomeDir(), skillName.replace(/^gstack-/, ''), 'SKILL.md');
+}
+
+function gstackSkillCandidatePaths(skillName: string): string[] {
+  return [
+    hermesSkillPath(skillName),
+    path.join(gstackHomeDir(), '.hermes', 'skills', skillName, 'SKILL.md'),
+    gstackSkillCheckoutPath(skillName),
+  ];
+}
+
 function gstackSkillExists(skillName: string): boolean {
-  return existsSync(hermesSkillPath(skillName))
-    || existsSync(path.join(gstackHomeDir(), '.hermes', 'skills', skillName, 'SKILL.md'))
-    || existsSync(path.join(gstackHomeDir(), skillName.replace(/^gstack-/, ''), 'SKILL.md'));
+  return gstackSkillCandidatePaths(skillName).some((candidate) => existsSync(candidate));
+}
+
+function uniqueMethodologyCandidates(candidates: MethodologyCandidate[]): MethodologyCandidate[] {
+  const seen = new Set<string>();
+  return candidates.filter((candidate) => {
+    const key = path.resolve(candidate.path);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function ideaMethodologyCandidates(): MethodologyCandidate[] {
+  return uniqueMethodologyCandidates([
+    { skill: 'gstack-plan-ceo-review', source: 'hermes', path: hermesSkillPath('gstack-plan-ceo-review') },
+    { skill: 'plan-ceo-review', source: 'hermes', path: hermesSkillPath('plan-ceo-review') },
+    { skill: 'gstack-plan-ceo-review', source: 'gstack-checkout-hermes', path: path.join(gstackHomeDir(), '.hermes', 'skills', 'gstack-plan-ceo-review', 'SKILL.md') },
+    { skill: 'plan-ceo-review', source: 'gstack-checkout-hermes', path: path.join(gstackHomeDir(), '.hermes', 'skills', 'plan-ceo-review', 'SKILL.md') },
+    { skill: 'gstack-plan-ceo-review', source: 'gstack-checkout', path: gstackSkillCheckoutPath('gstack-plan-ceo-review') },
+  ]);
+}
+
+function existingIdeaMethodologyCandidate(): MethodologyCandidate | null {
+  return ideaMethodologyCandidates().find((entry) => existsSync(entry.path)) ?? null;
+}
+
+function superpowersSkillDir(methodologySkill: string): string | null {
+  if (methodologySkill === 'superpowers:brainstorm') return 'brainstorming';
+  if (methodologySkill === 'superpowers:systematic-debugging') return 'systematic-debugging';
+  return null;
+}
+
+async function superpowersMethodologyCandidates(methodologySkill: string): Promise<MethodologyCandidate[]> {
+  const skillDir = superpowersSkillDir(methodologySkill);
+  if (!skillDir) return [];
+
+  const directSources = [
+    { source: 'codex-superpowers', root: codexSuperpowersSkillRoot() },
+    process.env.AXIS_CODEX_SUPERPOWERS_SOURCE ? { source: 'codex-superpowers-env', root: path.resolve(process.env.AXIS_CODEX_SUPERPOWERS_SOURCE) } : null,
+    { source: 'codex-superpowers-cache', root: path.join(homeDir(), '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills') },
+    { source: 'codex-superpowers-cache', root: path.join(homeDir(), '.codex', 'plugins', 'superpowers', 'skills') },
+  ].filter((entry): entry is { source: string; root: string } => Boolean(entry));
+
+  const cacheSource = await findSuperpowersCacheSource();
+  if (cacheSource) {
+    directSources.push({ source: 'codex-superpowers-cache', root: cacheSource });
+  }
+
+  return uniqueMethodologyCandidates(directSources.map((entry) => ({
+    skill: methodologySkill,
+    source: entry.source,
+    path: path.join(entry.root, skillDir, 'SKILL.md'),
+  })));
+}
+
+async function methodologyCandidatesForPool(pool: PoolConfig, methodologySkill: string): Promise<MethodologyCandidate[]> {
+  if (pool.kind === 'idea') return ideaMethodologyCandidates();
+  if (methodologySkill.startsWith('superpowers:')) return superpowersMethodologyCandidates(methodologySkill);
+  return [{ skill: methodologySkill, source: 'hermes', path: hermesSkillPath(methodologySkill) }];
 }
 
 function resolvePoolMethodologySkill(pool: PoolConfig): string {
   if (pool.kind !== 'idea') return POOL_METHODOLOGY_BY_KIND[pool.kind];
-  if (gstackSkillExists('gstack-plan-ceo-review')) return 'gstack-plan-ceo-review';
-  if (gstackSkillExists('plan-ceo-review')) return 'plan-ceo-review';
+  const candidate = existingIdeaMethodologyCandidate();
+  if (candidate) return candidate.skill;
   return POOL_METHODOLOGY_BY_KIND.idea;
+}
+
+function redactSensitiveSkillContent(content: string): string {
+  return content
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[redacted private key]')
+    .replace(/\b(token|password|passwd|secret|session|api[_-]?key|private[_-]?key)\b\s*[:=]\s*["']?[A-Za-z0-9_./+=-]{12,}["']?/gi, '$1: [redacted by axis-tools]');
+}
+
+async function readMethodologyCandidate(candidate: MethodologyCandidate): Promise<MethodologyInjection | null> {
+  if (!existsSync(candidate.path)) return null;
+  try {
+    const raw = await readFile(candidate.path, 'utf8');
+    if (raw.includes('\u0000')) {
+      return {
+        skill: candidate.skill,
+        source: candidate.source,
+        path: candidate.path,
+        content: '',
+        injected: false,
+        warning: `Methodology skill content at ${candidate.path} appears to be binary; content was not injected.`,
+        truncated: false,
+        bytes: 0,
+      };
+    }
+
+    const redacted = redactSensitiveSkillContent(raw.replace(/\r\n/g, '\n'));
+    const truncated = redacted.length > METHODOLOGY_INJECTION_MAX_CHARS;
+    const content = truncated
+      ? `${redacted.slice(0, METHODOLOGY_INJECTION_MAX_CHARS)}\n\n[axis-tools: methodology SKILL.md truncated to ${METHODOLOGY_INJECTION_MAX_CHARS} characters before prompt injection.]`
+      : redacted;
+    return {
+      skill: candidate.skill,
+      source: candidate.source,
+      path: candidate.path,
+      content,
+      injected: true,
+      warning: truncated ? `Methodology skill content at ${candidate.path} was truncated before prompt injection.` : null,
+      truncated,
+      bytes: Buffer.byteLength(raw, 'utf8'),
+    };
+  } catch (error) {
+    return {
+      skill: candidate.skill,
+      source: candidate.source,
+      path: candidate.path,
+      content: '',
+      injected: false,
+      warning: `Methodology skill content at ${candidate.path} could not be read: ${error instanceof Error ? error.message : String(error)}`,
+      truncated: false,
+      bytes: 0,
+    };
+  }
+}
+
+async function resolvePoolMethodologyInjection(pool: PoolConfig): Promise<MethodologyInjection> {
+  const methodologySkill = resolvePoolMethodologySkill(pool);
+  const candidates = await methodologyCandidatesForPool(pool, methodologySkill);
+  const checkedPaths = candidates.map((candidate) => candidate.path);
+  let firstReadFailure: MethodologyInjection | null = null;
+  for (const candidate of candidates) {
+    const injection = await readMethodologyCandidate(candidate);
+    if (!injection) continue;
+    if (injection.injected) return injection;
+    firstReadFailure ??= injection;
+  }
+
+  if (firstReadFailure) return firstReadFailure;
+
+  return {
+    skill: methodologySkill,
+    source: null,
+    path: null,
+    content: '',
+    injected: false,
+    warning: `Methodology skill content for ${methodologySkill} was not found on local filesystem${checkedPaths.length > 0 ? `; checked ${checkedPaths.join(', ')}` : ''}.`,
+    truncated: false,
+    bytes: 0,
+  };
 }
 
 function localPoolTemplate(pool: PoolConfig, source = 'local-fallback'): Json {
@@ -3718,7 +3888,7 @@ async function ensureGstackPrerequisite(): Promise<WorkPrerequisiteStep[]> {
   const alreadyHasSkill = gstackSkillExists('gstack-plan-ceo-review') || gstackSkillExists('plan-ceo-review');
   if (alreadyHasCommand && alreadyHasSkill) {
     steps.push({ name: 'gstack', ok: true, status: 'present', path: gstackWrapperPath() });
-    steps.push({ name: 'gstack plan-ceo-review skill', ok: true, status: 'present', path: hermesSkillPath(resolvePoolMethodologySkill(AXIS_POOLS_BY_KIND.idea)) });
+    steps.push({ name: 'gstack plan-ceo-review skill', ok: true, status: 'present', path: existingIdeaMethodologyCandidate()?.path ?? hermesSkillPath(resolvePoolMethodologySkill(AXIS_POOLS_BY_KIND.idea)) });
     return steps;
   }
 
@@ -3752,7 +3922,7 @@ async function ensureGstackPrerequisite(): Promise<WorkPrerequisiteStep[]> {
     name: 'gstack verification',
     ok: hasCommandEvidence && hasSkillEvidence,
     status: hasCommandEvidence && hasSkillEvidence ? 'verified' : 'missing-evidence',
-    path: hasSkillEvidence ? hermesSkillPath(resolvePoolMethodologySkill(AXIS_POOLS_BY_KIND.idea)) : undefined,
+    path: hasSkillEvidence ? existingIdeaMethodologyCandidate()?.path ?? hermesSkillPath(resolvePoolMethodologySkill(AXIS_POOLS_BY_KIND.idea)) : undefined,
     warning: hasCommandEvidence && hasSkillEvidence ? undefined : 'gstack setup did not produce both command and plan-ceo-review skill evidence.',
   });
   return steps;
@@ -3871,19 +4041,89 @@ function poolSeedText(seed: Json): string {
     ?? JSON.stringify(seed);
 }
 
-function buildWorkRefineAgentPrompt(pool: PoolConfig, seed: Json, prepare: Json, methodologySkill: string): string {
+function poolSeedReviewContext(seed: Json): Json | null {
+  const contextKeys = [
+    'document',
+    'sourceDocument',
+    'sourceArtifact',
+    'artifact',
+    'currentDocument',
+    'currentArtifact',
+    'existingDocument',
+    'existingArtifact',
+    'draftDocument',
+    'draftArtifact',
+    'poolDocument',
+    'markdown',
+    'documentMarkdown',
+    'artifactMarkdown',
+    'selectedOption',
+    'userSelection',
+    'feedback',
+    'review',
+    'comments',
+  ];
+  const context: Json = {};
+  for (const key of contextKeys) {
+    if (seed[key] !== undefined && seed[key] !== null) context[key] = seed[key];
+  }
+  return Object.keys(context).length > 0 ? context : null;
+}
+
+function methodologyPromptBlock(methodology: MethodologyInjection): string {
+  if (!methodology.injected) {
+    return [
+      'Methodology skill content was not injected.',
+      methodology.warning ? `Warning: ${methodology.warning}` : null,
+      'Use the methodologySkill name as fallback guidance, and still follow the non-interactive decision rules below.',
+    ].filter((line): line is string => Boolean(line)).join('\n');
+  }
+
+  return [
+    'Injected methodology skill content from local filesystem:',
+    '```markdown',
+    methodology.content,
+    '```',
+  ].join('\n');
+}
+
+function buildWorkRefineAgentPrompt(pool: PoolConfig, seed: Json, prepare: Json, methodology: MethodologyInjection): string {
+  const reviewContext = poolSeedReviewContext(seed);
   return [
     'You are an Axis work refine Agent converting one pending pool seed into an Orbit/Axis pool artifact.',
     `Pool kind: ${pool.kind}`,
     `Pool command: ${pool.command}`,
-    `methodologySkill: ${methodologySkill}`,
-    'You MUST use the methodology skill before producing the Orbit/Axis pool artifact.',
-    'After using the methodology, produce one orbit.pool.artifact.v1 JSON artifact for the seed.',
+    `methodologySkill: ${methodology.skill}`,
+    `methodologyInjected: ${methodology.injected}`,
+    `methodologySource: ${methodology.source ?? 'missing'}`,
+    `methodologyPath: ${methodology.path ?? 'missing'}`,
+    methodology.warning ? `methodologyWarning: ${methodology.warning}` : null,
+    'You MUST apply the injected methodology skill content before producing the Orbit/Axis pool artifact.',
+    'After applying the methodology, produce one orbit.pool.artifact.v1 JSON artifact for the seed.',
     'Do not write files directly. Return only the final JSON artifact.',
     'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
     '',
+    methodologyPromptBlock(methodology),
+    '',
+    'Automated one-shot decision rules:',
+    '- You MUST NOT ask the user questions, request confirmation, or stop for interaction.',
+    '- If the methodology would normally ask a question, output that question inside the artifact markdown as a structured Decision block.',
+    '- Each Decision block must include the available options, a clearly marked recommended option, and rationale.',
+    '- After writing a Decision block, continue generation in the same pass using the recommended option so the document can be uploaded.',
+    '- If multiple viable 方案 / paths are useful, append or update a markdown section named "可选方案 / 推荐方案" and mark the recommended one.',
+    '- If the user already selected an option in edited context, respect that selection even when you also show other options.',
+    '',
+    'Edited document review loop rules:',
+    '- Treat any existing edited document or artifact as user feedback/input, not as stale output to overwrite blindly.',
+    '- If the user changed wording, scope, acceptance criteria, or selected one option, preserve and refine that choice in the generated artifact.',
+    '- If options remain ambiguous, append or update decision options for user choice, still selecting a recommended default for upload.',
+    '- Re-review and refine the existing artifact when present; keep useful user edits unless they conflict with the current seed.',
+    '',
     'Prepare context:',
     JSON.stringify(prepare, null, 2),
+    '',
+    'Existing edited document/artifact context:',
+    reviewContext ? JSON.stringify(reviewContext, null, 2) : 'None detected in seed/context.',
     '',
     'Pending seed:',
     JSON.stringify(seed, null, 2),
@@ -3916,7 +4156,8 @@ async function convertPoolSeedWithAgent(
     return { ok: false, seedId, kind: null, error: 'Seed has no supported kind.' };
   }
   const pool = AXIS_POOLS_BY_KIND[kind];
-  const methodologySkill = resolvePoolMethodologySkill(pool);
+  const methodology = await resolvePoolMethodologyInjection(pool);
+  const methodologySkill = methodology.skill;
   const binding = await readProjectBinding(repoPath);
   const cloud = await fetchPoolTemplateContext(pool, repoPath);
   const prepare: Json = {
@@ -3929,19 +4170,27 @@ async function convertPoolSeedWithAgent(
     binding: safeProjectBinding(binding, repoPath),
     skill: pool.skill,
     methodologySkill,
+    methodologySource: methodology.source,
+    methodologyPath: methodology.path,
+    methodologyInjected: methodology.injected,
+    methodologyWarning: methodology.warning,
+    methodologyTruncated: methodology.truncated,
     template: cloud.template,
     projectContext: cloud.projectContext,
     expectedArtifactSchema: 'orbit.pool.artifact.v1',
     instructions: [
-      `Use methodology skill ${methodologySkill} before producing the artifact.`,
+      `Apply injected methodology skill ${methodologySkill} before producing the artifact.`,
+      'Do not ask the user questions; convert interactive methodology questions into Decision blocks with options, a recommended default, and rationale.',
+      'Continue generation in the same pass using the recommended option.',
+      'Treat any existing edited document/artifact in the seed as user feedback to re-review and refine.',
       'Use the pending seed plus template.markdownTemplate plus projectContext to produce orbit.pool.artifact.v1 JSON.',
       'Return only the final JSON artifact.',
       'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
     ],
-    warning: cloud.warning,
+    warning: combineWarnings(cloud.warning, methodology.warning),
   };
   try {
-    const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodologySkill));
+    const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodology));
     const artifact = normalizePoolArtifact(pool, output);
     const submit = await submitPoolArtifact(pool, repoPath, artifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
     return {
@@ -3950,9 +4199,14 @@ async function convertPoolSeedWithAgent(
       kind,
       pool: pool.pool,
       methodologySkill,
+      methodologySource: methodology.source,
+      methodologyPath: methodology.path,
+      methodologyInjected: methodology.injected,
+      methodologyWarning: methodology.warning,
+      methodologyTruncated: methodology.truncated,
       artifactTitle: artifact.title,
       submit,
-      warning: cloud.warning,
+      warning: combineWarnings(cloud.warning, methodology.warning),
     };
   } catch (error) {
     return {
@@ -3961,8 +4215,13 @@ async function convertPoolSeedWithAgent(
       kind,
       pool: pool.pool,
       methodologySkill,
+      methodologySource: methodology.source,
+      methodologyPath: methodology.path,
+      methodologyInjected: methodology.injected,
+      methodologyWarning: methodology.warning,
+      methodologyTruncated: methodology.truncated,
       error: error instanceof Error ? error.message : String(error),
-      warning: cloud.warning,
+      warning: combineWarnings(cloud.warning, methodology.warning),
     };
   }
 }

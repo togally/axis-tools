@@ -493,7 +493,7 @@ async function withPoolServer(fn, options = {}) {
     if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/pool-seeds')) {
       if (!requireAuth()) return;
       res.end(JSON.stringify({
-        items: [
+        items: options.poolSeeds ?? [
           { id: 'seed-old', kind: 'idea', title: 'Existing idea seed', status: 'pending-confirmation' },
         ],
         runtime: { store: 'mock' },
@@ -1513,8 +1513,8 @@ await withTempDir(async (dir) => {
     await writeFile(path.join(home, 'gstack', 'ETHOS.md'), '# Ethos\n', 'utf8');
     await mkdir(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'brainstorming'), { recursive: true });
     await mkdir(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'systematic-debugging'), { recursive: true });
-    await writeFile(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'brainstorming', 'SKILL.md'), '# Brainstorm\n', 'utf8');
-    await writeFile(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'systematic-debugging', 'SKILL.md'), '# Debug\n', 'utf8');
+    await writeFile(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'brainstorming', 'SKILL.md'), '# Brainstorm Method\n\nAsk clarifying questions before planning.\n', 'utf8');
+    await writeFile(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'systematic-debugging', 'SKILL.md'), '# Debug Method\n\nTrace symptoms before fixing.\n', 'utf8');
 
     await writeExecutable(path.join(fakeBin, 'git'), `#!/bin/sh
 printf 'git %s\\n' "$*" >> "$AXIS_FAKE_LOG"
@@ -1525,7 +1525,7 @@ printf 'bun %s\\n' "$*" >> "$AXIS_FAKE_LOG"
 if [ "$1" = "run" ]; then
   workdir="$(pwd)"
   mkdir -p "$workdir/.hermes/skills/gstack-plan-ceo-review"
-  printf '# Plan CEO Review\\n' > "$workdir/.hermes/skills/gstack-plan-ceo-review/SKILL.md"
+  printf '# Plan CEO Review\\n\\nAsk the CEO to choose between paths before writing the plan.\\n' > "$workdir/.hermes/skills/gstack-plan-ceo-review/SKILL.md"
   mkdir -p "$workdir/.hermes/skills/gstack"
   printf '# Gstack\\n' > "$workdir/.hermes/skills/gstack/SKILL.md"
 fi
@@ -1566,6 +1566,9 @@ JSON
     assert.equal(payload.refine.results[0].seedId, 'seed-old');
     assert.equal(payload.refine.results[0].kind, 'idea');
     assert.equal(payload.refine.results[0].methodologySkill, 'gstack-plan-ceo-review');
+    assert.equal(payload.refine.results[0].methodologyInjected, true);
+    assert.match(payload.refine.results[0].methodologyPath, /gstack-plan-ceo-review\/SKILL\.md$/);
+    assert.equal(payload.refine.results[0].methodologyWarning, null);
     assert.equal(payload.refine.results[0].submit.mode, 'hub');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'idea');
@@ -1573,7 +1576,16 @@ JSON
 
     const prompt = await readFile(promptLog, 'utf8');
     assert.match(prompt, /methodologySkill: gstack-plan-ceo-review/);
-    assert.match(prompt, /MUST use the methodology skill before producing the Orbit\/Axis pool artifact/);
+    assert.match(prompt, /# Plan CEO Review/);
+    assert.match(prompt, /Ask the CEO to choose between paths/);
+    assert.match(prompt, /MUST NOT ask the user questions/);
+    assert.match(prompt, /Decision block/);
+    assert.match(prompt, /recommended option/);
+    assert.match(prompt, /continue generation in the same pass/);
+    assert.match(prompt, /可选方案 \/ 推荐方案/);
+    assert.match(prompt, /Existing edited document\/artifact context/);
+    assert.match(prompt, /Treat any existing edited document or artifact as user feedback/);
+    assert.match(prompt, /Launch MVP first/);
     assert.match(prompt, /Existing idea seed/);
     assert.match(prompt, /Return only the final JSON artifact/);
 
@@ -1585,6 +1597,97 @@ JSON
     assert.match(await readFile(path.join(home, '.codex', 'skills', 'superpowers', 'brainstorming', 'SKILL.md'), 'utf8'), /Brainstorm/);
     assert.match(await readFile(path.join(home, '.local', 'bin', 'gstack'), 'utf8'), /gstack/);
     assert.match(result.stderr, /axis work prerequisite/);
+  }, {
+    poolSeeds: [
+      {
+        id: 'seed-old',
+        kind: 'idea',
+        title: 'Existing idea seed',
+        status: 'pending-confirmation',
+        document: {
+          id: 'doc-edited',
+          title: 'Existing idea seed',
+          markdown: '# Existing idea seed\n\n## 可选方案 / 推荐方案\n- [x] 推荐方案: Launch MVP first\n',
+          updatedAt: '2026-05-26T00:00:00.000Z',
+        },
+      },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'codex-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeExecutable(path.join(home, '.local', 'bin', 'gstack'), '#!/bin/sh\nexit 0\n');
+    await mkdir(path.join(home, '.hermes', 'skills', 'gstack-plan-ceo-review'), { recursive: true });
+    await writeFile(path.join(home, '.hermes', 'skills', 'gstack-plan-ceo-review', 'SKILL.md'), '# Plan CEO Review\n', 'utf8');
+    await mkdir(path.join(home, '.codex', 'skills', 'superpowers', 'brainstorming'), { recursive: true });
+    await mkdir(path.join(home, '.codex', 'skills', 'superpowers', 'systematic-debugging'), { recursive: true });
+    await writeFile(path.join(home, '.codex', 'skills', 'superpowers', 'brainstorming', 'SKILL.md'), '# Brainstorm Method\n\nAsk one question at a time.\n', 'utf8');
+    await writeFile(path.join(home, '.codex', 'skills', 'superpowers', 'systematic-debugging', 'SKILL.md'), '# Debug Method\n\nFind the root cause before fixes.\n', 'utf8');
+
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+printf '%s\\n---PROMPT---\\n' "$2" >> "$AXIS_FAKE_PROMPT"
+case "$2" in
+  *"Pool kind: bug"*)
+    cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"bug","title":"Crash on save","summary":"Converted bug","status":"draft","markdown":"# Crash on save\\n","sections":[],"workItems":[{"title":"Fix crash"}]}
+JSON
+    ;;
+  *)
+    cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Upload images","summary":"Converted requirement","status":"draft","markdown":"# Upload images\\n","sections":[],"workItems":[{"title":"Build upload"}]}
+JSON
+    ;;
+esac
+`);
+
+    const result = await run([
+      'work',
+      'once',
+      '--repo',
+      repo,
+      '--spawn',
+      '--agent',
+      'codex',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_FAKE_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.refine.results.length, 2);
+    assert.equal(payload.refine.results[0].methodologySkill, 'superpowers:brainstorm');
+    assert.equal(payload.refine.results[0].methodologyInjected, true);
+    assert.match(payload.refine.results[0].methodologyPath, /brainstorming\/SKILL\.md$/);
+    assert.equal(payload.refine.results[1].methodologySkill, 'superpowers:systematic-debugging');
+    assert.equal(payload.refine.results[1].methodologyInjected, true);
+    assert.match(payload.refine.results[1].methodologyPath, /systematic-debugging\/SKILL\.md$/);
+    assert.equal(state.poolDocuments, 2);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /methodologySkill: superpowers:brainstorm/);
+    assert.match(prompts, /# Brainstorm Method/);
+    assert.match(prompts, /methodologySkill: superpowers:systematic-debugging/);
+    assert.match(prompts, /# Debug Method/);
+    assert.match(prompts, /MUST NOT ask the user questions/);
+    assert.match(prompts, /recommended option/);
+    assert.match(prompts, /continue generation in the same pass/);
+  }, {
+    poolSeeds: [
+      { id: 'seed-req', kind: 'requirement', title: 'Upload images', seed: 'Support image uploads', status: 'pending-confirmation' },
+      { id: 'seed-bug', kind: 'bug', title: 'Crash on save', seed: 'App crashes when saving', status: 'pending-confirmation' },
+    ],
   });
 });
 
