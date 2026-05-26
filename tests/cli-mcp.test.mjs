@@ -431,6 +431,16 @@ async function writeProductLineBinding(root, backendUrl, extra = {}) {
   }, null, 2));
 }
 
+async function writeWorkPrerequisites(home) {
+  await writeExecutable(path.join(home, '.local', 'bin', 'gstack'), '#!/bin/sh\nexit 0\n');
+  await mkdir(path.join(home, '.hermes', 'skills', 'gstack-plan-ceo-review'), { recursive: true });
+  await writeFile(path.join(home, '.hermes', 'skills', 'gstack-plan-ceo-review', 'SKILL.md'), '# Plan CEO Review\n', 'utf8');
+  await mkdir(path.join(home, '.codex', 'skills', 'superpowers', 'brainstorming'), { recursive: true });
+  await mkdir(path.join(home, '.codex', 'skills', 'superpowers', 'systematic-debugging'), { recursive: true });
+  await writeFile(path.join(home, '.codex', 'skills', 'superpowers', 'brainstorming', 'SKILL.md'), '# Brainstorm Method\n\nAsk one question at a time.\n', 'utf8');
+  await writeFile(path.join(home, '.codex', 'skills', 'superpowers', 'systematic-debugging', 'SKILL.md'), '# Debug Method\n\nFind the root cause before fixes.\n', 'utf8');
+}
+
 async function withPoolServer(fn, options = {}) {
   const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0 };
   const server = http.createServer((req, res) => {
@@ -1689,6 +1699,152 @@ esac
       { id: 'seed-bug', kind: 'bug', title: 'Crash on save', seed: 'App crashes when saving', status: 'pending-confirmation' },
     ],
   });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'codex-prompt.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkPrerequisites(home);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+printf '%s' "$2" > "$AXIS_FAKE_PROMPT"
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Loop converts seed","summary":"Converted by loop","status":"draft","markdown":"# Loop converts seed\\n","sections":[],"workItems":[{"title":"Build loop worker"}]}
+JSON
+`);
+
+    const result = await run([
+      'work',
+      'loop',
+      '--repo',
+      repo,
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_FAKE_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'loop-work');
+    assert.notEqual(payload.mode, 'loop-skeleton');
+    assert.equal(payload.maxIterations, 1);
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.iterations[0].iteration, 1);
+    assert.equal(payload.iterations[0].mode, 'work-once');
+    assert.equal(payload.iterations[0].spawn, true);
+    assert.equal(payload.iterations[0].refine.results.length, 1);
+    assert.equal(payload.iterations[0].refine.results[0].seedId, 'seed-loop');
+    assert.equal(payload.iterations[0].refine.results[0].methodologySkill, 'superpowers:brainstorm');
+    assert.equal(payload.iterations[0].refine.results[0].submit.mode, 'hub');
+    assert.equal(payload.summary.converted, 1);
+    assert.equal(payload.summary.conversions, 1);
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.lastPoolDocument.kind, 'requirement');
+
+    const prompt = await readFile(promptLog, 'utf8');
+    assert.match(prompt, /methodologySkill: superpowers:brainstorm/);
+    assert.match(prompt, /# Brainstorm Method/);
+    assert.doesNotMatch(result.stdout, /loop-skeleton/);
+  }, {
+    poolSeeds: [
+      { id: 'seed-loop', kind: 'requirement', title: 'Loop converts seed', seed: 'Convert this in loop', status: 'pending-confirmation' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkPrerequisites(home);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"bug","title":"Loop bug","summary":"Converted bug","status":"draft","markdown":"# Loop bug\\n","sections":[],"workItems":[{"title":"Fix loop bug"}]}
+JSON
+`);
+
+    const result = await run([
+      'work',
+      'loop',
+      '--repo',
+      repo,
+      '--max-iterations',
+      '2',
+      '--sleep',
+      '60',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_WORK_LOOP_SKIP_SLEEP: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.maxIterations, 2);
+    assert.equal(payload.intervalSeconds, 60);
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.iterations.length, 2);
+    assert.deepEqual(payload.iterations.map((entry) => entry.iteration), [1, 2]);
+    assert.equal(payload.iterations[0].refine.results[0].seedId, 'seed-loop-bug');
+    assert.equal(payload.iterations[1].refine.results[0].seedId, 'seed-loop-bug');
+    assert.equal(payload.sleeps.length, 1);
+    assert.equal(payload.sleeps[0].afterIteration, 1);
+    assert.equal(payload.sleeps[0].skipped, true);
+    assert.equal(payload.summary.converted, 2);
+    assert.equal(payload.summary.conversions, 2);
+    assert.equal(state.poolDocuments, 2);
+  }, {
+    poolSeeds: [
+      { id: 'seed-loop-bug', kind: 'bug', title: 'Loop bug', seed: 'Crash in loop mode', status: 'pending-confirmation' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run([
+      'work',
+      'loop',
+      '--repo',
+      repo,
+      '--iterations',
+      '3',
+      '--json',
+    ]);
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.maxIterations, 3);
+    assert.equal(payload.stopReason, 'no-pending-work');
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.iterations[0].refine.results.length, 0);
+    assert.match(payload.warning, /No pending-confirmation pool seeds/);
+    assert.equal(payload.summary.pending, 0);
+    assert.equal(payload.summary.converted, 0);
+    assert.equal(state.poolDocuments, 0);
+  }, { poolSeeds: [] });
 });
 
 await withTempDir(async (dir) => {

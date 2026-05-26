@@ -382,7 +382,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 ];
 
 function printUsage(): void {
-  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work once --repo <path> [--spawn] [--agent <codex|claude-code|none>] [--json]\n  axis work loop --repo <path> [--iterations <n>] [--spawn] [--agent <codex|claude-code|none>] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req run "商品评价支持图片" --agent none --local\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-req prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-bug prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-sug prepare|import|run [--agent <codex|claude-code|current|none>]\n  --no-doc and --dry-run apply to advanced artifact submission\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work once --repo <path> [--spawn] [--agent <codex|claude-code|none>] [--json]\n  axis work loop --repo <path> [--iterations <n>|--max-iterations <n>] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req run "商品评价支持图片" --agent none --local\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-req prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-bug prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-sug prepare|import|run [--agent <codex|claude-code|current|none>]\n  --no-doc and --dry-run apply to advanced artifact submission\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
   console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 
@@ -3728,6 +3728,28 @@ function integerArg(flag: string, fallback: number, max: number): number {
   return Math.min(value, max);
 }
 
+function integerArgAny(flags: string[], fallback: number, max: number): number {
+  for (const flag of flags) {
+    const raw = getArg(flag);
+    if (raw === null) continue;
+    const value = Number.parseInt(raw, 10);
+    if (!Number.isFinite(value) || value < 1) return fallback;
+    return Math.min(value, max);
+  }
+  return fallback;
+}
+
+function secondsArgAny(flags: string[], fallback: number, max: number): number {
+  for (const flag of flags) {
+    const raw = getArg(flag);
+    if (raw === null) continue;
+    const value = Number.parseFloat(raw);
+    if (!Number.isFinite(value) || value < 0) return fallback;
+    return Math.min(value, max);
+  }
+  return fallback;
+}
+
 async function probeHubQueue(binding: ProjectBinding, routePath: string): Promise<{ items: Json[]; warning: string | null }> {
   try {
     const payload = await fetchOrbitJson(binding.backendUrl, routePath, await tokenForBinding(binding));
@@ -4226,8 +4248,12 @@ async function convertPoolSeedWithAgent(
   }
 }
 
-async function buildWorkRun(repoPath: string): Promise<Json> {
-  const probe = await buildWorkProbe(repoPath);
+interface WorkProbeOptions {
+  spawn?: boolean;
+}
+
+async function buildWorkRun(repoPath: string, options: WorkProbeOptions = {}): Promise<Json> {
+  const probe = await buildWorkProbe(repoPath, options);
   const lanes = isJson(probe.lanes) ? probe.lanes : {};
   const refineLane = isJson(lanes.refine) ? lanes.refine as Json : {};
   const seeds = Array.isArray(refineLane.items) ? refineLane.items.filter(isJson) : [];
@@ -4285,9 +4311,9 @@ async function buildWorkRun(repoPath: string): Promise<Json> {
   return payload;
 }
 
-async function buildWorkProbe(repoPath: string): Promise<Json> {
+async function buildWorkProbe(repoPath: string, options: WorkProbeOptions = {}): Promise<Json> {
   const binding = await readProjectBinding(repoPath);
-  const spawn = hasFlag('--spawn');
+  const spawn = options.spawn ?? hasFlag('--spawn');
   const lanes: Json = {
     refine: {
       description: 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.',
@@ -4365,6 +4391,124 @@ function printWorkProbe(payload: Json): void {
   if (safeString(payload.warning)) console.log(`warning: ${payload.warning}`);
 }
 
+interface WorkIterationSummary {
+  pending: number;
+  conversions: number;
+  converted: number;
+  failed: number;
+  warnings: string[];
+}
+
+interface WorkLoopSummary extends WorkIterationSummary {
+  requested: number;
+  attempted: number;
+}
+
+function pushUniqueWarning(warnings: string[], value: unknown): void {
+  const warning = safeString(value);
+  if (warning && !warnings.includes(warning)) warnings.push(warning);
+}
+
+function numericValue(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function summarizeWorkIteration(payload: Json): WorkIterationSummary {
+  const lanes = isJson(payload.lanes) ? payload.lanes : {};
+  const refineLane = isJson(lanes.refine) ? lanes.refine as Json : {};
+  const executeLane = isJson(lanes.execute) ? lanes.execute as Json : {};
+  const refine = isJson(payload.refine) ? payload.refine as Json : {};
+  const pending = Array.isArray(refineLane.items) ? refineLane.items.length : 0;
+  const results = Array.isArray(refine.results) ? refine.results.filter(isJson) : [];
+  const converted = results.filter((entry) => entry.ok === true).length;
+  const warnings: string[] = [];
+  pushUniqueWarning(warnings, payload.warning);
+  pushUniqueWarning(warnings, refineLane.warning);
+  pushUniqueWarning(warnings, executeLane.warning);
+  pushUniqueWarning(warnings, refine.warning);
+  for (const result of results) pushUniqueWarning(warnings, result.warning);
+  return {
+    pending,
+    conversions: results.length,
+    converted,
+    failed: results.length - converted,
+    warnings,
+  };
+}
+
+function summarizeWorkLoop(iterations: Json[], requested: number): WorkLoopSummary {
+  const summary: WorkLoopSummary = {
+    requested,
+    attempted: iterations.length,
+    pending: 0,
+    conversions: 0,
+    converted: 0,
+    failed: 0,
+    warnings: [],
+  };
+  for (const iteration of iterations) {
+    const iterationSummary = isJson(iteration.summary)
+      ? iteration.summary as Json
+      : summarizeWorkIteration(iteration);
+    summary.pending += numericValue(iterationSummary.pending);
+    summary.conversions += numericValue(iterationSummary.conversions);
+    summary.converted += numericValue(iterationSummary.converted);
+    summary.failed += numericValue(iterationSummary.failed);
+    const warnings = Array.isArray(iterationSummary.warnings) ? iterationSummary.warnings : [];
+    for (const warning of warnings) pushUniqueWarning(summary.warnings, warning);
+  }
+  return summary;
+}
+
+function workLoopStopReason(payload: Json, summary: WorkIterationSummary): string | null {
+  const lanes = isJson(payload.lanes) ? payload.lanes : {};
+  const refineLane = isJson(lanes.refine) ? lanes.refine as Json : {};
+  const refine = isJson(payload.refine) ? payload.refine as Json : {};
+  if (payload.bound !== true) return 'no-project-binding';
+  if (!safeString(payload.projectId)) return 'no-project-id';
+  if (summary.pending === 0) {
+    return safeString(refineLane.warning) ? 'queue-warning' : 'no-pending-work';
+  }
+  const refineWarning = safeString(refine.warning);
+  if (summary.conversions === 0 && refineWarning?.includes('No worker Agent is available')) return 'no-worker-agent';
+  if (summary.failed > 0) return 'worker-failure';
+  return null;
+}
+
+function shouldSkipWorkLoopSleep(): boolean {
+  return process.env.AXIS_WORK_LOOP_SKIP_SLEEP === '1';
+}
+
+async function sleepWorkLoop(seconds: number): Promise<boolean> {
+  if (seconds <= 0) return false;
+  if (shouldSkipWorkLoopSleep()) return true;
+  await new Promise<void>((resolve) => setTimeout(resolve, Math.round(seconds * 1000)));
+  return false;
+}
+
+function printWorkLoop(payload: Json): void {
+  if (hasFlag('--json')) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+
+  console.log(`repo: ${payload.repo}`);
+  console.log(`mode: ${payload.mode}`);
+  console.log(`max iterations: ${payload.maxIterations}`);
+  console.log(`interval seconds: ${payload.intervalSeconds}`);
+  const iterations = Array.isArray(payload.iterations) ? payload.iterations.filter(isJson) : [];
+  for (const iteration of iterations) {
+    const summary = isJson(iteration.summary) ? iteration.summary as Json : summarizeWorkIteration(iteration);
+    console.log(`iteration ${iteration.iteration}/${payload.maxIterations}: pending ${summary.pending}, converted ${summary.converted}/${summary.conversions}`);
+    const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
+    for (const warning of warnings) console.log(`iteration ${iteration.iteration} warning: ${warning}`);
+  }
+  const summary = isJson(payload.summary) ? payload.summary as Json : {};
+  console.log(`summary: iterations ${summary.attempted}/${summary.requested}, converted ${summary.converted}/${summary.conversions}, pending ${summary.pending}`);
+  console.log(`stop reason: ${payload.stopReason}`);
+  if (safeString(payload.warning)) console.log(`warning: ${payload.warning}`);
+}
+
 async function handleWorkCommand(command?: string): Promise<void> {
   if (!command || command === '--help' || command === '-h') {
     printUsage();
@@ -4376,28 +4520,51 @@ async function handleWorkCommand(command?: string): Promise<void> {
     return;
   }
   if (command === 'loop') {
-    const iterations = integerArg('--iterations', 1, 20);
-    const results: Json[] = [];
-    for (let index = 0; index < iterations; index++) {
-      results.push({ iteration: index + 1, ...(hasFlag('--spawn') ? await buildWorkRun(repoPath) : await buildWorkProbe(repoPath)) });
+    const maxIterations = integerArgAny(['--iterations', '--max-iterations'], 1, 20);
+    const intervalSeconds = secondsArgAny(['--interval', '--sleep'], 0, 3600);
+    const iterations: Json[] = [];
+    const sleeps: Json[] = [];
+    let stopReason = 'max-iterations';
+
+    for (let index = 0; index < maxIterations; index++) {
+      const startedAt = new Date().toISOString();
+      const run = await buildWorkRun(repoPath, { spawn: true });
+      const iteration: Json = {
+        iteration: index + 1,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        ...run,
+      };
+      const iterationSummary = summarizeWorkIteration(iteration);
+      iteration.summary = iterationSummary;
+      iterations.push(iteration);
+
+      const reason = workLoopStopReason(iteration, iterationSummary);
+      if (reason) {
+        stopReason = reason;
+        break;
+      }
+
+      if (index < maxIterations - 1 && intervalSeconds > 0) {
+        const skipped = await sleepWorkLoop(intervalSeconds);
+        sleeps.push({ afterIteration: index + 1, seconds: intervalSeconds, skipped });
+      }
     }
-    const payload = {
+
+    const summary = summarizeWorkLoop(iterations, maxIterations);
+    const payload: Json = {
       ok: true,
-      mode: hasFlag('--spawn') ? 'loop-work' : 'loop-skeleton',
+      mode: 'loop-work',
       repo: repoPath,
+      maxIterations,
+      intervalSeconds,
       iterations,
-      results,
-      warning: hasFlag('--spawn')
-        ? 'Loop is bounded and runs the refine worker once per iteration when pending seeds exist.'
-        : 'Loop skeleton is bounded and does not sleep or launch agents yet.',
+      sleeps,
+      summary,
+      stopReason,
+      warning: summary.warnings.length > 0 ? summary.warnings.join(' ') : null,
     };
-    if (hasFlag('--json')) console.log(JSON.stringify(payload, null, 2));
-    else {
-      console.log(`repo: ${repoPath}`);
-      console.log(`mode: loop-skeleton`);
-      console.log(`iterations: ${iterations}`);
-      console.log(payload.warning);
-    }
+    printWorkLoop(payload);
     return;
   }
   printUsage();
