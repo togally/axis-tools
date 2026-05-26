@@ -5021,8 +5021,8 @@ async function buildCodingWorkerIteration(repoPath: string, options: WorkIterati
     warning: null,
     coding,
     plan: [
-      'Probe WAIT_CODE WorkItems from the execute lane.',
-      'Do not claim, execute, or write back WorkItems until Hub lifecycle APIs are available.',
+      'Probe unclaimed WAIT_CODE WorkItems from the execute lane; Hub filters active leased claims.',
+      'Do not execute or write back WorkItems until axis-tools implements the Hub claim handoff.',
     ],
   };
 
@@ -5046,11 +5046,11 @@ async function buildCodingWorkerIteration(repoPath: string, options: WorkIterati
   for (const item of workItems) {
     options.progress?.(`workitem: ${workItemId(item) ?? '(unknown workitem)'} kind=${workItemKind(item) ?? 'unknown'} title=${workItemTitle(item)}`);
   }
-  const warning = `TODO: Hub claim/execute/writeback APIs are not implemented in axis-tools yet; probed ${workItems.length} WAIT_CODE coding WorkItem(s) and did not launch a coding agent or mark work complete.`;
+  const warning = `TODO: axis-tools coding execution/writeback is not implemented yet; Hub claim API is available for leased assignment, but this command only probed ${workItems.length} unclaimed WAIT_CODE coding WorkItem(s) and did not launch a coding agent or mark work complete.`;
   coding.ok = false;
   coding.status = 'blocked';
   coding.warning = warning;
-  coding.todo = 'Implement Hub WorkItem claim, execution handoff, verification, and writeback APIs before enabling coding execution.';
+  coding.todo = 'Implement Hub WorkItem claim handoff, execution, verification, and writeback before enabling coding execution.';
   payload.warning = warning;
   options.progress?.(`blocked: ${warning}`);
   return payload;

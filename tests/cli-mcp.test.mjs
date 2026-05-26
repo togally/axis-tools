@@ -2308,7 +2308,8 @@ await withTempDir(async (dir) => {
     assert.equal(payload.iterations[0].coding.status, 'blocked');
     assert.equal(payload.iterations[0].coding.readyCount, 1);
     assert.match(payload.iterations[0].coding.warning, /TODO/i);
-    assert.match(payload.iterations[0].coding.warning, /claim\/execute\/writeback APIs/i);
+    assert.match(payload.iterations[0].coding.warning, /Hub claim API is available/i);
+    assert.match(payload.iterations[0].coding.todo, /claim handoff/i);
     assert.equal(payload.summary.ready, 1);
     assert.equal(payload.summary.blocked, 1);
     assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
