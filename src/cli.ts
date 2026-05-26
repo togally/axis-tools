@@ -386,6 +386,15 @@ function printUsage(): void {
   console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 
+function printWorkWorkerUsage(workerType: WorkWorkerType): void {
+  const command = workerType === 'review' ? 'work-review' : 'work-coding';
+  console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nFlags:\n  --repo <path>                    Repo to read AxisNode project binding from\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
+}
+
+function isHelpFlag(value: string | undefined): boolean {
+  return value === '--help' || value === '-h';
+}
+
 function getArg(flag: string): string | null {
   const index = process.argv.indexOf(flag);
   if (index === -1) return null;
@@ -4945,11 +4954,19 @@ async function main(): Promise<void> {
   }
 
   if (group === 'work-review') {
+    if (isHelpFlag(command)) {
+      printWorkWorkerUsage('review');
+      return;
+    }
     printWorkLoop(await runWorkWorkerLoop(resolveRepoArg(), 'review'));
     return;
   }
 
   if (group === 'work-coding') {
+    if (isHelpFlag(command)) {
+      printWorkWorkerUsage('coding');
+      return;
+    }
     printWorkLoop(await runWorkWorkerLoop(resolveRepoArg(), 'coding'));
     return;
   }

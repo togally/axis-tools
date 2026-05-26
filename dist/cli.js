@@ -91,6 +91,13 @@ function printUsage() {
     console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work-review [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis work-review --repo /path/to/repo\n  axis work-review --repo /path/to/repo --iterations 1 --json\n  axis work-coding --repo /path/to/repo\n  axis work-coding --repo /path/to/repo --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
+function printWorkWorkerUsage(workerType) {
+    const command = workerType === 'review' ? 'work-review' : 'work-coding';
+    console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nFlags:\n  --repo <path>                    Repo to read AxisNode project binding from\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
+}
+function isHelpFlag(value) {
+    return value === '--help' || value === '-h';
+}
 function getArg(flag) {
     const index = process.argv.indexOf(flag);
     if (index === -1)
@@ -4356,10 +4363,18 @@ async function main() {
         return;
     }
     if (group === 'work-review') {
+        if (isHelpFlag(command)) {
+            printWorkWorkerUsage('review');
+            return;
+        }
         printWorkLoop(await runWorkWorkerLoop(resolveRepoArg(), 'review'));
         return;
     }
     if (group === 'work-coding') {
+        if (isHelpFlag(command)) {
+            printWorkWorkerUsage('coding');
+            return;
+        }
         printWorkLoop(await runWorkWorkerLoop(resolveRepoArg(), 'coding'));
         return;
     }

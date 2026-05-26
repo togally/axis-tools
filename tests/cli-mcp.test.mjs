@@ -605,6 +605,28 @@ async function withPoolServer(fn, options = {}) {
 }
 
 await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    for (const [command, flag] of [
+      ['work-review', '--help'],
+      ['work-review', '-h'],
+      ['work-coding', '--help'],
+      ['work-coding', '-h'],
+    ]) {
+      const result = await run([command, flag], { cwd: repo, timeout: 2000 });
+      assert.match(result.stdout, new RegExp(`axis ${command}`));
+      assert.doesNotMatch(result.stdout, /\bstarting\b/);
+      assert.doesNotMatch(result.stdout, /iteration 1/);
+      assert.doesNotMatch(result.stdout, /stop reason/);
+      assert.equal(result.stderr, '');
+      assert.equal(state.requests.length, 0);
+    }
+  }, { poolSeeds: [] });
+});
+
+await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
   const home = path.join(dir, 'home');
   const hermesConfig = path.join(dir, 'hermes.json');
