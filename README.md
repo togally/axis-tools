@@ -207,9 +207,9 @@ axis-ide prepare --json
 
 默认 seed 提交流程中 `--local`/`--save-local` 强制只保存本地 seed，`--save` 作为旧别名保留。高级 artifact 流程中 `--local`/`--save-local` 强制只保存本地 artifact，`--dry-run` 只生成 artifact，不提交也不保存。`--agent` 只在显式 `run` 路径生效。
 
-### Work CLI Skeleton
+### Work CLI
 
-`axis work` 是后续自动化开发循环的命令契约，目前只做安全探测，不启动 Agent，也不会常驻后台：
+`axis work` 是后续自动化开发循环的命令契约。默认只做安全探测，不启动 Agent，也不会常驻后台：
 
 ```bash
 axis work once --repo /path/to/repo
@@ -219,10 +219,17 @@ axis work loop --repo /path/to/repo --iterations 1 --json
 
 代码和输出里固定建模两条 lane：
 
-- `refine`: 读取 `pending-confirmation` 的 pool seeds，未来由 refine 子 Agent 整理成可确认 requirement / work-item。
+- `refine`: 读取 `pending-confirmation` 的 pool seeds；显式传 `--spawn` 时启动 refine worker，把 seed 转成 pool document / WorkItems。
 - `execute`: 读取 confirmed / ready requirements 或 work-items，未来由 execute 子 Agent claim、实现、验证并写回状态。
 
-`--spawn` 目前只是显式保留契约，会返回 warning，不会启动子进程。后续接入 Hub lifecycle API 后，再把 spawn 做成 opt-in 的 refine/execute launcher。
+refine worker 会把 seed kind 映射到方法论技能，并把该技能写进传给 Agent 的 prompt/context：
+
+- idea / `axis-ide`: `plan-ceo-review`；如果 Hermes 中存在 `gstack-plan-ceo-review` 目录，则使用 `gstack-plan-ceo-review`。
+- requirement / `axis-req`: `superpowers:brainstorm`。
+- bug / `axis-bug`: `superpowers:systematic-debugging`。
+- suggestion / `axis-sug`: `superpowers:brainstorm`。
+
+启动 worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work ... --spawn` 且存在待 refine seeds 时发生；普通 `axis-* "text"` 仍然只提交 raw seed，不启动 Agent。
 
 ### 绑定本地目录
 

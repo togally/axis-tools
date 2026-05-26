@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -139,6 +139,12 @@ async function withTempDir(fn) {
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+}
+
+async function writeExecutable(filePath, text) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text, 'utf8');
+  await chmod(filePath, 0o755);
 }
 
 async function runViaLinkedBin(args) {
@@ -1479,10 +1485,106 @@ await withTempDir(async (dir) => {
     assert.equal(payload.repo, repo);
     assert.equal(payload.spawn, false);
     assert.equal(payload.lanes.refine.description, 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.');
+    assert.deepEqual(payload.lanes.refine.methodologyByKind, {
+      idea: 'plan-ceo-review',
+      requirement: 'superpowers:brainstorm',
+      bug: 'superpowers:systematic-debugging',
+      suggestion: 'superpowers:brainstorm',
+    });
     assert.equal(payload.lanes.execute.description, 'Execute confirmed/ready requirements and work-items.');
     assert.equal(payload.lanes.refine.items[0].id, 'seed-old');
     assert.equal(payload.lanes.execute.items[0].id, 'wi-old');
     assert.match(payload.plan[0], /Probe Hub queues/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const fakeLog = path.join(dir, 'fake-tools.log');
+    const promptLog = path.join(dir, 'codex-prompt.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await mkdir(path.join(home, 'gstack', '.git'), { recursive: true });
+    await mkdir(path.join(home, 'gstack', 'bin'), { recursive: true });
+    await mkdir(path.join(home, 'gstack', 'browse'), { recursive: true });
+    await writeFile(path.join(home, 'gstack', 'ETHOS.md'), '# Ethos\n', 'utf8');
+    await mkdir(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'brainstorming'), { recursive: true });
+    await mkdir(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'systematic-debugging'), { recursive: true });
+    await writeFile(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'brainstorming', 'SKILL.md'), '# Brainstorm\n', 'utf8');
+    await writeFile(path.join(home, '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills', 'systematic-debugging', 'SKILL.md'), '# Debug\n', 'utf8');
+
+    await writeExecutable(path.join(fakeBin, 'git'), `#!/bin/sh
+printf 'git %s\\n' "$*" >> "$AXIS_FAKE_LOG"
+exit 0
+`);
+    await writeExecutable(path.join(fakeBin, 'bun'), `#!/bin/sh
+printf 'bun %s\\n' "$*" >> "$AXIS_FAKE_LOG"
+if [ "$1" = "run" ]; then
+  workdir="$(pwd)"
+  mkdir -p "$workdir/.hermes/skills/gstack-plan-ceo-review"
+  printf '# Plan CEO Review\\n' > "$workdir/.hermes/skills/gstack-plan-ceo-review/SKILL.md"
+  mkdir -p "$workdir/.hermes/skills/gstack"
+  printf '# Gstack\\n' > "$workdir/.hermes/skills/gstack/SKILL.md"
+fi
+exit 0
+`);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+printf '%s' "$2" > "$AXIS_FAKE_PROMPT"
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"idea","title":"Existing idea seed","summary":"Converted by fake Codex","status":"draft","markdown":"# Existing idea seed\\n","sections":[],"workItems":[{"title":"Review idea"}]}
+JSON
+`);
+
+    const result = await run([
+      'work',
+      'once',
+      '--repo',
+      repo,
+      '--spawn',
+      '--agent',
+      'codex',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_FAKE_LOG: fakeLog,
+        AXIS_FAKE_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'work-once');
+    assert.equal(payload.spawn, true);
+    assert.equal(payload.refine.agent, 'codex');
+    assert.equal(payload.refine.prerequisites.ok, true);
+    assert.equal(payload.refine.results.length, 1);
+    assert.equal(payload.refine.results[0].seedId, 'seed-old');
+    assert.equal(payload.refine.results[0].kind, 'idea');
+    assert.equal(payload.refine.results[0].methodologySkill, 'gstack-plan-ceo-review');
+    assert.equal(payload.refine.results[0].submit.mode, 'hub');
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.lastPoolDocument.kind, 'idea');
+    assert.equal(state.lastPoolDocument.sourceId, 'axis-ide');
+
+    const prompt = await readFile(promptLog, 'utf8');
+    assert.match(prompt, /methodologySkill: gstack-plan-ceo-review/);
+    assert.match(prompt, /MUST use the methodology skill before producing the Orbit\/Axis pool artifact/);
+    assert.match(prompt, /Existing idea seed/);
+    assert.match(prompt, /Return only the final JSON artifact/);
+
+    const toolLog = await readFile(fakeLog, 'utf8');
+    assert.match(toolLog, /git -C .*gstack pull --ff-only/);
+    assert.match(toolLog, /bun install/);
+    assert.match(toolLog, /bun run gen:skill-docs --host hermes/);
+    assert.match(await readFile(path.join(home, '.hermes', 'skills', 'gstack-plan-ceo-review', 'SKILL.md'), 'utf8'), /Plan CEO Review/);
+    assert.match(await readFile(path.join(home, '.codex', 'skills', 'superpowers', 'brainstorming', 'SKILL.md'), 'utf8'), /Brainstorm/);
+    assert.match(await readFile(path.join(home, '.local', 'bin', 'gstack'), 'utf8'), /gstack/);
+    assert.match(result.stderr, /axis work prerequisite/);
   });
 });
 

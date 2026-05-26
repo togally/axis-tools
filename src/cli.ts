@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, realpathSync, type Dirent } from 'node:fs';
-import { appendFile, copyFile, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, cp, readdir, readFile, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { execFile, spawn } from 'node:child_process';
@@ -197,6 +197,15 @@ interface PoolTemplateContext {
   warning: string | null;
 }
 
+interface WorkPrerequisiteStep {
+  name: string;
+  ok: boolean;
+  status: string;
+  path?: string;
+  command?: string;
+  warning?: string;
+}
+
 class OrbitHttpError extends Error {
   status: number;
 
@@ -313,6 +322,18 @@ const POOLS: Record<string, PoolConfig> = {
   'orbit-bug': { command: 'orbit-bug', pool: 'bug', kind: 'bug', displayName: 'Bug池', skill: 'orbit-bug', defaultDir: 'docs/bugs' },
   'orbit-sug': { command: 'orbit-sug', pool: 'sug', kind: 'suggestion', displayName: '优化池', skill: 'orbit-suggestion', defaultDir: 'docs/suggestions' },
 };
+const AXIS_POOLS_BY_KIND: Record<PoolConfig['kind'], PoolConfig> = {
+  idea: POOLS['axis-ide'],
+  requirement: POOLS['axis-req'],
+  bug: POOLS['axis-bug'],
+  suggestion: POOLS['axis-sug'],
+};
+const POOL_METHODOLOGY_BY_KIND: Record<PoolConfig['kind'], string> = {
+  idea: 'plan-ceo-review',
+  requirement: 'superpowers:brainstorm',
+  bug: 'superpowers:systematic-debugging',
+  suggestion: 'superpowers:brainstorm',
+};
 const SAFE_BINDING_KEYS = [
   'productLineId',
   'productLineUuid',
@@ -343,7 +364,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 ];
 
 function printUsage(): void {
-  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work once --repo <path> [--json]\n  axis work loop --repo <path> [--iterations <n>] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req run "商品评价支持图片" --agent none --local\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-req prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-bug prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-sug prepare|import|run [--agent <codex|claude-code|current|none>]\n  --no-doc and --dry-run apply to advanced artifact submission\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work once --repo <path> [--spawn] [--agent <codex|claude-code|none>] [--json]\n  axis work loop --repo <path> [--iterations <n>] [--spawn] [--agent <codex|claude-code|none>] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req run "商品评价支持图片" --agent none --local\n  axis-req --list --page 1 --page-size 20\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced agent protocol:\n  axis-ide prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-req prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-bug prepare|import|run [--agent <codex|claude-code|current|none>]\n  axis-sug prepare|import|run [--agent <codex|claude-code|current|none>]\n  --no-doc and --dry-run apply to advanced artifact submission\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
   console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 
@@ -457,6 +478,26 @@ function agentSkillPath(agent: AgentChoice, skillName = 'orbit-workflow'): strin
 
 function hermesSkillPath(skillName: string): string {
   return path.join(homeDir(), '.hermes', 'skills', skillName, 'SKILL.md');
+}
+
+function hermesSkillsDir(): string {
+  return path.join(homeDir(), '.hermes', 'skills');
+}
+
+function codexSuperpowersSkillRoot(): string {
+  return path.join(homeDir(), '.codex', 'skills', 'superpowers');
+}
+
+function gstackHomeDir(): string {
+  return path.resolve(process.env.AXIS_GSTACK_HOME ?? path.join(homeDir(), 'gstack'));
+}
+
+function userLocalBinDir(): string {
+  return path.join(homeDir(), '.local', 'bin');
+}
+
+function gstackWrapperPath(): string {
+  return path.join(userLocalBinDir(), 'gstack');
 }
 
 function defaultHermesConfigPath(): string {
@@ -2391,6 +2432,23 @@ function safeProjectBinding(binding: ProjectBinding | null, repoPath: string): J
   return safe;
 }
 
+function poolMethodologyMap(): Record<PoolConfig['kind'], string> {
+  return { ...POOL_METHODOLOGY_BY_KIND };
+}
+
+function gstackSkillExists(skillName: string): boolean {
+  return existsSync(hermesSkillPath(skillName))
+    || existsSync(path.join(gstackHomeDir(), '.hermes', 'skills', skillName, 'SKILL.md'))
+    || existsSync(path.join(gstackHomeDir(), skillName.replace(/^gstack-/, ''), 'SKILL.md'));
+}
+
+function resolvePoolMethodologySkill(pool: PoolConfig): string {
+  if (pool.kind !== 'idea') return POOL_METHODOLOGY_BY_KIND[pool.kind];
+  if (gstackSkillExists('gstack-plan-ceo-review')) return 'gstack-plan-ceo-review';
+  if (gstackSkillExists('plan-ceo-review')) return 'plan-ceo-review';
+  return POOL_METHODOLOGY_BY_KIND.idea;
+}
+
 function localPoolTemplate(pool: PoolConfig, source = 'local-fallback'): Json {
   const sectionsByKind: Record<PoolConfig['kind'], string[]> = {
     requirement: ['背景', '目标', '范围', '用户故事', '验收标准', '风险', 'WorkItems'],
@@ -2506,10 +2564,12 @@ async function preparePool(pool: PoolConfig): Promise<void> {
     bound: Boolean(binding),
     binding: safeProjectBinding(binding, repoPath),
     skill: pool.skill,
+    methodologySkill: resolvePoolMethodologySkill(pool),
     template: cloud.template,
     projectContext: cloud.projectContext,
     expectedArtifactSchema: 'orbit.pool.artifact.v1',
     instructions: [
+      `Before producing the artifact, use the methodology skill ${resolvePoolMethodologySkill(pool)} for ${pool.kind} seeds.`,
       'Use the user seed plus template.markdownTemplate plus projectContext to produce orbit.pool.artifact.v1 JSON.',
       `Artifact kind must be ${pool.kind}; artifactSchema is orbit.pool.artifact.v1.`,
       'If key information is missing, ask clarifying questions or include explicit open questions in the artifact.',
@@ -3111,7 +3171,7 @@ function parsePoolAgentArg(value: string | null): PoolAgentChoice | null {
 
 async function commandAvailable(command: string): Promise<boolean> {
   try {
-    await execFileAsync('sh', ['-lc', `command -v ${command}`]);
+    await execFileAsync('sh', ['-c', `command -v ${command}`]);
     return true;
   } catch {
     return false;
@@ -3141,11 +3201,14 @@ async function resolvePoolAgent(repoPath: string): Promise<PoolAgentChoice> {
 }
 
 function buildPoolAgentPrompt(pool: PoolConfig, prepare: string, userInput: string): string {
+  const methodologySkill = resolvePoolMethodologySkill(pool);
   const fallback = pool.kind === 'bug' || pool.kind === 'suggestion'
     ? `If packaged skill ${pool.skill} is unavailable, output only valid orbit.pool.artifact.v1 JSON for kind ${pool.kind}.`
     : `Use packaged skill ${pool.skill} when available and output only valid orbit.pool.artifact.v1 JSON.`;
   return [
     `You are generating an AxisNode ${pool.displayName} artifact.`,
+    `methodologySkill: ${methodologySkill}`,
+    'You MUST use the methodology skill before producing the Orbit/Axis pool artifact.',
     fallback,
     'Do not write files directly. Return only the final JSON artifact.',
     '',
@@ -3198,10 +3261,12 @@ async function runPool(pool: PoolConfig, args: string[]): Promise<void> {
     bound: Boolean(binding),
     binding: safeProjectBinding(binding, repoPath),
     skill: pool.skill,
+    methodologySkill: resolvePoolMethodologySkill(pool),
     template: cloud.template,
     projectContext: cloud.projectContext,
     expectedArtifactSchema: 'orbit.pool.artifact.v1',
     instructions: [
+      `Before producing the artifact, use the methodology skill ${resolvePoolMethodologySkill(pool)} for ${pool.kind} seeds.`,
       'Use the user seed plus template.markdownTemplate plus projectContext to produce orbit.pool.artifact.v1 JSON.',
       'Return only the final JSON artifact.',
       'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
@@ -3502,6 +3567,465 @@ async function probeHubQueue(binding: ProjectBinding, routePath: string): Promis
   }
 }
 
+function prerequisiteEnv(): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    HTTP_PROXY: process.env.HTTP_PROXY ?? 'http://127.0.0.1:7890',
+    HTTPS_PROXY: process.env.HTTPS_PROXY ?? 'http://127.0.0.1:7890',
+    ALL_PROXY: process.env.ALL_PROXY ?? 'socks5://127.0.0.1:7891',
+  };
+}
+
+function logWorkPrerequisite(message: string): void {
+  console.error(`[axis work prerequisite] ${message}`);
+}
+
+function commandText(command: string, args: string[]): string {
+  return [command, ...args].map((part) => /\s/.test(part) ? JSON.stringify(part) : part).join(' ');
+}
+
+async function runPrerequisiteCommand(command: string, args: string[], options: { cwd?: string } = {}): Promise<WorkPrerequisiteStep> {
+  const display = commandText(command, args);
+  logWorkPrerequisite(`running ${display}${options.cwd ? ` in ${options.cwd}` : ''}`);
+  if (process.env.AXIS_WORK_PREREQ_DRY_RUN === '1') {
+    return { name: display, ok: false, status: 'planned', command: display, warning: 'AXIS_WORK_PREREQ_DRY_RUN=1; command was not executed.' };
+  }
+  try {
+    await execFileAsync(command, args, {
+      cwd: options.cwd,
+      env: prerequisiteEnv(),
+      maxBuffer: 20 * 1024 * 1024,
+    });
+    return { name: display, ok: true, status: 'ok', command: display };
+  } catch (error) {
+    const warning = summarizeCommandError(error);
+    logWorkPrerequisite(`warning: ${display} failed: ${warning}`);
+    return { name: display, ok: false, status: 'failed', command: display, warning };
+  }
+}
+
+async function copyGstackHermesSkills(gstackDir: string): Promise<WorkPrerequisiteStep> {
+  const source = path.join(gstackDir, '.hermes', 'skills');
+  const target = hermesSkillsDir();
+  if (!await directoryExists(source)) {
+    return {
+      name: 'gstack hermes skills',
+      ok: false,
+      status: 'missing-source',
+      path: source,
+      warning: `Generated gstack Hermes skills were not found at ${source}.`,
+    };
+  }
+  ensureDir(target);
+  try {
+    const entries = await readdir(source, { withFileTypes: true });
+    for (const entry of entries) {
+      await cp(path.join(source, entry.name), path.join(target, entry.name), { recursive: true, force: true });
+    }
+    return { name: 'gstack hermes skills', ok: true, status: 'copied', path: target };
+  } catch (error) {
+    return {
+      name: 'gstack hermes skills',
+      ok: false,
+      status: 'copy-failed',
+      path: target,
+      warning: summarizeCommandError(error),
+    };
+  }
+}
+
+async function linkOrCopyGstackAsset(source: string, target: string): Promise<void> {
+  if (existsSync(target) || !existsSync(source)) return;
+  try {
+    await symlink(source, target);
+    return;
+  } catch {
+    const sourceStat = await stat(source);
+    if (sourceStat.isDirectory()) {
+      await cp(source, target, { recursive: true, force: false, errorOnExist: false });
+    } else {
+      await copyFile(source, target);
+    }
+  }
+}
+
+async function linkGstackAssets(gstackDir: string): Promise<WorkPrerequisiteStep> {
+  const skillsDir = hermesSkillsDir();
+  if (!await directoryExists(skillsDir)) {
+    return { name: 'gstack skill assets', ok: false, status: 'missing-skills-dir', path: skillsDir };
+  }
+  const assets = [
+    { name: 'bin', source: path.join(gstackDir, 'bin') },
+    { name: 'browse', source: path.join(gstackDir, 'browse') },
+    { name: 'ETHOS.md', source: path.join(gstackDir, 'ETHOS.md') },
+  ];
+  let linked = 0;
+  try {
+    const entries = await readdir(skillsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || !entry.name.startsWith('gstack')) continue;
+      const skillDir = path.join(skillsDir, entry.name);
+      if (!existsSync(path.join(skillDir, 'SKILL.md'))) continue;
+      for (const asset of assets) {
+        await linkOrCopyGstackAsset(asset.source, path.join(skillDir, asset.name));
+      }
+      linked++;
+    }
+    return { name: 'gstack skill assets', ok: linked > 0, status: linked > 0 ? 'linked' : 'no-gstack-skills', path: skillsDir };
+  } catch (error) {
+    return { name: 'gstack skill assets', ok: false, status: 'failed', path: skillsDir, warning: summarizeCommandError(error) };
+  }
+}
+
+async function writeGstackWrapper(gstackDir: string): Promise<WorkPrerequisiteStep> {
+  const target = gstackWrapperPath();
+  ensureDir(path.dirname(target));
+  const text = `#!/usr/bin/env sh
+set -eu
+GSTACK_HOME="\${GSTACK_HOME:-${gstackDir}}"
+if [ "\${1:-}" = "" ] || [ "\${1:-}" = "--help" ] || [ "\${1:-}" = "-h" ]; then
+  echo "gstack skills are installed under $HOME/.hermes/skills; usage: gstack <skill-name>"
+  exit 0
+fi
+skill="$1"
+shift || true
+for name in "gstack-$skill" "$skill"; do
+  if [ -f "$HOME/.hermes/skills/$name/SKILL.md" ]; then
+    printf '%s\\n' "$HOME/.hermes/skills/$name/SKILL.md"
+    exit 0
+  fi
+  if [ -f "$GSTACK_HOME/$skill/SKILL.md" ]; then
+    printf '%s\\n' "$GSTACK_HOME/$skill/SKILL.md"
+    exit 0
+  fi
+done
+echo "gstack skill not found: $skill" >&2
+exit 2
+`;
+  try {
+    await writeFile(target, text, 'utf8');
+    await chmod(target, 0o755);
+    return { name: 'gstack user command', ok: true, status: 'written', path: target };
+  } catch (error) {
+    return { name: 'gstack user command', ok: false, status: 'failed', path: target, warning: summarizeCommandError(error) };
+  }
+}
+
+async function ensureGstackPrerequisite(): Promise<WorkPrerequisiteStep[]> {
+  const steps: WorkPrerequisiteStep[] = [];
+  const gstackDir = gstackHomeDir();
+  const alreadyHasCommand = await commandAvailable('gstack') || existsSync(gstackWrapperPath());
+  const alreadyHasSkill = gstackSkillExists('gstack-plan-ceo-review') || gstackSkillExists('plan-ceo-review');
+  if (alreadyHasCommand && alreadyHasSkill) {
+    steps.push({ name: 'gstack', ok: true, status: 'present', path: gstackWrapperPath() });
+    steps.push({ name: 'gstack plan-ceo-review skill', ok: true, status: 'present', path: hermesSkillPath(resolvePoolMethodologySkill(AXIS_POOLS_BY_KIND.idea)) });
+    return steps;
+  }
+
+  logWorkPrerequisite('gstack command or plan-ceo-review skill is missing; attempting user-local setup.');
+  const repoUrl = process.env.AXIS_GSTACK_REPO_URL ?? 'https://github.com/garrytan/gstack.git';
+  if (await directoryExists(gstackDir)) {
+    steps.push(await runPrerequisiteCommand('git', ['-C', gstackDir, 'pull', '--ff-only']));
+  } else {
+    steps.push(await runPrerequisiteCommand('git', ['clone', repoUrl, gstackDir]));
+  }
+
+  if (await directoryExists(gstackDir)) {
+    if (await commandAvailable('bun')) {
+      steps.push(await runPrerequisiteCommand('bun', ['install'], { cwd: gstackDir }));
+      steps.push(await runPrerequisiteCommand('bun', ['run', 'gen:skill-docs', '--host', 'hermes'], { cwd: gstackDir }));
+    } else {
+      const warning = 'bun was not found on PATH; skipped gstack dependency install and Hermes skill generation.';
+      logWorkPrerequisite(`warning: ${warning}`);
+      steps.push({ name: 'bun', ok: false, status: 'missing', warning });
+    }
+    steps.push(await copyGstackHermesSkills(gstackDir));
+    steps.push(await linkGstackAssets(gstackDir));
+    steps.push(await writeGstackWrapper(gstackDir));
+  } else {
+    steps.push({ name: 'gstack checkout', ok: false, status: 'missing', path: gstackDir, warning: `gstack checkout is unavailable at ${gstackDir}.` });
+  }
+
+  const hasCommandEvidence = await commandAvailable('gstack') || existsSync(gstackWrapperPath());
+  const hasSkillEvidence = gstackSkillExists('gstack-plan-ceo-review') || gstackSkillExists('plan-ceo-review');
+  steps.push({
+    name: 'gstack verification',
+    ok: hasCommandEvidence && hasSkillEvidence,
+    status: hasCommandEvidence && hasSkillEvidence ? 'verified' : 'missing-evidence',
+    path: hasSkillEvidence ? hermesSkillPath(resolvePoolMethodologySkill(AXIS_POOLS_BY_KIND.idea)) : undefined,
+    warning: hasCommandEvidence && hasSkillEvidence ? undefined : 'gstack setup did not produce both command and plan-ceo-review skill evidence.',
+  });
+  return steps;
+}
+
+async function superpowersSkillEvidence(): Promise<string | null> {
+  const root = codexSuperpowersSkillRoot();
+  const required = [
+    path.join(root, 'brainstorming', 'SKILL.md'),
+    path.join(root, 'systematic-debugging', 'SKILL.md'),
+  ];
+  return required.every((filePath) => existsSync(filePath)) ? root : null;
+}
+
+async function findSuperpowersCacheSource(): Promise<string | null> {
+  const explicit = process.env.AXIS_CODEX_SUPERPOWERS_SOURCE;
+  const candidates = [
+    explicit ? path.resolve(explicit) : null,
+    path.join(homeDir(), '.codex', '.tmp', 'plugins', 'plugins', 'superpowers', 'skills'),
+    path.join(homeDir(), '.codex', 'plugins', 'superpowers', 'skills'),
+  ].filter((entry): entry is string => Boolean(entry));
+  for (const candidate of candidates) {
+    if (existsSync(path.join(candidate, 'brainstorming', 'SKILL.md')) || existsSync(path.join(candidate, 'systematic-debugging', 'SKILL.md'))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+async function linkOrCopySuperpowersSkills(source: string, target: string): Promise<WorkPrerequisiteStep> {
+  ensureDir(path.dirname(target));
+  if (path.resolve(source) === path.resolve(target)) {
+    return { name: 'codex superpowers skills', ok: true, status: 'same-path', path: target };
+  }
+  try {
+    if (!existsSync(target)) {
+      try {
+        await symlink(source, target);
+        return { name: 'codex superpowers skills', ok: true, status: 'linked', path: target };
+      } catch {
+        await cp(source, target, { recursive: true, force: false, errorOnExist: false });
+        return { name: 'codex superpowers skills', ok: true, status: 'copied', path: target };
+      }
+    }
+    await cp(source, target, { recursive: true, force: false, errorOnExist: false });
+    return { name: 'codex superpowers skills', ok: true, status: 'merged', path: target };
+  } catch (error) {
+    return { name: 'codex superpowers skills', ok: false, status: 'failed', path: target, warning: summarizeCommandError(error) };
+  }
+}
+
+async function ensureCodexSuperpowersPrerequisite(): Promise<WorkPrerequisiteStep[]> {
+  const steps: WorkPrerequisiteStep[] = [];
+  const existing = await superpowersSkillEvidence();
+  if (existing) {
+    steps.push({ name: 'codex superpowers skills', ok: true, status: 'present', path: existing });
+    return steps;
+  }
+
+  logWorkPrerequisite('Codex Superpowers skills are missing; attempting user-local setup.');
+  const marketplaceSource = process.env.AXIS_CODEX_SUPERPOWERS_MARKETPLACE;
+  if (marketplaceSource && await commandAvailable('codex')) {
+    steps.push(await runPrerequisiteCommand('codex', ['plugin', 'marketplace', 'add', marketplaceSource]));
+  }
+
+  const source = await findSuperpowersCacheSource();
+  if (source) {
+    steps.push(await linkOrCopySuperpowersSkills(source, codexSuperpowersSkillRoot()));
+  } else {
+    const warning = 'No Codex Superpowers plugin cache was found to link/copy into ~/.codex/skills/superpowers.';
+    logWorkPrerequisite(`warning: ${warning}`);
+    steps.push({ name: 'codex superpowers cache', ok: false, status: 'missing', warning });
+  }
+
+  const verified = await superpowersSkillEvidence();
+  steps.push({
+    name: 'codex superpowers verification',
+    ok: Boolean(verified),
+    status: verified ? 'verified' : 'missing-evidence',
+    path: verified ?? undefined,
+    warning: verified ? undefined : 'Codex Superpowers setup did not produce filesystem evidence under ~/.codex/skills/superpowers.',
+  });
+  return steps;
+}
+
+async function ensureWorkThreadPrerequisites(): Promise<Json> {
+  const steps = [
+    ...await ensureGstackPrerequisite(),
+    ...await ensureCodexSuperpowersPrerequisite(),
+  ];
+  const warnings = steps.map((step) => step.warning).filter((entry): entry is string => Boolean(entry));
+  return {
+    ok: steps.every((step) => step.ok),
+    steps,
+    warnings,
+  };
+}
+
+function poolKindFromSeed(seed: Json): PoolConfig['kind'] | null {
+  const raw = (safeString(seed.kind) ?? safeString(seed.pool) ?? safeString(seed.sourceType) ?? '').toLowerCase();
+  if (raw === 'idea' || raw === 'ide') return 'idea';
+  if (raw === 'requirement' || raw === 'req') return 'requirement';
+  if (raw === 'bug') return 'bug';
+  if (raw === 'suggestion' || raw === 'sug' || raw === 'improvement') return 'suggestion';
+  return null;
+}
+
+function poolSeedId(seed: Json): string | null {
+  return safeString(seed.id) ?? safeString(seed.uuid) ?? safeString(seed.seedId) ?? safeString(seed.documentId);
+}
+
+function poolSeedText(seed: Json): string {
+  return safeString(seed.seed)
+    ?? safeString(seed.summary)
+    ?? safeString(seed.title)
+    ?? JSON.stringify(seed);
+}
+
+function buildWorkRefineAgentPrompt(pool: PoolConfig, seed: Json, prepare: Json, methodologySkill: string): string {
+  return [
+    'You are an Axis work refine Agent converting one pending pool seed into an Orbit/Axis pool artifact.',
+    `Pool kind: ${pool.kind}`,
+    `Pool command: ${pool.command}`,
+    `methodologySkill: ${methodologySkill}`,
+    'You MUST use the methodology skill before producing the Orbit/Axis pool artifact.',
+    'After using the methodology, produce one orbit.pool.artifact.v1 JSON artifact for the seed.',
+    'Do not write files directly. Return only the final JSON artifact.',
+    'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
+    '',
+    'Prepare context:',
+    JSON.stringify(prepare, null, 2),
+    '',
+    'Pending seed:',
+    JSON.stringify(seed, null, 2),
+    '',
+    'Seed text:',
+    poolSeedText(seed),
+  ].join('\n');
+}
+
+async function resolveWorkAgent(repoPath: string): Promise<Exclude<PoolAgentChoice, 'current' | 'none'> | null> {
+  const explicit = parsePoolAgentArg(getArg('--agent'));
+  if (explicit === 'current') throw new Error('--agent current is not supported for axis work; use codex, claude-code, or none.');
+  if (explicit === 'none') return null;
+  if (explicit === 'codex' || explicit === 'claude-code') return explicit;
+  const binding = await readProjectBinding(repoPath);
+  if (binding?.selectedAgent && binding.selectedAgent !== 'none') return binding.selectedAgent;
+  if (await commandAvailable('codex')) return 'codex';
+  if (await commandAvailable('claude')) return 'claude-code';
+  return null;
+}
+
+async function convertPoolSeedWithAgent(
+  agent: Exclude<PoolAgentChoice, 'current' | 'none'>,
+  repoPath: string,
+  seed: Json,
+): Promise<Json> {
+  const kind = poolKindFromSeed(seed);
+  const seedId = poolSeedId(seed);
+  if (!kind) {
+    return { ok: false, seedId, kind: null, error: 'Seed has no supported kind.' };
+  }
+  const pool = AXIS_POOLS_BY_KIND[kind];
+  const methodologySkill = resolvePoolMethodologySkill(pool);
+  const binding = await readProjectBinding(repoPath);
+  const cloud = await fetchPoolTemplateContext(pool, repoPath);
+  const prepare: Json = {
+    schemaVersion: 'orbit.pool.prepare.v1',
+    pool: pool.pool,
+    kind: pool.kind,
+    displayName: pool.displayName,
+    repo: repoPath,
+    bound: Boolean(binding),
+    binding: safeProjectBinding(binding, repoPath),
+    skill: pool.skill,
+    methodologySkill,
+    template: cloud.template,
+    projectContext: cloud.projectContext,
+    expectedArtifactSchema: 'orbit.pool.artifact.v1',
+    instructions: [
+      `Use methodology skill ${methodologySkill} before producing the artifact.`,
+      'Use the pending seed plus template.markdownTemplate plus projectContext to produce orbit.pool.artifact.v1 JSON.',
+      'Return only the final JSON artifact.',
+      'Do not include credentials, tokens, passwords, sessions, or private keys in artifacts.',
+    ],
+    warning: cloud.warning,
+  };
+  try {
+    const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodologySkill));
+    const artifact = normalizePoolArtifact(pool, output);
+    const submit = await submitPoolArtifact(pool, repoPath, artifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
+    return {
+      ok: true,
+      seedId,
+      kind,
+      pool: pool.pool,
+      methodologySkill,
+      artifactTitle: artifact.title,
+      submit,
+      warning: cloud.warning,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      seedId,
+      kind,
+      pool: pool.pool,
+      methodologySkill,
+      error: error instanceof Error ? error.message : String(error),
+      warning: cloud.warning,
+    };
+  }
+}
+
+async function buildWorkRun(repoPath: string): Promise<Json> {
+  const probe = await buildWorkProbe(repoPath);
+  const lanes = isJson(probe.lanes) ? probe.lanes : {};
+  const refineLane = isJson(lanes.refine) ? lanes.refine as Json : {};
+  const seeds = Array.isArray(refineLane.items) ? refineLane.items.filter(isJson) : [];
+  const binding = await readProjectBinding(repoPath);
+  const projectId = binding ? projectApiId(binding) : null;
+  const payload: Json = {
+    ...probe,
+    mode: 'work-once',
+    warning: null,
+    refine: {
+      agent: null,
+      prerequisites: null,
+      results: [],
+      warning: null,
+    },
+  };
+
+  if (!binding || !projectId) {
+    const warning = !binding
+      ? 'No AxisNode project binding found; work thread did not launch.'
+      : 'Project binding has no projectId/projectUuid; work thread did not launch.';
+    (payload.refine as Json).warning = warning;
+    payload.warning = warning;
+    return payload;
+  }
+
+  if (seeds.length === 0) {
+    (payload.refine as Json).warning = 'No pending-confirmation pool seeds found; work thread did not launch a refine worker.';
+    return payload;
+  }
+
+  const prerequisites = await ensureWorkThreadPrerequisites();
+  (payload.refine as Json).prerequisites = prerequisites;
+
+  const agent = await resolveWorkAgent(repoPath);
+  (payload.refine as Json).agent = agent;
+  if (!agent) {
+    const warning = 'No worker Agent is available; install codex or pass --agent codex/claude-code.';
+    (payload.refine as Json).warning = warning;
+    payload.warning = warning;
+    return payload;
+  }
+
+  const results: Json[] = [];
+  for (const seed of seeds) {
+    results.push(await convertPoolSeedWithAgent(agent, repoPath, seed));
+  }
+  (payload.refine as Json).results = results;
+  const failures = results.filter((result) => result.ok !== true);
+  if (failures.length > 0) {
+    const warning = `${failures.length} pool seed conversion(s) failed.`;
+    (payload.refine as Json).warning = warning;
+    payload.warning = warning;
+  }
+  return payload;
+}
+
 async function buildWorkProbe(repoPath: string): Promise<Json> {
   const binding = await readProjectBinding(repoPath);
   const spawn = hasFlag('--spawn');
@@ -3509,6 +4033,7 @@ async function buildWorkProbe(repoPath: string): Promise<Json> {
     refine: {
       description: 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.',
       query: 'pool-seeds?status=pending-confirmation',
+      methodologyByKind: poolMethodologyMap(),
       items: [],
       warning: null,
     },
@@ -3548,11 +4073,11 @@ async function buildWorkProbe(repoPath: string): Promise<Json> {
     lanes,
     plan: [
       'Probe Hub queues only; do not launch agents by default.',
-      'Refine lane: convert pending-confirmation seeds into confirmed requirements or work-items after human confirmation.',
+      'Refine lane: convert pending-confirmation seeds into confirmed documents/work-items with the mapped methodology skill when --spawn is passed.',
       'Execute lane: claim confirmed/ready work-items, run implementation in an isolated workspace, verify, then write back status.',
-      'TODO: add explicit --spawn refine and --spawn execute subagent launchers after Hub lifecycle APIs are stable.',
+      'TODO: extend --spawn to execute lane after Hub lifecycle APIs are stable.',
     ],
-    warning: spawn ? '--spawn is reserved for a future explicit launcher; this skeleton did not start agents.' : null,
+    warning: spawn ? '--spawn requested; refine worker launches only when pending pool seeds exist.' : null,
   };
 }
 
@@ -3571,6 +4096,13 @@ function printWorkProbe(payload: Json): void {
     console.log(`${laneName}: ${items.length} item(s)`);
     if (safeString(lane.warning)) console.log(`${laneName} warning: ${lane.warning}`);
   }
+  const refine = isJson(payload.refine) ? payload.refine : null;
+  if (refine) {
+    const results = Array.isArray(refine.results) ? refine.results : [];
+    if (safeString(refine.agent)) console.log(`refine agent: ${refine.agent}`);
+    console.log(`refine converted: ${results.filter((entry) => isJson(entry) && entry.ok === true).length}/${results.length}`);
+    if (safeString(refine.warning)) console.log(`refine warning: ${refine.warning}`);
+  }
   if (safeString(payload.warning)) console.log(`warning: ${payload.warning}`);
 }
 
@@ -3581,22 +4113,24 @@ async function handleWorkCommand(command?: string): Promise<void> {
   }
   const repoPath = resolveRepoArg();
   if (command === 'once') {
-    printWorkProbe(await buildWorkProbe(repoPath));
+    printWorkProbe(hasFlag('--spawn') ? await buildWorkRun(repoPath) : await buildWorkProbe(repoPath));
     return;
   }
   if (command === 'loop') {
     const iterations = integerArg('--iterations', 1, 20);
     const results: Json[] = [];
     for (let index = 0; index < iterations; index++) {
-      results.push({ iteration: index + 1, ...await buildWorkProbe(repoPath) });
+      results.push({ iteration: index + 1, ...(hasFlag('--spawn') ? await buildWorkRun(repoPath) : await buildWorkProbe(repoPath)) });
     }
     const payload = {
       ok: true,
-      mode: 'loop-skeleton',
+      mode: hasFlag('--spawn') ? 'loop-work' : 'loop-skeleton',
       repo: repoPath,
       iterations,
       results,
-      warning: 'Loop skeleton is bounded and does not sleep or launch agents yet.',
+      warning: hasFlag('--spawn')
+        ? 'Loop is bounded and runs the refine worker once per iteration when pending seeds exist.'
+        : 'Loop skeleton is bounded and does not sleep or launch agents yet.',
     };
     if (hasFlag('--json')) console.log(JSON.stringify(payload, null, 2));
     else {
