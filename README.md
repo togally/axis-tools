@@ -44,7 +44,7 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 查看当前 repo 的 AxisNode 绑定
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
-  - `work-review` 持续运行 review/refine worker，把待确认 seed 转成 pool document / WorkItems
+  - `work-review` 持续运行 review/refine worker，把待确认 seed 和 WorkItem 池里的 `pending-confirmation` 条目转成 pool document / WorkItems
   - `work-coding` 持续探测 confirmed/ready WorkItems；Hub claim/execute/writeback API 未完成前会明确 blocked/TODO，不会假装实现成功
   - `--repo <path>` 是显式窄模式，只处理该路径下已绑定的单个 repo/project
 
@@ -232,7 +232,7 @@ axis work-coding --repo /path/to/repo --once --json
 
 代码和输出里固定建模两条 lane：
 
-- `refine`: 读取 `pending-confirmation` 的 pool seeds；`axis work-review` 会启动 review worker，把 seed 转成 pool document / WorkItems。
+- `refine`: 读取 `pending-confirmation` 的 pool seeds，以及 WorkItem 池 UI 中可见的 `pending-confirmation` 想法/需求/BUG/建议优化条目；`axis work-review` 会启动 review worker，把它们转成 pool document / WorkItems。
 - `execute`: 读取 confirmed / ready requirements 或 work-items；`axis work-coding` 会探测 ready WorkItems。Hub claim/execute/writeback API 未完成前，它只返回 blocked/TODO warning，不会启动 coding Agent 或写回成功状态。
 
 兼容入口仍保留但已废弃：`axis work-once`、`axis work-loop`、`axis work once`、`axis work loop` 都映射到 review worker。`axis work once` 默认仍只做队列 probe，`axis work once --spawn` 运行单次 review worker。
@@ -245,9 +245,11 @@ axis work-coding --repo /path/to/repo --once --json
 - `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定；未传时使用用户 workspace。
 - `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
 - `--agent <codex|claude-code|none>`：选择 review worker Agent；未传时沿用项目绑定或本机可用 Agent。`work-coding` 当前只 probe，不启动 Agent。
-- `--json`：stdout 只输出 JSON；progress 和 Agent stderr 走 stderr 或被抑制。输出包含 `mode: "work-review"` / `mode: "work-coding"`、`workerType`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。
+- `--json`：stdout 只输出 JSON；progress 和 Agent stderr 走 stderr 或被抑制。输出包含 `mode: "work-review"` / `mode: "work-coding"`、`workerType`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。review lane 还会暴露 `lanes.refine.sourceCounts`、候选 `candidateSource` / `candidateType`，以及 `summary.pendingBySource` / `summary.candidatesByType`。
 
-默认 workspace 模式需要已登录 session；未登录会提示先执行 `axis login`，不会用 `no-project-binding` 误导。没有可访问项目、没有 pending review seeds 或没有 ready coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。`--repo <path>` 窄模式仍要求该 repo 有可用项目绑定；缺失绑定时保持单 repo 的 clean stop 行为。
+pool document 的 `draft` / `reviewing` 状态通常表示 review worker 已生成或用户正在编辑的 artifact，不作为新的 raw review 输入重复消费；`pending-confirmation` raw seed document 会通过关联的 pending WorkItem 或 legacy pool-seed 条目进入队列，并按 `sourceArtifactId` / document id 去重。
+
+默认 workspace 模式需要已登录 session；未登录会提示先执行 `axis login`，不会用 `no-project-binding` 误导。没有可访问项目、没有 pending review seeds / WorkItems 或没有 ready coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。`--repo <path>` 窄模式仍要求该 repo 有可用项目绑定；缺失绑定时保持单 repo 的 clean stop 行为。
 
 review worker 会把 seed kind 映射到方法论技能，并把本机 `SKILL.md` 内容直接注入传给 Agent 的 prompt/context，而不是只写一个技能名：
 
@@ -260,7 +262,7 @@ idea 方法论内容按顺序查找：`~/.hermes/skills/gstack-plan-ceo-review/S
 
 worker prompt 会把交互式方法论改成一次性自动输出：Agent 不得向用户提问或停下来等确认；如果方法论原本要提问，必须把问题写进 artifact markdown 的 structured Decision block，列出 options、明确 recommended option 和 rationale，然后在同一轮里按 recommended option 继续生成并上传。多个可行路径会被追加/更新到 `可选方案 / 推荐方案` 章节，并标出推荐方案。Hub seed/context 里如果带有已有 document、sourceArtifact、artifact、markdown、selectedOption、feedback 等字段，worker 会把它当成用户编辑反馈来重新 review/refine；用户已经改写或选择的方案优先保留，仍有歧义时继续给出可选方案并选一个推荐默认值。
 
-启动 review worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work-review` 或废弃 review aliases 且存在待 review seeds 时发生；普通 `axis-ide` / `axis-req` / `axis-bug` / `axis-sug` 的 `"text"` 入口仍然只提交 raw seed，不启动 Agent。
+启动 review worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work-review` 或废弃 review aliases 且存在待 review seeds / WorkItems 时发生；普通 `axis-ide` / `axis-req` / `axis-bug` / `axis-sug` 的 `"text"` 入口仍然只提交 raw seed，不启动 Agent。
 
 ### 绑定本地目录
 

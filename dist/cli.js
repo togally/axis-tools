@@ -93,7 +93,10 @@ function printUsage() {
 }
 function printWorkWorkerUsage(workerType) {
     const command = workerType === 'review' ? 'work-review' : 'work-coding';
-    console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nDefault scope:\n  Without --repo, use AXIS_HOME or ~/.axis, sync accessible AxisNode projects, and loop all permitted project queues.\n\nFlags:\n  --repo <path>                    Narrow to one repo and read its AxisNode project binding\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --backend-url <url>              AxisNode backend; defaults to cached login backend or shared backend\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
+    const queueText = workerType === 'review'
+        ? '\nReview queue:\n  Consumes pending pool-seeds and pending-confirmation pool WorkItems across accessible projects.\n'
+        : '\nCoding queue:\n  Probes confirmed/ready WorkItems across accessible projects.\n';
+    console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nDefault scope:\n  Without --repo, use AXIS_HOME or ~/.axis, sync accessible AxisNode projects, and loop all permitted project queues.${queueText}\nFlags:\n  --repo <path>                    Narrow to one repo and read its AxisNode project binding\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --backend-url <url>              AxisNode backend; defaults to cached login backend or shared backend\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
 }
 function isHelpFlag(value) {
     return value === '--help' || value === '-h';
@@ -952,6 +955,38 @@ async function postOrbitJson(backendUrl, routePath, body, token) {
     try {
         response = await fetch(url, {
             method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                ...(token ? { authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body),
+        });
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`Cannot reach AxisNode backend at ${url}: ${message}`);
+    }
+    if (!response.ok) {
+        if (response.status === 401)
+            throw new OrbitCliError(loginRequiredMessage(backendUrl));
+        if (response.status === 403)
+            throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
+        throw new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}`);
+    }
+    try {
+        return await response.json();
+    }
+    catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`AxisNode backend returned invalid JSON for ${url}: ${message}`);
+    }
+}
+async function patchOrbitJson(backendUrl, routePath, body, token) {
+    const url = `${normalizeBackendUrl(backendUrl)}${routePath}`;
+    let response;
+    try {
+        response = await fetch(url, {
+            method: 'PATCH',
             headers: {
                 'content-type': 'application/json',
                 ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -3800,8 +3835,12 @@ async function resolveWorkAgent(repoPath) {
 async function convertPoolSeedWithAgent(agent, repoPath, seed, options = {}) {
     const kind = poolKindFromSeed(seed);
     const seedId = poolSeedId(seed);
+    const candidateSource = candidateSourceFromSeed(seed);
+    const sourceId = safeString(seed.sourceId) ?? seedId;
+    const workItemIdValue = safeString(seed.workItemId);
+    const documentIdValue = safeString(seed.documentId) ?? safeString(seed.sourceArtifactId);
     if (!kind) {
-        return { ok: false, seedId, kind: null, error: 'Seed has no supported kind.' };
+        return { ok: false, seedId, kind: null, candidateSource, candidateType: null, sourceId, workItemId: workItemIdValue, documentId: documentIdValue, error: 'Seed has no supported kind.' };
     }
     const pool = AXIS_POOLS_BY_KIND[kind];
     const methodology = await resolvePoolMethodologyInjection(pool);
@@ -3842,11 +3881,20 @@ async function convertPoolSeedWithAgent(agent, repoPath, seed, options = {}) {
         const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodology), options);
         const artifact = normalizePoolArtifact(pool, output);
         const submit = await submitPoolArtifact(pool, repoPath, artifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
+        const handled = reviewWorkItemIdsForHandling(seed).length > 0
+            ? await markReviewWorkItemHandled(repoPath, seed, submit)
+            : null;
+        const handledWarning = isJson(handled) ? safeString(handled.warning) : null;
         return {
             ok: true,
             seedId,
             kind,
             pool: pool.pool,
+            candidateSource,
+            candidateType: kind,
+            sourceId,
+            workItemId: workItemIdValue,
+            documentId: documentIdValue,
             methodologySkill,
             methodologySource: methodology.source,
             methodologyPath: methodology.path,
@@ -3855,7 +3903,8 @@ async function convertPoolSeedWithAgent(agent, repoPath, seed, options = {}) {
             methodologyTruncated: methodology.truncated,
             artifactTitle: artifact.title,
             submit,
-            warning: combineWarnings(cloud.warning, methodology.warning),
+            handled,
+            warning: combineWarnings(cloud.warning, methodology.warning, handledWarning),
         };
     }
     catch (error) {
@@ -3864,6 +3913,11 @@ async function convertPoolSeedWithAgent(agent, repoPath, seed, options = {}) {
             seedId,
             kind,
             pool: pool.pool,
+            candidateSource,
+            candidateType: kind,
+            sourceId,
+            workItemId: workItemIdValue,
+            documentId: documentIdValue,
             methodologySkill,
             methodologySource: methodology.source,
             methodologyPath: methodology.path,
@@ -3887,18 +3941,288 @@ function workItemKind(item) {
 function workItemTitle(item) {
     return safeString(item.title) ?? safeString(item.name) ?? safeString(item.summary) ?? 'Untitled work item';
 }
+function poolKindFromWorkItem(item) {
+    const rawPool = (safeString(item.pool) ?? safeString(item.category) ?? '').toLowerCase();
+    if (rawPool === 'requirement' || rawPool === 'req')
+        return 'requirement';
+    if (rawPool === 'idea' || rawPool === 'ide')
+        return 'idea';
+    if (rawPool === 'bug')
+        return 'bug';
+    if (rawPool === 'suggestion' || rawPool === 'sug' || rawPool === 'improvement' || rawPool === 'optimization')
+        return 'suggestion';
+    const rawKind = (safeString(item.kind) ?? safeString(item.type) ?? safeString(item.sourceType) ?? '').toLowerCase();
+    if (rawKind === 'requirement' || rawKind === 'req')
+        return 'requirement';
+    if (rawKind === 'idea' || rawKind === 'ide')
+        return 'idea';
+    if (rawKind === 'bug')
+        return 'bug';
+    if (rawKind === 'suggestion' || rawKind === 'sug' || rawKind === 'improvement' || rawKind === 'optimization')
+        return 'suggestion';
+    return null;
+}
+function reviewPoolForKind(kind) {
+    return kind === 'suggestion' ? 'improvement' : kind;
+}
+function poolSeedDocumentId(seed) {
+    return safeString(seed.documentId)
+        ?? safeString(seed.sourceArtifactId)
+        ?? (isJson(seed.document) ? extractId(seed.document) : null)
+        ?? (isJson(seed.sourceDocument) ? extractId(seed.sourceDocument) : null)
+        ?? poolSeedId(seed);
+}
+function normalizePoolSeedCandidate(seed) {
+    const kind = poolKindFromSeed(seed);
+    if (!kind)
+        return null;
+    const id = poolSeedId(seed) ?? poolSeedDocumentId(seed) ?? `${kind}:${poolSeedDisplayTitle(seed)}`;
+    const documentId = poolSeedDocumentId(seed) ?? undefined;
+    return {
+        ...seed,
+        id,
+        kind,
+        title: poolSeedDisplayTitle(seed),
+        seed: poolSeedText(seed),
+        notes: safeString(seed.notes) ?? safeString(seed.summary) ?? poolSeedText(seed),
+        status: safeString(seed.status) ?? 'pending-confirmation',
+        source: 'pool-seed',
+        sourceType: 'pool-seed',
+        sourceId: id,
+        candidateSource: 'pool-seed',
+        candidateType: kind,
+        pool: reviewPoolForKind(kind),
+        ...(documentId ? { documentId, sourceArtifactId: documentId } : {}),
+        originalSource: safeString(seed.source),
+        originalSourceId: safeString(seed.sourceId),
+    };
+}
+function normalizeWorkItemReviewCandidate(item) {
+    if ((safeString(item.status) ?? '').toLowerCase() !== 'pending-confirmation')
+        return null;
+    const kind = poolKindFromWorkItem(item);
+    if (!kind)
+        return null;
+    const id = workItemId(item);
+    if (!id)
+        return null;
+    const sourceArtifactId = safeString(item.sourceArtifactId) ?? safeString(item.documentId) ?? undefined;
+    const notes = safeString(item.notes) ?? safeString(item.summary) ?? '';
+    const seed = notes || workItemTitle(item);
+    return {
+        id,
+        kind,
+        title: workItemTitle(item),
+        seed,
+        notes: seed,
+        status: safeString(item.status) ?? 'pending-confirmation',
+        source: 'work-item',
+        sourceType: 'work-item',
+        sourceId: id,
+        candidateSource: 'work-item',
+        candidateType: kind,
+        pool: safeString(item.pool) ?? reviewPoolForKind(kind),
+        workItemId: id,
+        ...(sourceArtifactId ? { documentId: sourceArtifactId, sourceArtifactId } : {}),
+        workItem: compactWorkItem(item),
+    };
+}
+function reviewCandidateDedupeKeys(candidate) {
+    const keys = [];
+    if (candidate.documentId)
+        keys.push(`document:${candidate.documentId}`);
+    if (candidate.sourceArtifactId)
+        keys.push(`document:${candidate.sourceArtifactId}`);
+    if (candidate.source && candidate.sourceId)
+        keys.push(`${candidate.source}:${candidate.sourceId}`);
+    keys.push(`candidate:${candidate.id}`);
+    return [...new Set(keys)];
+}
+function appendUniqueString(target, key, value) {
+    if (!value)
+        return;
+    const current = Array.isArray(target[key]) ? target[key].filter((entry) => typeof entry === 'string') : [];
+    if (!current.includes(value))
+        current.push(value);
+    target[key] = current;
+}
+function attachDuplicateReviewCandidate(target, duplicate) {
+    appendUniqueString(target, 'duplicateSources', duplicate.candidateSource);
+    appendUniqueString(target, 'duplicateSourceIds', duplicate.sourceId);
+    appendUniqueString(target, 'duplicateWorkItemIds', duplicate.workItemId);
+}
+function dedupeReviewCandidates(candidates) {
+    const seen = new Map();
+    const deduped = [];
+    let duplicates = 0;
+    for (const candidate of candidates) {
+        const keys = reviewCandidateDedupeKeys(candidate);
+        const existing = keys.map((key) => seen.get(key)).find((entry) => Boolean(entry));
+        if (existing) {
+            attachDuplicateReviewCandidate(existing, candidate);
+            duplicates++;
+            continue;
+        }
+        deduped.push(candidate);
+        for (const key of keys)
+            seen.set(key, candidate);
+    }
+    return { candidates: deduped, duplicates };
+}
+function reviewCandidateSourceCounts(seeds, workItems, candidates, duplicates) {
+    return {
+        poolSeed: seeds.length,
+        workItem: workItems.length,
+        candidates: candidates.length,
+        duplicates,
+    };
+}
+function emptyReviewSourceCounts() {
+    return { poolSeed: 0, workItem: 0, candidates: 0, duplicates: 0 };
+}
+function countCandidatesBy(candidates, field) {
+    const counts = {};
+    for (const candidate of candidates) {
+        const value = safeString(candidate[field]);
+        if (!value)
+            continue;
+        counts[value] = (counts[value] ?? 0) + 1;
+    }
+    return counts;
+}
+function candidateSourceFromSeed(seed) {
+    const raw = safeString(seed.candidateSource) ?? safeString(seed.source);
+    return raw === 'work-item' ? 'work-item' : 'pool-seed';
+}
+const REVIEW_DOCUMENT_INPUT_POLICY = {
+    included: false,
+    reason: 'Draft/reviewing pool documents are generated or edited artifacts, not raw unconfirmed WorkItem-pool inputs. Pending raw-seed documents are consumed through linked pending-confirmation WorkItems or legacy pool-seed entries and deduped by document/sourceArtifactId.',
+};
+function optionalPoolSeedProbeWarning(warning) {
+    if (!warning)
+        return null;
+    if (/HTTP (404|405)\b/.test(warning) && /\/pool-seeds\b/.test(warning))
+        return null;
+    return warning;
+}
+async function discoverReviewCandidates(binding, projectId) {
+    const seedProbe = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/pool-seeds?status=pending-confirmation&page=1&pageSize=100`);
+    const workItemProbe = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/work-items?status=pending-confirmation&page=1&pageSize=100`);
+    const seedCandidates = seedProbe.items
+        .map(normalizePoolSeedCandidate)
+        .filter((candidate) => Boolean(candidate));
+    const workItemCandidates = workItemProbe.items
+        .map(normalizeWorkItemReviewCandidate)
+        .filter((candidate) => Boolean(candidate));
+    const deduped = dedupeReviewCandidates([...seedCandidates, ...workItemCandidates]);
+    return {
+        candidates: deduped.candidates,
+        sourceCounts: reviewCandidateSourceCounts(seedCandidates, workItemCandidates, deduped.candidates, deduped.duplicates),
+        warnings: [optionalPoolSeedProbeWarning(seedProbe.warning), workItemProbe.warning].filter((warning) => Boolean(warning)),
+    };
+}
+function reviewWorkItemIdsForHandling(candidate) {
+    const ids = [
+        safeString(candidate.workItemId),
+        ...(Array.isArray(candidate.duplicateWorkItemIds) ? candidate.duplicateWorkItemIds.map(safeString) : []),
+    ].filter((entry) => Boolean(entry));
+    return [...new Set(ids)];
+}
+async function markReviewWorkItemHandled(repoPath, candidate, submit) {
+    const workItemIds = reviewWorkItemIdsForHandling(candidate);
+    if (workItemIds.length === 0) {
+        return {
+            ok: false,
+            status: 'skipped',
+            warning: 'TODO: WorkItem review input had no workItemId; original pending WorkItem was not marked handled and may be processed again.',
+        };
+    }
+    const submitMode = safeString(submit.mode);
+    if (submitMode !== 'hub') {
+        return {
+            ok: false,
+            status: 'skipped',
+            workItemId: workItemIds[0],
+            workItemIds,
+            warning: `TODO: WorkItem(s) ${workItemIds.join(', ')} were converted but upload mode was ${submitMode ?? 'unknown'}; original pending WorkItem(s) were not marked handled and may be processed again.`,
+        };
+    }
+    const binding = await readProjectBinding(repoPath);
+    if (!binding) {
+        return {
+            ok: false,
+            status: 'skipped',
+            workItemId: workItemIds[0],
+            workItemIds,
+            warning: `TODO: WorkItem(s) ${workItemIds.join(', ')} were converted but no project binding was available for lifecycle update; they may be processed again.`,
+        };
+    }
+    const token = await tokenForBinding(binding);
+    const response = isJson(submit.response) ? submit.response : {};
+    const documentId = extractId(response) ?? safeString(submit.id);
+    const documentUrl = extractUrl(response) ?? safeString(submit.url);
+    const previousNotes = safeString(candidate.notes) ?? safeString(candidate.seed) ?? '';
+    const handledAt = new Date().toISOString();
+    const notes = [
+        `axis work-review converted this pending WorkItem into a pool document at ${handledAt}.`,
+        documentId ? `documentId: ${documentId}` : null,
+        documentUrl ? `url: ${documentUrl}` : null,
+        previousNotes ? `original notes: ${previousNotes}` : null,
+    ].filter((line) => Boolean(line)).join('\n');
+    const patches = [];
+    const failures = [];
+    try {
+        for (const workItemIdValue of workItemIds) {
+            const patch = await patchOrbitJson(binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemIdValue)}`, {
+                status: 'done',
+                notes,
+                owner: 'axis-work-review',
+                completedAt: handledAt,
+            }, token);
+            patches.push({ workItemId: workItemIdValue, response: patch });
+        }
+    }
+    catch (error) {
+        failures.push(error instanceof Error ? error.message : String(error));
+    }
+    if (failures.length === 0) {
+        return {
+            ok: true,
+            status: 'done',
+            workItemId: workItemIds[0],
+            workItemIds,
+            documentId,
+            url: documentUrl,
+            responses: patches,
+        };
+    }
+    return {
+        ok: false,
+        status: 'failed',
+        workItemId: workItemIds[0],
+        workItemIds,
+        documentId,
+        url: documentUrl,
+        responses: patches,
+        warning: `TODO: WorkItem(s) ${workItemIds.join(', ')} were converted and uploaded, but marking them handled failed: ${failures.join('; ')}. They may be processed again.`,
+    };
+}
 async function buildReviewWorkerIteration(repoPath, options = {}) {
     const probe = await buildWorkProbe(repoPath, options);
     const lanes = isJson(probe.lanes) ? probe.lanes : {};
     const refineLane = isJson(lanes.refine) ? lanes.refine : {};
     const seeds = Array.isArray(refineLane.items) ? refineLane.items.filter(isJson) : [];
-    options.progress?.(`queue: review pending ${seeds.length}`);
+    const sourceCounts = isJson(refineLane.sourceCounts) ? refineLane.sourceCounts : emptyReviewSourceCounts();
+    options.progress?.(`queue: review seeds ${numericValue(sourceCounts.poolSeed)}, workitems ${numericValue(sourceCounts.workItem)}, candidates ${seeds.length}`);
     const binding = await readProjectBinding(repoPath);
     const projectId = binding ? projectApiId(binding) : null;
     const review = {
         agent: null,
         prerequisites: null,
         results: [],
+        sourceCounts,
+        candidatesBySource: countCandidatesBy(seeds, 'candidateSource'),
+        candidatesByType: countCandidatesBy(seeds, 'candidateType'),
         warning: null,
     };
     const payload = {
@@ -3909,8 +4233,8 @@ async function buildReviewWorkerIteration(repoPath, options = {}) {
         review,
         refine: review,
         plan: [
-            'Run review worker for pending-confirmation pool seeds.',
-            'Map each seed kind to its methodology skill, inject the skill, launch the selected Agent, and submit a pool document.',
+            'Run review worker for pending-confirmation pool seeds and WorkItem-pool inputs.',
+            'Map each candidate kind to its methodology skill, inject the skill, launch the selected Agent, and submit a pool document.',
         ],
     };
     if (!binding || !projectId) {
@@ -3923,8 +4247,8 @@ async function buildReviewWorkerIteration(repoPath, options = {}) {
         return payload;
     }
     if (seeds.length === 0) {
-        review.warning = 'No pending-confirmation pool seeds found; review worker is idle.';
-        options.progress?.('idle: no pending-confirmation pool seeds');
+        review.warning = 'No pending-confirmation pool seeds or pool WorkItems found; review worker is idle.';
+        options.progress?.('idle: no pending-confirmation pool seeds or pool WorkItems');
         return payload;
     }
     const prerequisites = await ensureWorkThreadPrerequisites();
@@ -3943,7 +4267,8 @@ async function buildReviewWorkerIteration(repoPath, options = {}) {
     for (const seed of seeds) {
         const seedId = poolSeedId(seed) ?? '(unknown seed)';
         const kind = poolKindFromSeed(seed) ?? 'unknown';
-        options.progress?.(`seed: ${seedId} kind=${kind} title=${poolSeedDisplayTitle(seed)}`);
+        const candidateSource = candidateSourceFromSeed(seed);
+        options.progress?.(`candidate: ${candidateSource} ${seedId} kind=${kind} title=${poolSeedDisplayTitle(seed)}`);
         options.progress?.(`agent: launching ${agent} for ${seedId}`);
         const result = await convertPoolSeedWithAgent(agent, repoPath, seed, { progress: options.progress });
         results.push(result);
@@ -4028,10 +4353,12 @@ async function buildWorkProbe(repoPath, options = {}) {
     const spawn = options.spawn ?? hasFlag('--spawn');
     const lanes = {
         refine: {
-            description: 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.',
-            query: 'pool-seeds?status=pending-confirmation',
+            description: 'Refine pending-confirmation pool seeds and WorkItem-pool inputs into confirmed requirements/work-items.',
+            query: 'pool-seeds?status=pending-confirmation + work-items?status=pending-confirmation',
             methodologyByKind: poolMethodologyMap(),
             items: [],
+            sourceCounts: emptyReviewSourceCounts(),
+            documentInputs: REVIEW_DOCUMENT_INPUT_POLICY,
             warning: null,
         },
         execute: {
@@ -4044,10 +4371,11 @@ async function buildWorkProbe(repoPath, options = {}) {
     if (binding) {
         const projectId = projectApiId(binding);
         if (projectId) {
-            const refine = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/pool-seeds?status=pending-confirmation&page=1&pageSize=10`);
+            const refine = await discoverReviewCandidates(binding, projectId);
             const execute = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/work-items?status=ready&page=1&pageSize=10`);
-            lanes.refine.items = refine.items;
-            lanes.refine.warning = refine.warning;
+            lanes.refine.items = refine.candidates;
+            lanes.refine.sourceCounts = refine.sourceCounts;
+            lanes.refine.warning = refine.warnings.length > 0 ? refine.warnings.join(' ') : null;
             lanes.execute.items = execute.items;
             lanes.execute.warning = execute.warning;
         }
@@ -4070,11 +4398,11 @@ async function buildWorkProbe(repoPath, options = {}) {
         lanes,
         plan: [
             'Probe Hub queues only; do not launch agents by default.',
-            'Review worker: convert pending-confirmation seeds into confirmed documents/work-items with the mapped methodology skill.',
+            'Review worker: convert pending-confirmation seeds and pool WorkItems into confirmed documents/work-items with the mapped methodology skill.',
             'Coding worker: probe confirmed/ready work-items and report blocked until Hub claim/execute/writeback APIs are stable.',
             'TODO: implement Hub WorkItem claim, execution handoff, verification, and writeback APIs before coding execution.',
         ],
-        warning: spawn ? '--spawn requested; deprecated review alias launches only when pending pool seeds exist.' : null,
+        warning: spawn ? '--spawn requested; deprecated review alias launches only when pending pool seeds or WorkItem-pool inputs exist.' : null,
     };
 }
 function printWorkProbe(payload) {
@@ -4089,7 +4417,13 @@ function printWorkProbe(payload) {
     for (const laneName of ['refine', 'execute']) {
         const lane = isJson(lanes[laneName]) ? lanes[laneName] : {};
         const items = Array.isArray(lane.items) ? lane.items : [];
-        console.log(`${laneName}: ${items.length} item(s)`);
+        if (laneName === 'refine') {
+            const counts = isJson(lane.sourceCounts) ? lane.sourceCounts : emptyReviewSourceCounts();
+            console.log(`${laneName}: ${items.length} item(s), pool-seed ${numericValue(counts.poolSeed)}, work-item ${numericValue(counts.workItem)}, duplicates ${numericValue(counts.duplicates)}`);
+        }
+        else {
+            console.log(`${laneName}: ${items.length} item(s)`);
+        }
         if (safeString(lane.warning))
             console.log(`${laneName} warning: ${lane.warning}`);
     }
@@ -4113,6 +4447,13 @@ function pushUniqueWarning(warnings, value) {
 function numericValue(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
+function addNumericCounts(target, source) {
+    if (!isJson(source))
+        return;
+    for (const [key, value] of Object.entries(source)) {
+        target[key] = (target[key] ?? 0) + numericValue(value);
+    }
+}
 function summarizeWorkIteration(payload) {
     const lanes = isJson(payload.lanes) ? payload.lanes : {};
     const refineLane = isJson(lanes.refine) ? lanes.refine : {};
@@ -4124,7 +4465,8 @@ function summarizeWorkIteration(payload) {
             : {};
     const coding = isJson(payload.coding) ? payload.coding : {};
     const workerType = safeString(payload.workerType);
-    const pending = Array.isArray(refineLane.items) ? refineLane.items.length : 0;
+    const refineItems = Array.isArray(refineLane.items) ? refineLane.items.filter(isJson) : [];
+    const pending = refineItems.length;
     const ready = Array.isArray(executeLane.items) ? executeLane.items.length : 0;
     const results = Array.isArray(review.results) ? review.results.filter(isJson) : [];
     const converted = results.filter((entry) => entry.ok === true).length;
@@ -4142,6 +4484,8 @@ function summarizeWorkIteration(payload) {
         pushUniqueWarning(warnings, result.warning);
     return {
         pending,
+        pendingBySource: countCandidatesBy(refineItems, 'candidateSource'),
+        candidatesByType: countCandidatesBy(refineItems, 'candidateType'),
         ready,
         conversions: results.length,
         converted,
@@ -4156,6 +4500,8 @@ function summarizeWorkLoop(iterations, requested) {
         requested: requested ?? iterations.length,
         attempted: iterations.length,
         pending: 0,
+        pendingBySource: {},
+        candidatesByType: {},
         ready: 0,
         conversions: 0,
         converted: 0,
@@ -4169,6 +4515,8 @@ function summarizeWorkLoop(iterations, requested) {
             ? iteration.summary
             : summarizeWorkIteration(iteration);
         summary.pending += numericValue(iterationSummary.pending);
+        addNumericCounts(summary.pendingBySource, iterationSummary.pendingBySource);
+        addNumericCounts(summary.candidatesByType, iterationSummary.candidatesByType);
         summary.ready += numericValue(iterationSummary.ready);
         summary.conversions += numericValue(iterationSummary.conversions);
         summary.converted += numericValue(iterationSummary.converted);
@@ -4184,10 +4532,12 @@ function summarizeWorkLoop(iterations, requested) {
 function baseWorkLanes() {
     return {
         refine: {
-            description: 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.',
-            query: 'pool-seeds?status=pending-confirmation',
+            description: 'Refine pending-confirmation pool seeds and WorkItem-pool inputs into confirmed requirements/work-items.',
+            query: 'pool-seeds?status=pending-confirmation + work-items?status=pending-confirmation',
             methodologyByKind: poolMethodologyMap(),
             items: [],
+            sourceCounts: emptyReviewSourceCounts(),
+            documentInputs: REVIEW_DOCUMENT_INPUT_POLICY,
             warning: null,
         },
         execute: {
@@ -4206,6 +4556,11 @@ function appendLaneItemsAndWarnings(targetLanes, sourcePayload, warnings) {
         const targetItems = Array.isArray(targetLane.items) ? targetLane.items : [];
         const sourceItems = Array.isArray(sourceLane.items) ? sourceLane.items.filter(isJson) : [];
         targetLane.items = [...targetItems, ...sourceItems];
+        if (laneName === 'refine') {
+            const targetCounts = isJson(targetLane.sourceCounts) ? targetLane.sourceCounts : emptyReviewSourceCounts();
+            addNumericCounts(targetCounts, sourceLane.sourceCounts);
+            targetLane.sourceCounts = targetCounts;
+        }
         pushUniqueWarning(warnings, sourceLane.warning);
         targetLanes[laneName] = targetLane;
     }
@@ -4213,6 +4568,8 @@ function appendLaneItemsAndWarnings(targetLanes, sourcePayload, warnings) {
 function summarizeWorkspaceIteration(projectPayloads, workerType, warnings) {
     const summary = {
         pending: 0,
+        pendingBySource: {},
+        candidatesByType: {},
         ready: 0,
         conversions: 0,
         converted: 0,
@@ -4226,6 +4583,8 @@ function summarizeWorkspaceIteration(projectPayloads, workerType, warnings) {
     for (const projectPayload of projectPayloads) {
         const projectSummary = summarizeWorkIteration(projectPayload);
         summary.pending += projectSummary.pending;
+        addNumericCounts(summary.pendingBySource, projectSummary.pendingBySource);
+        addNumericCounts(summary.candidatesByType, projectSummary.candidatesByType);
         summary.ready += projectSummary.ready;
         summary.conversions += projectSummary.conversions;
         summary.converted += projectSummary.converted;

@@ -442,7 +442,7 @@ async function writeWorkPrerequisites(home) {
 }
 
 async function withPoolServer(fn, options = {}) {
-  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0, loginCount: 0, accountByToken: {} };
+  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0, loginCount: 0, accountByToken: {}, workItemUpdates: [] };
   const catalog = {
     products: [
       {
@@ -498,6 +498,25 @@ async function withPoolServer(fn, options = {}) {
       });
       req.on('end', () => resolve(body ? JSON.parse(body) : {}));
     });
+    const workItems = () => options.workItems ?? [
+      { id: 'wi-old', title: 'Existing item', type: 'requirement', pool: 'requirement', status: 'ready' },
+    ];
+    const workItemMatches = (item, url) => {
+      const pool = url.searchParams.get('pool') ?? url.searchParams.get('category');
+      const status = url.searchParams.get('status');
+      const kind = url.searchParams.get('kind');
+      const type = url.searchParams.get('type');
+      if (pool && item.pool !== pool) return false;
+      if (status && item.status !== status) return false;
+      if (type && item.type !== type) return false;
+      if (kind) {
+        if (item.kind === kind || item.type === kind) return true;
+        if (kind === 'suggestion' && (item.pool === 'improvement' || item.type === 'improvement')) return true;
+        if (item.pool === kind) return true;
+        return false;
+      }
+      return true;
+    };
 
     if (req.method === 'POST' && req.url === '/api/login') {
       state.loginCount++;
@@ -584,10 +603,9 @@ async function withPoolServer(fn, options = {}) {
     }
     if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/work-items')) {
       if (!requireAuth()) return;
+      const url = new URL(req.url, 'http://127.0.0.1');
       res.end(JSON.stringify({
-        items: [
-          { id: 'wi-old', title: 'Existing item', type: 'requirement', status: 'ready' },
-        ],
+        items: workItems().filter((item) => workItemMatches(item, url)),
         runtime: { store: 'mock' },
       }));
       return;
@@ -636,6 +654,25 @@ async function withPoolServer(fn, options = {}) {
           document,
           items: [{ id: 'wi-pool-1', title: payload.workItems?.[0]?.title ?? 'Generated item', sourceArtifactId: document.id }],
           project: { id: 'proj_1', name: 'Hermes Console' },
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
+    if (req.method === 'PATCH' && req.url.startsWith('/api/work-items/')) {
+      if (!requireAuth()) return;
+      const workItemId = req.url.split('/').pop();
+      readJson().then((payload) => {
+        state.workItemUpdates.push({ id: workItemId, payload });
+        res.end(JSON.stringify({
+          item: {
+            id: workItemId,
+            title: workItems().find((item) => item.id === workItemId)?.title ?? 'Updated item',
+            type: workItems().find((item) => item.id === workItemId)?.type ?? 'requirement',
+            status: payload.status ?? 'done',
+            notes: payload.notes ?? '',
+            completedAt: payload.completedAt ?? '',
+          },
           runtime: { store: 'mock' },
         }));
       });
@@ -1565,12 +1602,166 @@ JSON
     assert.equal(payload.iterations[0].review.agent, 'codex');
     assert.equal(payload.iterations[0].review.results.length, 1);
     assert.equal(payload.iterations[0].review.results[0].seedId, 'seed-work-review');
+    assert.equal(payload.iterations[0].review.results[0].candidateSource, 'pool-seed');
+    assert.equal(payload.iterations[0].review.results[0].candidateType, 'requirement');
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.poolSeed, 1);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.workItem, 0);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.candidates, 1);
     assert.equal(payload.iterations[0].review.results[0].submit.mode, 'hub');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'requirement');
   }, {
     poolSeeds: [
       { id: 'seed-work-review', kind: 'requirement', title: 'Work review converts seed', seed: 'Convert this in work-review', status: 'pending-confirmation' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'codex-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkPrerequisites(home);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+printf '%s\\n---PROMPT---\\n' "$2" >> "$AXIS_FAKE_PROMPT"
+case "$2" in
+  *"Pool kind: bug"*)
+    cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"bug","title":"Pending bug WorkItem","summary":"Converted bug work item","status":"draft","markdown":"# Pending bug WorkItem\\n","sections":[],"workItems":[{"title":"Fix pending bug"}]}
+JSON
+    ;;
+  *)
+    cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Pending requirement WorkItem","summary":"Converted requirement work item","status":"draft","markdown":"# Pending requirement WorkItem\\n","sections":[],"workItems":[{"title":"Build pending requirement"}]}
+JSON
+    ;;
+esac
+`);
+
+    const result = await run([
+      'work-review',
+      '--repo',
+      repo,
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_FAKE_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.iterations[0].summary.pending, 2);
+    assert.deepEqual(payload.iterations[0].summary.pendingBySource, { 'work-item': 2 });
+    assert.deepEqual(payload.iterations[0].summary.candidatesByType, { requirement: 1, bug: 1 });
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.poolSeed, 0);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.workItem, 2);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.candidates, 2);
+    assert.equal(payload.iterations[0].review.results.length, 2);
+    assert.deepEqual(payload.iterations[0].review.results.map((entry) => entry.candidateSource), ['work-item', 'work-item']);
+    assert.deepEqual(payload.iterations[0].review.results.map((entry) => entry.candidateType), ['requirement', 'bug']);
+    assert.equal(payload.iterations[0].review.results[0].handled.status, 'done');
+    assert.equal(payload.iterations[0].review.results[1].handled.status, 'done');
+    assert.equal(payload.summary.pending, 2);
+    assert.equal(payload.summary.converted, 2);
+    assert.deepEqual(payload.summary.pendingBySource, { 'work-item': 2 });
+    assert.equal(state.poolDocuments, 2);
+    assert.deepEqual(state.workItemUpdates.map((entry) => entry.id), ['wi-pending-req', 'wi-pending-bug']);
+    assert.deepEqual(state.workItemUpdates.map((entry) => entry.payload.status), ['done', 'done']);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Pending requirement WorkItem/);
+    assert.match(prompts, /Convert pending requirement from WorkItem notes/);
+    assert.match(prompts, /Pending bug WorkItem/);
+    assert.match(prompts, /Convert pending bug from WorkItem notes/);
+  }, {
+    poolSeeds: [],
+    workItems: [
+      {
+        id: 'wi-pending-req',
+        type: 'requirement',
+        pool: 'requirement',
+        title: 'Pending requirement WorkItem',
+        notes: 'Convert pending requirement from WorkItem notes',
+        status: 'pending-confirmation',
+        sourceArtifactId: 'doc-pending-req',
+      },
+      {
+        id: 'wi-pending-bug',
+        type: 'bug',
+        pool: 'bug',
+        title: 'Pending bug WorkItem',
+        notes: 'Convert pending bug from WorkItem notes',
+        status: 'pending-confirmation',
+        sourceArtifactId: 'doc-pending-bug',
+      },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkPrerequisites(home);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Duplicate source","summary":"Converted once","status":"draft","markdown":"# Duplicate source\\n","sections":[],"workItems":[{"title":"Build duplicate once"}]}
+JSON
+`);
+
+    const result = await run([
+      'work-review',
+      '--repo',
+      repo,
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.poolSeed, 1);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.workItem, 1);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.candidates, 1);
+    assert.equal(payload.iterations[0].lanes.refine.sourceCounts.duplicates, 1);
+    assert.equal(payload.iterations[0].review.results.length, 1);
+    assert.equal(payload.iterations[0].review.results[0].candidateSource, 'pool-seed');
+    assert.equal(payload.iterations[0].review.results[0].handled.status, 'done');
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.workItemUpdates.length, 1);
+    assert.equal(state.workItemUpdates[0].id, 'wi-dupe');
+    assert.equal(state.workItemUpdates[0].payload.status, 'done');
+  }, {
+    poolSeeds: [
+      { id: 'doc-dupe', kind: 'requirement', title: 'Duplicate source', seed: 'Convert duplicate once', status: 'pending-confirmation' },
+    ],
+    workItems: [
+      {
+        id: 'wi-dupe',
+        type: 'requirement',
+        pool: 'requirement',
+        title: 'Duplicate source',
+        notes: 'This WorkItem points at the same raw seed document.',
+        status: 'pending-confirmation',
+        sourceArtifactId: 'doc-dupe',
+      },
     ],
   });
 });
@@ -1663,7 +1854,7 @@ await withTempDir(async (dir) => {
     assert.equal(payload.mode, 'probe');
     assert.equal(payload.repo, repo);
     assert.equal(payload.spawn, false);
-    assert.equal(payload.lanes.refine.description, 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.');
+    assert.equal(payload.lanes.refine.description, 'Refine pending-confirmation pool seeds and WorkItem-pool inputs into confirmed requirements/work-items.');
     assert.deepEqual(payload.lanes.refine.methodologyByKind, {
       idea: 'plan-ceo-review',
       requirement: 'superpowers:brainstorm',
