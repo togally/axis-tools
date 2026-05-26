@@ -42,8 +42,8 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 高级非交互式绑定命令，保留给自动化脚本使用
 - `axis project show`
   - 查看当前 repo 的 AxisNode 绑定
-- `axis work once` / `axis work loop`
-  - `once` 默认探测 Hub 队列；`once --spawn` 和 `loop` 会运行 bounded refine worker，把待确认 seed 转成 pool document / WorkItems
+- `axis work-once` / `axis work-loop`
+  - `work-once` 单次运行 refine worker，把待确认 seed 转成 pool document / WorkItems；`work-loop` 默认持续轮询直到 Ctrl+C/SIGINT/SIGTERM
 
 ## 仓库结构
 
@@ -209,29 +209,33 @@ axis-ide prepare --json
 
 ### Work CLI
 
-`axis work` 是后续自动化开发循环的命令契约。`axis work once` 默认只做安全探测，不启动 Agent；`axis work once --spawn` 和 `axis work loop` 会启动 refine worker。`loop` 默认只跑 1 次，最多按显式上限跑 bounded iterations，不会常驻后台或无限循环：
+`axis work-once` / `axis work-loop` 是后续自动化开发循环的命令契约。`axis work-once` 默认就是一次真实 refine worker 运行，等价于兼容入口 `axis work once --spawn`。`axis work-loop` 默认持续轮询直到用户 Ctrl+C/SIGINT/SIGTERM；需要 debug/test 时再用显式 bounded flags：
 
 ```bash
-axis work once --repo /path/to/repo
-axis work once --repo /path/to/repo --json
-axis work once --repo /path/to/repo --spawn --json
-axis work loop --repo /path/to/repo --iterations 1 --json
-axis work loop --repo /path/to/repo --max-iterations 3 --interval 30
+axis work-once --repo /path/to/repo
+axis work-once --repo /path/to/repo --json
+axis work-loop --repo /path/to/repo
+axis work-loop --repo /path/to/repo --iterations 1 --json
+axis work-loop --repo /path/to/repo --max-iterations 3 --interval 30
+axis work-loop --repo /path/to/repo --once --json
 ```
 
 代码和输出里固定建模两条 lane：
 
-- `refine`: 读取 `pending-confirmation` 的 pool seeds；`axis work once --spawn` 或 `axis work loop` 会启动 refine worker，把 seed 转成 pool document / WorkItems。
+- `refine`: 读取 `pending-confirmation` 的 pool seeds；`axis work-once` 或 `axis work-loop` 会启动 refine worker，把 seed 转成 pool document / WorkItems。
 - `execute`: 读取 confirmed / ready requirements 或 work-items，未来由 execute 子 Agent claim、实现、验证并写回状态。
 
-`axis work loop` 支持：
+兼容入口仍保留：`axis work once` 默认只做队列 probe，`axis work once --spawn` 运行单次 worker；`axis work loop` 是 `axis work-loop` 的旧别名。
 
-- `--iterations <n>` / `--max-iterations <n>`：bounded 迭代次数，默认 1，上限由 CLI clamp，避免误开无限循环。
-- `--interval <seconds>` / `--sleep <seconds>`：多次迭代之间的等待时间；默认 0，不 sleep。
+`axis work-loop` 支持：
+
+- `--iterations <n>` / `--max-iterations <n>`：bounded 迭代次数；不传时为 infinite/continuous loop。
+- `--once`：等价于 `--iterations 1`。
+- `--interval <seconds>` / `--sleep <seconds>`：轮询之间的等待时间；默认 10 秒。测试可设置 `AXIS_WORK_LOOP_SKIP_SLEEP=1` 跳过真实 sleep。
 - `--agent <codex|claude-code|none>`：选择 refine worker Agent；未传时沿用项目绑定或本机可用 Agent。
-- `--json`：输出 `mode: "loop-work"`、`maxIterations`、`intervalSeconds`、`iterations[]`、`summary`、`warning` 和 `stopReason`。每个 `iterations[]` entry 都是一次真实 `work-once` run，包含 iteration number、refine results、warnings 和提交结果。
+- `--json`：输出 `mode: "loop-work"`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。每个 `iterations[]` entry 都是一次真实 `work-once` run，包含 iteration number、refine results、warnings 和提交结果。
 
-如果没有项目绑定、绑定缺少 project id、没有 pending seeds、没有可用 Agent 或 worker 转换失败，`loop` 会 cleanly stop，输出 warning / summary / stopReason，而不是继续空转。
+如果没有项目绑定或绑定缺少 project id，`work-loop` 会 cleanly stop 并输出 warning / summary / stopReason。没有 pending seeds 不是错误：infinite 模式会输出 idle summary、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 Agent 或 worker 转换失败会停止并报告对应 stop reason。
 
 refine worker 会把 seed kind 映射到方法论技能，并把本机 `SKILL.md` 内容直接注入传给 Agent 的 prompt/context，而不是只写一个技能名：
 
@@ -244,7 +248,7 @@ idea 方法论内容按顺序查找：`~/.hermes/skills/gstack-plan-ceo-review/S
 
 worker prompt 会把交互式方法论改成一次性自动输出：Agent 不得向用户提问或停下来等确认；如果方法论原本要提问，必须把问题写进 artifact markdown 的 structured Decision block，列出 options、明确 recommended option 和 rationale，然后在同一轮里按 recommended option 继续生成并上传。多个可行路径会被追加/更新到 `可选方案 / 推荐方案` 章节，并标出推荐方案。Hub seed/context 里如果带有已有 document、sourceArtifact、artifact、markdown、selectedOption、feedback 等字段，worker 会把它当成用户编辑反馈来重新 review/refine；用户已经改写或选择的方案优先保留，仍有歧义时继续给出可选方案并选一个推荐默认值。
 
-启动 worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work once --spawn` 或 `axis work loop` 且存在待 refine seeds 时发生；普通 `axis-ide` / `axis-req` / `axis-bug` / `axis-sug` 的 `"text"` 入口仍然只提交 raw seed，不启动 Agent。
+启动 worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work-once`、`axis work once --spawn`、`axis work-loop` 或 `axis work loop` 且存在待 refine seeds 时发生；普通 `axis-ide` / `axis-req` / `axis-bug` / `axis-sug` 的 `"text"` 入口仍然只提交 raw seed，不启动 Agent。
 
 ### 绑定本地目录
 

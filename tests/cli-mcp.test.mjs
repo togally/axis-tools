@@ -587,6 +587,8 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /^axis\n/);
   assert.match(usage.stdout, /Aliases: axis-tools, orbit, orbit-tools/);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
+  assert.match(usage.stdout, /axis work-once --repo <path>/);
+  assert.match(usage.stdout, /axis work-loop --repo <path>/);
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.equal(linkedHelp.stdout, usage.stdout);
@@ -1408,6 +1410,51 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkPrerequisites(home);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Top-level once converts seed","summary":"Converted by work-once","status":"draft","markdown":"# Top-level once converts seed\\n","sections":[],"workItems":[{"title":"Build work-once worker"}]}
+JSON
+`);
+
+    const result = await run([
+      'work-once',
+      '--repo',
+      repo,
+      '--agent',
+      'codex',
+      '--json',
+    ], {
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'work-once');
+    assert.equal(payload.spawn, true);
+    assert.equal(payload.refine.agent, 'codex');
+    assert.equal(payload.refine.results.length, 1);
+    assert.equal(payload.refine.results[0].seedId, 'seed-work-once');
+    assert.equal(payload.refine.results[0].submit.mode, 'hub');
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.lastPoolDocument.kind, 'requirement');
+  }, {
+    poolSeeds: [
+      { id: 'seed-work-once', kind: 'requirement', title: 'Top-level once converts seed', seed: 'Convert this in work-once', status: 'pending-confirmation' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
     const root = path.join(dir, 'pull-root');
     const productRoot = path.join(root, 'hermes');
     const project = path.join(productRoot, 'hermes-console');
@@ -1718,8 +1765,7 @@ JSON
 `);
 
     const result = await run([
-      'work',
-      'loop',
+      'work-loop',
       '--repo',
       repo,
       '--iterations',
@@ -1737,6 +1783,8 @@ JSON
     assert.equal(payload.ok, true);
     assert.equal(payload.mode, 'loop-work');
     assert.notEqual(payload.mode, 'loop-skeleton');
+    assert.equal(payload.bounded, true);
+    assert.equal(payload.infinite, false);
     assert.equal(payload.maxIterations, 1);
     assert.equal(payload.stopReason, 'max-iterations');
     assert.equal(payload.iterations.length, 1);
@@ -1778,8 +1826,7 @@ JSON
 `);
 
     const result = await run([
-      'work',
-      'loop',
+      'work-loop',
       '--repo',
       repo,
       '--max-iterations',
@@ -1798,6 +1845,8 @@ JSON
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
     assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.bounded, true);
+    assert.equal(payload.infinite, false);
     assert.equal(payload.maxIterations, 2);
     assert.equal(payload.intervalSeconds, 60);
     assert.equal(payload.stopReason, 'max-iterations');
@@ -1824,27 +1873,56 @@ await withTempDir(async (dir) => {
     await writeProjectBinding(repo, backendUrl);
 
     const result = await run([
-      'work',
-      'loop',
+      'work-loop',
       '--repo',
       repo,
       '--iterations',
       '3',
       '--json',
-    ]);
+    ], {
+      env: {
+        AXIS_WORK_LOOP_SKIP_SLEEP: '1',
+      },
+    });
 
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
     assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.bounded, true);
+    assert.equal(payload.infinite, false);
     assert.equal(payload.maxIterations, 3);
-    assert.equal(payload.stopReason, 'no-pending-work');
-    assert.equal(payload.iterations.length, 1);
-    assert.equal(payload.iterations[0].refine.results.length, 0);
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.iterations.length, 3);
+    assert.deepEqual(payload.iterations.map((entry) => entry.refine.results.length), [0, 0, 0]);
+    assert.equal(payload.sleeps.length, 2);
+    assert.equal(payload.sleeps[0].skipped, true);
     assert.match(payload.warning, /No pending-confirmation pool seeds/);
     assert.equal(payload.summary.pending, 0);
     assert.equal(payload.summary.converted, 0);
     assert.equal(state.poolDocuments, 0);
   }, { poolSeeds: [] });
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'unbound-repo');
+  await mkdir(repo, { recursive: true });
+
+  const result = await run([
+    'work-loop',
+    '--repo',
+    repo,
+    '--json',
+  ]);
+
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.mode, 'loop-work');
+  assert.equal(payload.bounded, false);
+  assert.equal(payload.infinite, true);
+  assert.equal(payload.maxIterations, null);
+  assert.equal(payload.stopReason, 'no-project-binding');
+  assert.equal(payload.iterations.length, 1);
+  assert.match(payload.warning, /No AxisNode project binding found/);
 });
 
 await withTempDir(async (dir) => {
