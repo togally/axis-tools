@@ -44,8 +44,8 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 查看当前 repo 的 AxisNode 绑定
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
-  - `work-review` 持续运行 review/refine worker，把待确认 seed 和 WorkItem 池里的 `pending-confirmation` 条目转成 pool document / WorkItems
-  - `work-coding` 持续探测 confirmed/ready WorkItems；Hub claim/execute/writeback API 未完成前会明确 blocked/TODO，不会假装实现成功
+  - `work-review` 持续运行 review/refine worker，把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems
+  - `work-coding` 持续探测 `WAIT_CODE` WorkItems；Hub claim/execute/writeback API 未完成前会明确 blocked/TODO，不会假装实现成功
   - `--repo <path>` 是显式窄模式，只处理该路径下已绑定的单个 repo/project
 
 ## 仓库结构
@@ -166,7 +166,7 @@ axis bind
 
 ### Pool CLI
 
-四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定和登录 token，优先提交到 AxisNode Hub 的 `/api/projects/{projectId}/pool-seeds`，状态为 `pending-confirmation`，然后立即返回。默认不会提示选择 Agent，也不会启动 Codex / Claude Code。
+四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定和登录 token，优先提交到 AxisNode Hub 的 `/api/projects/{projectId}/pool-seeds`，状态为 `NEW`，然后立即返回。默认不会提示选择 Agent，也不会启动 Codex / Claude Code。
 
 ```bash
 axis-req "商品评价支持图片"
@@ -232,8 +232,8 @@ axis work-coding --repo /path/to/repo --once --json
 
 代码和输出里固定建模两条 lane：
 
-- `refine`: 读取 `pending-confirmation` 的 pool seeds，以及 WorkItem 池 UI 中可见的 `pending-confirmation` 想法/需求/BUG/建议优化条目；`axis work-review` 会启动 review worker，把它们转成 pool document / WorkItems。
-- `execute`: 读取 confirmed / ready requirements 或 work-items；`axis work-coding` 会探测 ready WorkItems。Hub claim/execute/writeback API 未完成前，它只返回 blocked/TODO warning，不会启动 coding Agent 或写回成功状态。
+- `refine`: 读取 `NEW` / `WAIT_REVIEW` 的 pool seeds，以及 WorkItem 池 UI 中可见的 `NEW` / `WAIT_REVIEW` 想法/需求/BUG/建议优化条目；`axis work-review` 会启动 review worker，把它们转成 `WAIT_USER_CONFIRM` pool document / WorkItems。旧 `pending-confirmation` 会按兼容输入读取，但新写入不再使用它。
+- `execute`: 读取 `WAIT_CODE` requirements 或 work-items；`axis work-coding` 会探测 `WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新写入使用 `WAIT_CODE`。Hub claim/execute/writeback API 未完成前，它只返回 blocked/TODO warning，不会启动 coding Agent 或写回成功状态。
 
 兼容入口仍保留但已废弃：`axis work-once`、`axis work-loop`、`axis work once`、`axis work loop` 都映射到 review worker。`axis work once` 默认仍只做队列 probe，`axis work once --spawn` 运行单次 review worker。
 
@@ -247,9 +247,9 @@ axis work-coding --repo /path/to/repo --once --json
 - `--agent <codex|claude-code|none>`：选择 review worker Agent；未传时沿用项目绑定或本机可用 Agent。`work-coding` 当前只 probe，不启动 Agent。
 - `--json`：stdout 只输出 JSON；progress 和 Agent stderr 走 stderr 或被抑制。输出包含 `mode: "work-review"` / `mode: "work-coding"`、`workerType`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。review lane 还会暴露 `lanes.refine.sourceCounts`、候选 `candidateSource` / `candidateType`，以及 `summary.pendingBySource` / `summary.candidatesByType`。
 
-pool document 的 `draft` / `reviewing` 状态通常表示 review worker 已生成或用户正在编辑的 artifact，不作为新的 raw review 输入重复消费；`pending-confirmation` raw seed document 会通过关联的 pending WorkItem 或 legacy pool-seed 条目进入队列，并按 `sourceArtifactId` / document id 去重。
+pool document 采用四个内部生命周期状态：`NEW` 表示 raw seed 新提交，`WAIT_REVIEW` 表示用户要求继续讨论/重新整理，`WAIT_USER_CONFIRM` 表示 review worker 已生成文档、等待用户在 Hub UI 确认，`WAIT_CODE` 表示用户已确认、等待开发。旧 `pending-confirmation` raw seed document 会按 `NEW` / `WAIT_REVIEW` 兼容读取，并按 `sourceArtifactId` / document id 去重。
 
-默认 workspace 模式需要已登录 session；未登录会提示先执行 `axis login`，不会用 `no-project-binding` 误导。没有可访问项目、没有 pending review seeds / WorkItems 或没有 ready coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。`--repo <path>` 窄模式仍要求该 repo 有可用项目绑定；缺失绑定时保持单 repo 的 clean stop 行为。
+默认 workspace 模式需要已登录 session；未登录会提示先执行 `axis login`，不会用 `no-project-binding` 误导。没有可访问项目、没有 `NEW` / `WAIT_REVIEW` review seeds / WorkItems 或没有 `WAIT_CODE` coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。`--repo <path>` 窄模式仍要求该 repo 有可用项目绑定；缺失绑定时保持单 repo 的 clean stop 行为。
 
 review worker 会把 seed kind 映射到方法论技能，并把本机 `SKILL.md` 内容直接注入传给 Agent 的 prompt/context，而不是只写一个技能名：
 

@@ -374,6 +374,12 @@ const POOL_METHODOLOGY_BY_KIND: Record<PoolConfig['kind'], string> = {
   suggestion: 'superpowers:brainstorm',
 };
 const METHODOLOGY_INJECTION_MAX_CHARS = 24_000;
+const LIFECYCLE_NEW = 'NEW';
+const LIFECYCLE_WAIT_REVIEW = 'WAIT_REVIEW';
+const LIFECYCLE_WAIT_USER_CONFIRM = 'WAIT_USER_CONFIRM';
+const LIFECYCLE_WAIT_CODE = 'WAIT_CODE';
+const REVIEW_INPUT_STATUSES = [LIFECYCLE_NEW, LIFECYCLE_WAIT_REVIEW, 'pending-confirmation'] as const;
+const CODING_INPUT_STATUSES = [LIFECYCLE_WAIT_CODE, 'ready'] as const;
 const SAFE_BINDING_KEYS = [
   'productLineId',
   'productLineUuid',
@@ -411,8 +417,8 @@ function printUsage(): void {
 function printWorkWorkerUsage(workerType: WorkWorkerType): void {
   const command = workerType === 'review' ? 'work-review' : 'work-coding';
   const queueText = workerType === 'review'
-    ? '\nReview queue:\n  Consumes pending pool-seeds and pending-confirmation pool WorkItems across accessible projects.\n'
-    : '\nCoding queue:\n  Probes confirmed/ready WorkItems across accessible projects.\n';
+    ? '\nReview queue:\n  Consumes NEW, WAIT_REVIEW, and legacy pending-confirmation review inputs across accessible projects.\n'
+    : '\nCoding queue:\n  Probes WAIT_CODE and legacy ready WorkItems across accessible projects.\n';
   console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nDefault scope:\n  Without --repo, use AXIS_HOME or ~/.axis, sync accessible AxisNode projects, and loop all permitted project queues.${queueText}\nFlags:\n  --repo <path>                    Narrow to one repo and read its AxisNode project binding\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --backend-url <url>              AxisNode backend; defaults to cached login backend or shared backend\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
 }
 
@@ -2726,6 +2732,21 @@ function poolMethodologyMap(): Record<PoolConfig['kind'], string> {
   return { ...POOL_METHODOLOGY_BY_KIND };
 }
 
+function canonicalLifecycleStatus(status: string | null | undefined): string | null {
+  const value = status?.trim();
+  if (!value) return null;
+  const lower = value.toLowerCase();
+  if (lower === 'pending-confirmation') return LIFECYCLE_NEW;
+  if (lower === 'ready') return LIFECYCLE_WAIT_CODE;
+  if (['new', 'wait_review', 'wait_user_confirm', 'wait_code'].includes(lower)) return value.toUpperCase().replace(/-/g, '_');
+  return value;
+}
+
+function isReviewInputStatus(status: string | null | undefined): boolean {
+  const canonical = canonicalLifecycleStatus(status);
+  return canonical === LIFECYCLE_NEW || canonical === LIFECYCLE_WAIT_REVIEW;
+}
+
 function gstackSkillCheckoutPath(skillName: string): string {
   return path.join(gstackHomeDir(), skillName.replace(/^gstack-/, ''), 'SKILL.md');
 }
@@ -3173,7 +3194,7 @@ function buildPoolPayload(pool: PoolConfig, artifact: PoolArtifact, repoPath: st
     kind: artifact.kind,
     title: artifact.title,
     summary: artifact.summary,
-    status: artifact.status,
+    status: LIFECYCLE_WAIT_USER_CONFIRM,
     markdown: artifact.markdown,
     sections: artifact.sections,
     workItems: artifact.workItems,
@@ -3196,7 +3217,7 @@ function buildPoolSeedPayload(pool: PoolConfig, seed: string, repoPath: string):
     title,
     seed: trimmed,
     summary: trimmed,
-    status: 'pending-confirmation',
+    status: LIFECYCLE_NEW,
     source: 'CLI',
     sourceId: pool.command,
     repo: repoPath,
@@ -3415,7 +3436,7 @@ async function submitPoolSeed(pool: PoolConfig, repoPath: string, seed: string):
   const initialPayload = buildPoolSeedPayload(pool, seed, repoPath);
   const title = safeString(initialPayload.title) ?? poolSeedTitle(pool, seed);
   const summary = safeString(initialPayload.summary) ?? seed.trim();
-  const status = safeString(initialPayload.status) ?? 'pending-confirmation';
+  const status = safeString(initialPayload.status) ?? LIFECYCLE_NEW;
 
   if (hasFlag('--dry-run')) {
     return { ok: true, mode: 'dry-run', repo: repoPath, pool: pool.pool, kind: pool.kind, title, seed: seed.trim(), summary, status, id: null, url: null, savedPath: null, warning: null };
@@ -3994,6 +4015,31 @@ async function probeHubQueue(binding: ProjectBinding, routePath: string): Promis
   }
 }
 
+async function probeHubQueueStatuses(
+  binding: ProjectBinding,
+  projectId: string,
+  endpoint: 'pool-seeds' | 'work-items',
+  statuses: readonly string[],
+  pageSize: number,
+): Promise<{ items: Json[]; warning: string | null }> {
+  const warnings: string[] = [];
+  const items: Json[] = [];
+  const seen = new Set<string>();
+  for (const status of statuses) {
+    const route = `/api/projects/${encodeURIComponent(projectId)}/${endpoint}?status=${encodeURIComponent(status)}&page=1&pageSize=${encodeURIComponent(String(pageSize))}`;
+    const probe = await probeHubQueue(binding, route);
+    if (probe.warning) warnings.push(probe.warning);
+    for (const item of probe.items) {
+      const id = extractId(item) ?? safeString(item.id) ?? safeString(item.documentId) ?? JSON.stringify(item);
+      const key = `${endpoint}:${id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      items.push(item);
+    }
+  }
+  return { items, warning: warnings.length > 0 ? [...new Set(warnings)].join(' ') : null };
+}
+
 function prerequisiteEnv(): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -4347,7 +4393,7 @@ function methodologyPromptBlock(methodology: MethodologyInjection): string {
 function buildWorkRefineAgentPrompt(pool: PoolConfig, seed: Json, prepare: Json, methodology: MethodologyInjection): string {
   const reviewContext = poolSeedReviewContext(seed);
   return [
-    'You are an Axis work refine Agent converting one pending pool seed into an Orbit/Axis pool artifact.',
+    'You are an Axis work-review Agent converting one NEW/WAIT_REVIEW pool input into an Orbit/Axis pool artifact.',
     `Pool kind: ${pool.kind}`,
     `Pool command: ${pool.command}`,
     `methodologySkill: ${methodology.skill}`,
@@ -4456,9 +4502,7 @@ async function convertPoolSeedWithAgent(
     const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodology), options);
     const artifact = normalizePoolArtifact(pool, output);
     const submit = await submitPoolArtifact(pool, repoPath, artifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
-    const handled = reviewWorkItemIdsForHandling(seed).length > 0
-      ? await markReviewWorkItemHandled(repoPath, seed, submit as unknown as Json)
-      : null;
+    const handled = await markReviewWorkItemHandled(repoPath, seed, submit as unknown as Json);
     const handledWarning = isJson(handled) ? safeString(handled.warning) : null;
     return {
       ok: true,
@@ -4604,7 +4648,7 @@ function normalizePoolSeedCandidate(seed: Json): ReviewCandidate | null {
     title: poolSeedDisplayTitle(seed),
     seed: poolSeedText(seed),
     notes: safeString(seed.notes) ?? safeString(seed.summary) ?? poolSeedText(seed),
-    status: safeString(seed.status) ?? 'pending-confirmation',
+    status: canonicalLifecycleStatus(safeString(seed.status)) ?? LIFECYCLE_NEW,
     source: 'pool-seed',
     sourceType: 'pool-seed',
     sourceId: id,
@@ -4618,7 +4662,7 @@ function normalizePoolSeedCandidate(seed: Json): ReviewCandidate | null {
 }
 
 function normalizeWorkItemReviewCandidate(item: Json): ReviewCandidate | null {
-  if ((safeString(item.status) ?? '').toLowerCase() !== 'pending-confirmation') return null;
+  if (!isReviewInputStatus(safeString(item.status))) return null;
   const kind = poolKindFromWorkItem(item);
   if (!kind) return null;
   const id = workItemId(item);
@@ -4632,7 +4676,7 @@ function normalizeWorkItemReviewCandidate(item: Json): ReviewCandidate | null {
     title: workItemTitle(item),
     seed,
     notes: seed,
-    status: safeString(item.status) ?? 'pending-confirmation',
+    status: canonicalLifecycleStatus(safeString(item.status)) ?? LIFECYCLE_NEW,
     source: 'work-item',
     sourceType: 'work-item',
     sourceId: id,
@@ -4715,7 +4759,7 @@ function candidateSourceFromSeed(seed: Json): ReviewCandidateSource {
 
 const REVIEW_DOCUMENT_INPUT_POLICY: Json = {
   included: false,
-  reason: 'Draft/reviewing pool documents are generated or edited artifacts, not raw unconfirmed WorkItem-pool inputs. Pending raw-seed documents are consumed through linked pending-confirmation WorkItems or legacy pool-seed entries and deduped by document/sourceArtifactId.',
+  reason: 'Generated pool documents are edited artifacts, not raw review inputs. Raw seed documents are consumed through NEW/WAIT_REVIEW pool-seed entries or linked WorkItems and deduped by document/sourceArtifactId.',
 };
 
 function optionalPoolSeedProbeWarning(warning: string | null): string | null {
@@ -4725,8 +4769,8 @@ function optionalPoolSeedProbeWarning(warning: string | null): string | null {
 }
 
 async function discoverReviewCandidates(binding: ProjectBinding, projectId: string): Promise<ReviewCandidateDiscovery> {
-  const seedProbe = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/pool-seeds?status=pending-confirmation&page=1&pageSize=100`);
-  const workItemProbe = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/work-items?status=pending-confirmation&page=1&pageSize=100`);
+  const seedProbe = await probeHubQueueStatuses(binding, projectId, 'pool-seeds', REVIEW_INPUT_STATUSES, 100);
+  const workItemProbe = await probeHubQueueStatuses(binding, projectId, 'work-items', REVIEW_INPUT_STATUSES, 100);
   const seedCandidates = seedProbe.items
     .map(normalizePoolSeedCandidate)
     .filter((candidate): candidate is ReviewCandidate => Boolean(candidate));
@@ -4749,13 +4793,23 @@ function reviewWorkItemIdsForHandling(candidate: Json): string[] {
   return [...new Set(ids)];
 }
 
+function reviewDocumentIdsForHandling(candidate: Json): string[] {
+  const ids = [
+    safeString(candidate.documentId),
+    safeString(candidate.sourceArtifactId),
+    poolSeedDocumentId(candidate),
+  ].filter((entry): entry is string => Boolean(entry));
+  return [...new Set(ids)];
+}
+
 async function markReviewWorkItemHandled(repoPath: string, candidate: Json, submit: Json): Promise<Json> {
   const workItemIds = reviewWorkItemIdsForHandling(candidate);
-  if (workItemIds.length === 0) {
+  const documentIds = reviewDocumentIdsForHandling(candidate);
+  if (workItemIds.length === 0 && documentIds.length === 0) {
     return {
       ok: false,
       status: 'skipped',
-      warning: 'TODO: WorkItem review input had no workItemId; original pending WorkItem was not marked handled and may be processed again.',
+      warning: 'Review input had no workItemId or documentId; original source could not move to WAIT_USER_CONFIRM and may be processed again.',
     };
   }
   const submitMode = safeString(submit.mode);
@@ -4765,7 +4819,8 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
       status: 'skipped',
       workItemId: workItemIds[0],
       workItemIds,
-      warning: `TODO: WorkItem(s) ${workItemIds.join(', ')} were converted but upload mode was ${submitMode ?? 'unknown'}; original pending WorkItem(s) were not marked handled and may be processed again.`,
+      documentIds,
+      warning: `Review source(s) were converted but upload mode was ${submitMode ?? 'unknown'}; original source(s) were not moved to WAIT_USER_CONFIRM and may be processed again.`,
     };
   }
   const binding = await readProjectBinding(repoPath);
@@ -4775,7 +4830,8 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
       status: 'skipped',
       workItemId: workItemIds[0],
       workItemIds,
-      warning: `TODO: WorkItem(s) ${workItemIds.join(', ')} were converted but no project binding was available for lifecycle update; they may be processed again.`,
+      documentIds,
+      warning: 'Review source(s) were converted but no project binding was available for lifecycle update; they may be processed again.',
     };
   }
   const token = await tokenForBinding(binding);
@@ -4785,7 +4841,7 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
   const previousNotes = safeString(candidate.notes) ?? safeString(candidate.seed) ?? '';
   const handledAt = new Date().toISOString();
   const notes = [
-    `axis work-review converted this pending WorkItem into a pool document at ${handledAt}.`,
+    `axis work-review converted this review input into a pool document at ${handledAt}.`,
     documentId ? `documentId: ${documentId}` : null,
     documentUrl ? `url: ${documentUrl}` : null,
     previousNotes ? `original notes: ${previousNotes}` : null,
@@ -4793,26 +4849,43 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
 
   const patches: Json[] = [];
   const failures: string[] = [];
-  try {
-    for (const workItemIdValue of workItemIds) {
-      const patch = await patchOrbitJson(binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemIdValue)}`, {
-        status: 'done',
-        notes,
+  const projectId = projectApiId(binding);
+  for (const documentIdValue of documentIds) {
+    if (!projectId) {
+      failures.push(`project binding has no projectId/projectUuid for document ${documentIdValue}`);
+      continue;
+    }
+    try {
+      const patch = await patchOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentIdValue)}`, {
+        status: LIFECYCLE_WAIT_USER_CONFIRM,
         owner: 'axis-work-review',
-        completedAt: handledAt,
+      }, token);
+      patches.push({ documentId: documentIdValue, response: patch });
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+  for (const workItemIdValue of workItemIds) {
+    try {
+      const patch = await patchOrbitJson(binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemIdValue)}`, {
+        status: LIFECYCLE_WAIT_USER_CONFIRM,
+        notes,
+        sourceArtifactId: documentId ?? undefined,
+        owner: 'axis-work-review',
       }, token);
       patches.push({ workItemId: workItemIdValue, response: patch });
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error));
     }
-  } catch (error) {
-    failures.push(error instanceof Error ? error.message : String(error));
   }
 
   if (failures.length === 0) {
     return {
       ok: true,
-      status: 'done',
+      status: LIFECYCLE_WAIT_USER_CONFIRM,
       workItemId: workItemIds[0],
       workItemIds,
+      documentIds,
       documentId,
       url: documentUrl,
       responses: patches,
@@ -4824,10 +4897,11 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
     status: 'failed',
     workItemId: workItemIds[0],
     workItemIds,
+    documentIds,
     documentId,
     url: documentUrl,
     responses: patches,
-    warning: `TODO: WorkItem(s) ${workItemIds.join(', ')} were converted and uploaded, but marking them handled failed: ${failures.join('; ')}. They may be processed again.`,
+    warning: `Review source(s) were converted and uploaded, but moving them to WAIT_USER_CONFIRM failed: ${failures.join('; ')}. They may be processed again.`,
   };
 }
 
@@ -4857,7 +4931,7 @@ async function buildReviewWorkerIteration(repoPath: string, options: WorkIterati
     review,
     refine: review,
     plan: [
-      'Run review worker for pending-confirmation pool seeds and WorkItem-pool inputs.',
+      'Run review worker for NEW/WAIT_REVIEW pool seeds and WorkItem-pool inputs.',
       'Map each candidate kind to its methodology skill, inject the skill, launch the selected Agent, and submit a pool document.',
     ],
   };
@@ -4873,8 +4947,8 @@ async function buildReviewWorkerIteration(repoPath: string, options: WorkIterati
   }
 
   if (seeds.length === 0) {
-    review.warning = 'No pending-confirmation pool seeds or pool WorkItems found; review worker is idle.';
-    options.progress?.('idle: no pending-confirmation pool seeds or pool WorkItems');
+    review.warning = 'No NEW or WAIT_REVIEW pool seeds or pool WorkItems found; review worker is idle.';
+    options.progress?.('idle: no NEW or WAIT_REVIEW pool seeds or pool WorkItems');
     return payload;
   }
 
@@ -4947,7 +5021,7 @@ async function buildCodingWorkerIteration(repoPath: string, options: WorkIterati
     warning: null,
     coding,
     plan: [
-      'Probe confirmed/ready WorkItems from the execute lane.',
+      'Probe WAIT_CODE WorkItems from the execute lane.',
       'Do not claim, execute, or write back WorkItems until Hub lifecycle APIs are available.',
     ],
   };
@@ -4964,15 +5038,15 @@ async function buildCodingWorkerIteration(repoPath: string, options: WorkIterati
   }
 
   if (workItems.length === 0) {
-    coding.warning = 'No ready coding WorkItems found; coding worker is idle.';
-    options.progress?.('idle: no ready coding WorkItems');
+    coding.warning = 'No WAIT_CODE coding WorkItems found; coding worker is idle.';
+    options.progress?.('idle: no WAIT_CODE coding WorkItems');
     return payload;
   }
 
   for (const item of workItems) {
     options.progress?.(`workitem: ${workItemId(item) ?? '(unknown workitem)'} kind=${workItemKind(item) ?? 'unknown'} title=${workItemTitle(item)}`);
   }
-  const warning = `TODO: Hub claim/execute/writeback APIs are not implemented in axis-tools yet; probed ${workItems.length} ready coding WorkItem(s) and did not launch a coding agent or mark work complete.`;
+  const warning = `TODO: Hub claim/execute/writeback APIs are not implemented in axis-tools yet; probed ${workItems.length} WAIT_CODE coding WorkItem(s) and did not launch a coding agent or mark work complete.`;
   coding.ok = false;
   coding.status = 'blocked';
   coding.warning = warning;
@@ -4987,8 +5061,8 @@ async function buildWorkProbe(repoPath: string, options: WorkProbeOptions = {}):
   const spawn = options.spawn ?? hasFlag('--spawn');
   const lanes: Json = {
     refine: {
-      description: 'Refine pending-confirmation pool seeds and WorkItem-pool inputs into confirmed requirements/work-items.',
-      query: 'pool-seeds?status=pending-confirmation + work-items?status=pending-confirmation',
+      description: '整理 NEW/WAIT_REVIEW seeds and pool WorkItems into WAIT_USER_CONFIRM documents.',
+      query: 'pool-seeds?status=NEW|WAIT_REVIEW|pending-confirmation + work-items?status=NEW|WAIT_REVIEW|pending-confirmation',
       methodologyByKind: poolMethodologyMap(),
       items: [],
       sourceCounts: emptyReviewSourceCounts(),
@@ -4996,8 +5070,8 @@ async function buildWorkProbe(repoPath: string, options: WorkProbeOptions = {}):
       warning: null,
     },
     execute: {
-      description: 'Execute confirmed/ready requirements and work-items.',
-      query: 'work-items?status=ready',
+      description: '开发 WAIT_CODE WorkItems.',
+      query: 'work-items?status=WAIT_CODE|ready',
       items: [],
       warning: null,
     },
@@ -5007,7 +5081,7 @@ async function buildWorkProbe(repoPath: string, options: WorkProbeOptions = {}):
     const projectId = projectApiId(binding);
     if (projectId) {
       const refine = await discoverReviewCandidates(binding, projectId);
-      const execute = await probeHubQueue(binding, `/api/projects/${encodeURIComponent(projectId)}/work-items?status=ready&page=1&pageSize=10`);
+      const execute = await probeHubQueueStatuses(binding, projectId, 'work-items', CODING_INPUT_STATUSES, 10);
       (lanes.refine as Json).items = refine.candidates;
       (lanes.refine as Json).sourceCounts = refine.sourceCounts;
       (lanes.refine as Json).warning = refine.warnings.length > 0 ? refine.warnings.join(' ') : null;
@@ -5032,11 +5106,11 @@ async function buildWorkProbe(repoPath: string, options: WorkProbeOptions = {}):
     lanes,
     plan: [
       'Probe Hub queues only; do not launch agents by default.',
-      'Review worker: convert pending-confirmation seeds and pool WorkItems into confirmed documents/work-items with the mapped methodology skill.',
-      'Coding worker: probe confirmed/ready work-items and report blocked until Hub claim/execute/writeback APIs are stable.',
+      'Review worker: convert NEW/WAIT_REVIEW seeds and pool WorkItems into WAIT_USER_CONFIRM documents/work-items with the mapped methodology skill.',
+      'Coding worker: probe WAIT_CODE work-items and report blocked until Hub claim/execute/writeback APIs are stable.',
       'TODO: implement Hub WorkItem claim, execution handoff, verification, and writeback APIs before coding execution.',
     ],
-    warning: spawn ? '--spawn requested; deprecated review alias launches only when pending pool seeds or WorkItem-pool inputs exist.' : null,
+    warning: spawn ? '--spawn requested; deprecated review alias launches only when NEW/WAIT_REVIEW pool seeds or WorkItem-pool inputs exist.' : null,
   };
 }
 
@@ -5182,8 +5256,8 @@ function summarizeWorkLoop(iterations: Json[], requested: number | null): WorkLo
 function baseWorkLanes(): Json {
   return {
     refine: {
-      description: 'Refine pending-confirmation pool seeds and WorkItem-pool inputs into confirmed requirements/work-items.',
-      query: 'pool-seeds?status=pending-confirmation + work-items?status=pending-confirmation',
+      description: '整理 NEW/WAIT_REVIEW seeds and pool WorkItems into WAIT_USER_CONFIRM documents.',
+      query: 'pool-seeds?status=NEW|WAIT_REVIEW|pending-confirmation + work-items?status=NEW|WAIT_REVIEW|pending-confirmation',
       methodologyByKind: poolMethodologyMap(),
       items: [],
       sourceCounts: emptyReviewSourceCounts(),
@@ -5191,8 +5265,8 @@ function baseWorkLanes(): Json {
       warning: null,
     },
     execute: {
-      description: 'Execute confirmed/ready requirements and work-items.',
-      query: 'work-items?status=ready',
+      description: '开发 WAIT_CODE WorkItems.',
+      query: 'work-items?status=WAIT_CODE|ready',
       items: [],
       warning: null,
     },
@@ -5352,7 +5426,7 @@ async function buildWorkspaceWorkerIteration(workspace: AxisWorkspaceResolution,
       'Sync accessible AxisNode projects into the user workspace.',
       workerType === 'review'
         ? 'Run the existing review worker for each accessible project queue.'
-        : 'Probe ready coding WorkItems for each accessible project queue without executing them.',
+        : 'Probe WAIT_CODE coding WorkItems for each accessible project queue without executing them.',
     ],
   };
   if (workerType === 'review') {

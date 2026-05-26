@@ -441,8 +441,21 @@ async function writeWorkPrerequisites(home) {
   await writeFile(path.join(home, '.codex', 'skills', 'superpowers', 'systematic-debugging', 'SKILL.md'), '# Debug Method\n\nFind the root cause before fixes.\n', 'utf8');
 }
 
+function canonicalLifecycleStatus(status) {
+  const value = String(status ?? '').trim();
+  const lower = value.toLowerCase();
+  if (lower === 'pending-confirmation') return 'NEW';
+  if (lower === 'ready') return 'WAIT_CODE';
+  if (['new', 'wait_review', 'wait_user_confirm', 'wait_code'].includes(lower)) return value.toUpperCase();
+  return value;
+}
+
+function statusMatches(actual, requested) {
+  return canonicalLifecycleStatus(actual) === canonicalLifecycleStatus(requested);
+}
+
 async function withPoolServer(fn, options = {}) {
-  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0, loginCount: 0, accountByToken: {}, workItemUpdates: [] };
+  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0, loginCount: 0, accountByToken: {}, workItemUpdates: [], documentUpdates: [] };
   const catalog = {
     products: [
       {
@@ -507,7 +520,7 @@ async function withPoolServer(fn, options = {}) {
       const kind = url.searchParams.get('kind');
       const type = url.searchParams.get('type');
       if (pool && item.pool !== pool) return false;
-      if (status && item.status !== status) return false;
+      if (status && !statusMatches(item.status, status)) return false;
       if (type && item.type !== type) return false;
       if (kind) {
         if (item.kind === kind || item.type === kind) return true;
@@ -612,10 +625,13 @@ async function withPoolServer(fn, options = {}) {
     }
     if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/pool-seeds')) {
       if (!requireAuth()) return;
+      const url = new URL(req.url, 'http://127.0.0.1');
+      const status = url.searchParams.get('status');
+      const items = options.poolSeeds ?? [
+        { id: 'seed-old', kind: 'idea', title: 'Existing idea seed', status: 'pending-confirmation' },
+      ];
       res.end(JSON.stringify({
-        items: options.poolSeeds ?? [
-          { id: 'seed-old', kind: 'idea', title: 'Existing idea seed', status: 'pending-confirmation' },
-        ],
+        items: items.filter((item) => !status || statusMatches(item.status, status)),
         runtime: { store: 'mock' },
       }));
       return;
@@ -659,11 +675,37 @@ async function withPoolServer(fn, options = {}) {
       });
       return;
     }
+    if (req.method === 'PATCH' && req.url.startsWith('/api/projects/proj_1/documents/')) {
+      if (!requireAuth()) return;
+      const documentId = req.url.split('/').pop();
+      readJson().then((payload) => {
+        state.documentUpdates.push({ id: documentId, payload });
+        if (Array.isArray(options.poolSeeds)) {
+          for (const item of options.poolSeeds) {
+            if (item.id === documentId || item.documentId === documentId) item.status = payload.status;
+          }
+        }
+        res.end(JSON.stringify({
+          document: { id: documentId, title: 'Updated document', source: { type: 'requirement' }, status: payload.status },
+          items: [],
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
     if (req.method === 'PATCH' && req.url.startsWith('/api/work-items/')) {
       if (!requireAuth()) return;
       const workItemId = req.url.split('/').pop();
       readJson().then((payload) => {
         state.workItemUpdates.push({ id: workItemId, payload });
+        if (Array.isArray(options.workItems)) {
+          for (const item of options.workItems) {
+            if (item.id === workItemId) {
+              if (payload.status) item.status = payload.status;
+              if (payload.sourceArtifactId) item.sourceArtifactId = payload.sourceArtifactId;
+            }
+          }
+        }
         res.end(JSON.stringify({
           item: {
             id: workItemId,
@@ -1498,7 +1540,7 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
-  await withPoolServer(async (backendUrl) => {
+  await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
@@ -1544,7 +1586,7 @@ await withTempDir(async (dir) => {
     assert.equal(created.ok, true);
     assert.equal(created.mode, 'hub-seed');
     assert.equal(created.id, 'seed-1');
-    assert.equal(created.status, 'pending-confirmation');
+    assert.equal(created.status, 'NEW');
     assert.equal(created.kind, 'idea');
     assert.equal(created.title, '测试想法');
     assert.equal(state.poolSeeds, 1);
@@ -1552,7 +1594,7 @@ await withTempDir(async (dir) => {
     assert.equal(state.lastPoolSeed.kind, 'idea');
     assert.equal(state.lastPoolSeed.title, '测试想法');
     assert.equal(state.lastPoolSeed.seed, '测试想法');
-    assert.equal(state.lastPoolSeed.status, 'pending-confirmation');
+    assert.equal(state.lastPoolSeed.status, 'NEW');
     assert.equal(state.lastPoolSeed.source, 'CLI');
     assert.equal(state.lastPoolSeed.sourceId, 'axis-ide');
     assert.equal(state.lastPoolSeed.repo, repo);
@@ -1608,11 +1650,14 @@ JSON
     assert.equal(payload.iterations[0].lanes.refine.sourceCounts.workItem, 0);
     assert.equal(payload.iterations[0].lanes.refine.sourceCounts.candidates, 1);
     assert.equal(payload.iterations[0].review.results[0].submit.mode, 'hub');
+    assert.equal(payload.iterations[0].review.results[0].handled.status, 'WAIT_USER_CONFIRM');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'requirement');
+    assert.deepEqual(state.documentUpdates.map((entry) => entry.id), ['seed-work-review']);
+    assert.deepEqual(state.documentUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
   }, {
     poolSeeds: [
-      { id: 'seed-work-review', kind: 'requirement', title: 'Work review converts seed', seed: 'Convert this in work-review', status: 'pending-confirmation' },
+      { id: 'seed-work-review', kind: 'requirement', title: 'Work review converts seed', seed: 'Convert this in work-review', status: 'NEW' },
     ],
   });
 });
@@ -1668,14 +1713,15 @@ esac
     assert.equal(payload.iterations[0].review.results.length, 2);
     assert.deepEqual(payload.iterations[0].review.results.map((entry) => entry.candidateSource), ['work-item', 'work-item']);
     assert.deepEqual(payload.iterations[0].review.results.map((entry) => entry.candidateType), ['requirement', 'bug']);
-    assert.equal(payload.iterations[0].review.results[0].handled.status, 'done');
-    assert.equal(payload.iterations[0].review.results[1].handled.status, 'done');
+    assert.equal(payload.iterations[0].review.results[0].handled.status, 'WAIT_USER_CONFIRM');
+    assert.equal(payload.iterations[0].review.results[1].handled.status, 'WAIT_USER_CONFIRM');
     assert.equal(payload.summary.pending, 2);
     assert.equal(payload.summary.converted, 2);
     assert.deepEqual(payload.summary.pendingBySource, { 'work-item': 2 });
     assert.equal(state.poolDocuments, 2);
     assert.deepEqual(state.workItemUpdates.map((entry) => entry.id), ['wi-pending-req', 'wi-pending-bug']);
-    assert.deepEqual(state.workItemUpdates.map((entry) => entry.payload.status), ['done', 'done']);
+    assert.deepEqual(state.workItemUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM', 'WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.workItemUpdates.map((entry) => entry.payload.sourceArtifactId), ['doc-pool-1', 'doc-pool-1']);
 
     const prompts = await readFile(promptLog, 'utf8');
     assert.match(prompts, /Pending requirement WorkItem/);
@@ -1691,7 +1737,7 @@ esac
         pool: 'requirement',
         title: 'Pending requirement WorkItem',
         notes: 'Convert pending requirement from WorkItem notes',
-        status: 'pending-confirmation',
+        status: 'WAIT_REVIEW',
         sourceArtifactId: 'doc-pending-req',
       },
       {
@@ -1700,7 +1746,7 @@ esac
         pool: 'bug',
         title: 'Pending bug WorkItem',
         notes: 'Convert pending bug from WorkItem notes',
-        status: 'pending-confirmation',
+        status: 'WAIT_REVIEW',
         sourceArtifactId: 'doc-pending-bug',
       },
     ],
@@ -1743,14 +1789,17 @@ JSON
     assert.equal(payload.iterations[0].lanes.refine.sourceCounts.duplicates, 1);
     assert.equal(payload.iterations[0].review.results.length, 1);
     assert.equal(payload.iterations[0].review.results[0].candidateSource, 'pool-seed');
-    assert.equal(payload.iterations[0].review.results[0].handled.status, 'done');
+    assert.equal(payload.iterations[0].review.results[0].handled.status, 'WAIT_USER_CONFIRM');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.workItemUpdates.length, 1);
     assert.equal(state.workItemUpdates[0].id, 'wi-dupe');
-    assert.equal(state.workItemUpdates[0].payload.status, 'done');
+    assert.equal(state.workItemUpdates[0].payload.status, 'WAIT_USER_CONFIRM');
+    assert.equal(state.workItemUpdates[0].payload.sourceArtifactId, 'doc-pool-1');
+    assert.deepEqual(state.documentUpdates.map((entry) => entry.id), ['doc-dupe']);
+    assert.deepEqual(state.documentUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
   }, {
     poolSeeds: [
-      { id: 'doc-dupe', kind: 'requirement', title: 'Duplicate source', seed: 'Convert duplicate once', status: 'pending-confirmation' },
+      { id: 'doc-dupe', kind: 'requirement', title: 'Duplicate source', seed: 'Convert duplicate once', status: 'NEW' },
     ],
     workItems: [
       {
@@ -1759,7 +1808,7 @@ JSON
         pool: 'requirement',
         title: 'Duplicate source',
         notes: 'This WorkItem points at the same raw seed document.',
-        status: 'pending-confirmation',
+        status: 'NEW',
         sourceArtifactId: 'doc-dupe',
       },
     ],
@@ -1844,7 +1893,7 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
-  await withPoolServer(async (backendUrl) => {
+  await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
@@ -1854,16 +1903,21 @@ await withTempDir(async (dir) => {
     assert.equal(payload.mode, 'probe');
     assert.equal(payload.repo, repo);
     assert.equal(payload.spawn, false);
-    assert.equal(payload.lanes.refine.description, 'Refine pending-confirmation pool seeds and WorkItem-pool inputs into confirmed requirements/work-items.');
+    assert.equal(payload.lanes.refine.description, '整理 NEW/WAIT_REVIEW seeds and pool WorkItems into WAIT_USER_CONFIRM documents.');
     assert.deepEqual(payload.lanes.refine.methodologyByKind, {
       idea: 'plan-ceo-review',
       requirement: 'superpowers:brainstorm',
       bug: 'superpowers:systematic-debugging',
       suggestion: 'superpowers:brainstorm',
     });
-    assert.equal(payload.lanes.execute.description, 'Execute confirmed/ready requirements and work-items.');
+    assert.equal(payload.lanes.execute.description, '开发 WAIT_CODE WorkItems.');
     assert.equal(payload.lanes.refine.items[0].id, 'seed-old');
     assert.equal(payload.lanes.execute.items[0].id, 'wi-old');
+    assert.ok(state.requests.some((entry) => entry.url.includes('/pool-seeds?status=NEW')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/pool-seeds?status=WAIT_REVIEW')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/pool-seeds?status=pending-confirmation')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=ready')));
     assert.match(payload.plan[0], /Probe Hub queues/);
   });
 });
@@ -2055,8 +2109,8 @@ esac
     assert.match(prompts, /continue generation in the same pass/);
   }, {
     poolSeeds: [
-      { id: 'seed-req', kind: 'requirement', title: 'Upload images', seed: 'Support image uploads', status: 'pending-confirmation' },
-      { id: 'seed-bug', kind: 'bug', title: 'Crash on save', seed: 'App crashes when saving', status: 'pending-confirmation' },
+      { id: 'seed-req', kind: 'requirement', title: 'Upload images', seed: 'Support image uploads', status: 'NEW' },
+      { id: 'seed-bug', kind: 'bug', title: 'Crash on save', seed: 'App crashes when saving', status: 'WAIT_REVIEW' },
     ],
   });
 });
@@ -2121,7 +2175,7 @@ JSON
     assert.doesNotMatch(result.stdout, /loop-skeleton/);
   }, {
     poolSeeds: [
-      { id: 'seed-loop', kind: 'requirement', title: 'Loop converts seed', seed: 'Convert this in loop', status: 'pending-confirmation' },
+      { id: 'seed-loop', kind: 'requirement', title: 'Loop converts seed', seed: 'Convert this in loop', status: 'NEW' },
     ],
   });
 });
@@ -2169,13 +2223,14 @@ JSON
     assert.equal(payload.iterations.length, 2);
     assert.deepEqual(payload.iterations.map((entry) => entry.iteration), [1, 2]);
     assert.equal(payload.iterations[0].review.results[0].seedId, 'seed-loop-bug');
-    assert.equal(payload.iterations[1].review.results[0].seedId, 'seed-loop-bug');
+    assert.equal(payload.iterations[1].review.results.length, 0);
     assert.equal(payload.sleeps.length, 1);
     assert.equal(payload.sleeps[0].afterIteration, 1);
     assert.equal(payload.sleeps[0].skipped, true);
-    assert.equal(payload.summary.converted, 2);
-    assert.equal(payload.summary.conversions, 2);
-    assert.equal(state.poolDocuments, 2);
+    assert.equal(payload.summary.converted, 1);
+    assert.equal(payload.summary.conversions, 1);
+    assert.equal(state.poolDocuments, 1);
+    assert.deepEqual(state.documentUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
   }, {
     poolSeeds: [
       { id: 'seed-loop-bug', kind: 'bug', title: 'Loop bug', seed: 'Crash in loop mode', status: 'pending-confirmation' },
@@ -2213,7 +2268,7 @@ await withTempDir(async (dir) => {
     assert.deepEqual(payload.iterations.map((entry) => entry.review.results.length), [0, 0, 0]);
     assert.equal(payload.sleeps.length, 2);
     assert.equal(payload.sleeps[0].skipped, true);
-    assert.match(payload.warning, /No pending-confirmation pool seeds/);
+    assert.match(payload.warning, /No NEW or WAIT_REVIEW pool seeds/);
     assert.equal(payload.summary.pending, 0);
     assert.equal(payload.summary.idle, 3);
     assert.equal(payload.summary.converted, 0);
@@ -2222,7 +2277,7 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
-  await withPoolServer(async (backendUrl) => {
+  await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     await writeProjectBinding(repo, backendUrl);
 
@@ -2256,6 +2311,8 @@ await withTempDir(async (dir) => {
     assert.match(payload.iterations[0].coding.warning, /claim\/execute\/writeback APIs/i);
     assert.equal(payload.summary.ready, 1);
     assert.equal(payload.summary.blocked, 1);
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=ready')));
   });
 });
 
@@ -2314,7 +2371,7 @@ JSON
     assert.equal(state.lastPoolDocument.kind, 'requirement');
   }, {
     poolSeeds: [
-      { id: 'seed-workspace-review', kind: 'requirement', title: 'Workspace review seed', seed: 'Convert from workspace mode', status: 'pending-confirmation' },
+      { id: 'seed-workspace-review', kind: 'requirement', title: 'Workspace review seed', seed: 'Convert from workspace mode', status: 'NEW' },
     ],
   });
 });
