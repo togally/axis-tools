@@ -88,12 +88,12 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work-review [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis work-review --repo /path/to/repo\n  axis work-review --repo /path/to/repo --iterations 1 --json\n  axis work-coding --repo /path/to/repo\n  axis work-coding --repo /path/to/repo --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis work-review\n  axis work-review --iterations 1 --json\n  axis work-review --repo /path/to/repo --iterations 1 --json\n  axis work-coding\n  axis work-coding --once --json\n  axis work-coding --repo /path/to/repo --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function printWorkWorkerUsage(workerType) {
     const command = workerType === 'review' ? 'work-review' : 'work-coding';
-    console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nFlags:\n  --repo <path>                    Repo to read AxisNode project binding from\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
+    console.log(`axis ${command}\n\nUsage:\n  axis ${command} [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n\nDefault scope:\n  Without --repo, use AXIS_HOME or ~/.axis, sync accessible AxisNode projects, and loop all permitted project queues.\n\nFlags:\n  --repo <path>                    Narrow to one repo and read its AxisNode project binding\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --backend-url <url>              AxisNode backend; defaults to cached login backend or shared backend\n  --interval <seconds>, --sleep <seconds>\n                                   Seconds between polls\n  --iterations <n>, --max-iterations <n>\n                                   Run a bounded number of polls\n  --once                           Alias for --iterations 1\n  --json                           Print machine-readable JSON output\n  --help, -h                       Print this help\n`);
 }
 function isHelpFlag(value) {
     return value === '--help' || value === '-h';
@@ -171,6 +171,12 @@ function cliPackageRoot() {
 }
 function globalOrbitConfigPath() {
     return path.join(homeDir(), '.orbit', 'config.json');
+}
+function axisHomeDir() {
+    return path.resolve(process.env.AXIS_HOME ?? path.join(homeDir(), '.axis'));
+}
+function axisWorkspaceCatalogPath(workspaceRoot = axisHomeDir()) {
+    return path.join(workspaceRoot, 'catalog.json');
 }
 function stableOrbitSkillPath(skillName = 'orbit-workflow') {
     return path.join(homeDir(), '.orbit', 'skills', skillName, 'SKILL.md');
@@ -1055,6 +1061,8 @@ async function fetchProductLines(backendUrl, token, options = {}) {
         .map(visibleProductDetail)
         .filter((entry) => Boolean(entry));
     if (products.length === 0) {
+        if (options.allowEmpty)
+            return [];
         const account = options.account ? ` for account "${options.account}"` : ' for this account';
         throw new Error(`No accessible product lines${account} at ${normalizeBackendUrl(backendUrl)}. Verify this account has product/project access for this backend.`);
     }
@@ -1813,10 +1821,188 @@ async function selectProductLinesToPull(prompt, backendUrl, token, account) {
     }
     return [await fetchProductDetail(backendUrl, selected.id, token, { allowEmptyProjects: true })];
 }
+function workspaceProductPath(workspaceRoot, product) {
+    return path.join(workspaceRoot, safeSlug(product.name, 'product-line'));
+}
+function workspaceProjectPath(workspaceRoot, product, project) {
+    return path.join(workspaceProductPath(workspaceRoot, product), safeSlug(project.name, 'project'));
+}
+function workspaceProjectFilter() {
+    return {
+        id: getArg('--project-id'),
+        uuid: getArg('--project-uuid'),
+    };
+}
+function workspaceProjectMatchesFilter(project, filter) {
+    if (filter.id && filter.id !== project.id && filter.id !== project.projectId)
+        return false;
+    if (filter.uuid && filter.uuid !== project.uuid)
+        return false;
+    return true;
+}
+async function fetchWorkspaceProductDetails(backendUrl, token, account) {
+    const warnings = [];
+    const productLines = await fetchProductLines(backendUrl, token, { account, allowEmpty: true });
+    const details = [];
+    for (const entry of productLines) {
+        try {
+            details.push(await fetchProductDetail(backendUrl, entry.product.id, token, { allowEmptyProjects: true }));
+        }
+        catch (error) {
+            if (error instanceof OrbitCliError)
+                throw error;
+            warnings.push(`Product line ${entry.product.name} detail fetch failed; using catalog summary. ${error instanceof Error ? error.message : String(error)}`);
+            details.push(entry);
+        }
+    }
+    return { details, warnings };
+}
+function safeWorkspaceProject(project) {
+    return {
+        productLineId: project.binding.productLineId ?? project.binding.productLineUuid ?? null,
+        productLineUuid: project.binding.productLineUuid ?? null,
+        productLineName: project.binding.productLineName ?? project.product.name,
+        projectId: project.binding.projectId ?? project.binding.projectUuid ?? null,
+        projectUuid: project.binding.projectUuid ?? null,
+        projectName: project.binding.projectName ?? project.project.name,
+        repoPath: project.repoPath,
+        materialized: project.materialized,
+        repoUrl: project.repoUrl,
+        syncStatus: project.syncStatus,
+        warning: project.warning,
+    };
+}
+async function writeAxisWorkspaceCatalog(workspace) {
+    ensureDir(path.dirname(workspace.catalogPath));
+    const payload = {
+        schemaVersion: 'axis.workspace.catalog.v1',
+        workspaceRoot: workspace.workspaceRoot,
+        backendUrl: normalizeBackendUrl(workspace.backendUrl),
+        account: workspace.account,
+        updatedAt: new Date().toISOString(),
+        projectCount: workspace.projects.length,
+        projects: workspace.projects.map(safeWorkspaceProject),
+        warnings: workspace.warnings,
+    };
+    await writeFile(workspace.catalogPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
+}
+async function syncAxisWorkspaceProject(values) {
+    const repoPath = workspaceProjectPath(values.workspaceRoot, values.productDetail.product, values.project);
+    const repoUrl = cloneAddress(values.project);
+    let materialized = false;
+    let syncStatus = repoUrl ? 'not-synced' : 'metadata-only';
+    let warning = null;
+    if (repoUrl) {
+        try {
+            const sync = await syncRepository(repoUrl, repoPath);
+            syncStatus = sync.status;
+            materialized = sync.status === 'cloned' || sync.status === 'pulled';
+            warning = sync.error ? `Repository sync failed for ${values.project.name}: ${sync.error}` : null;
+        }
+        catch (error) {
+            syncStatus = 'sync-failed';
+            warning = `Repository sync failed for ${values.project.name}: ${error instanceof Error ? error.message : String(error)}`;
+        }
+    }
+    ensureDir(repoPath);
+    const binding = buildProjectBinding({
+        repoPath,
+        backendUrl: values.backendUrl,
+        mcpUrl: values.mcpUrl,
+        owner: values.owner,
+        productDetail: values.productDetail,
+        selectedProject: values.project,
+        login: values.login,
+        account: values.account,
+    });
+    await writeProjectBinding(repoPath, binding);
+    return {
+        workspaceRoot: values.workspaceRoot,
+        product: values.productDetail.product,
+        project: values.project,
+        repoPath,
+        binding,
+        materialized,
+        repoUrl,
+        syncStatus,
+        warning,
+    };
+}
+async function resolveAxisWorkspaceForWorker() {
+    const config = await readGlobalOrbitConfig();
+    const workspaceRoot = axisHomeDir();
+    const backendUrl = getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl();
+    const mcpUrl = resolveMcpUrl(getArg('--mcp-url'), safeString(config.mcpUrl));
+    const { login, account } = await requireCachedLoginSession(backendUrl, mcpUrl);
+    const owner = login.user.account ?? account;
+    const warnings = [];
+    const { details, warnings: detailWarnings } = await fetchWorkspaceProductDetails(backendUrl, login.token, owner);
+    warnings.push(...detailWarnings);
+    ensureDir(workspaceRoot);
+    const filter = workspaceProjectFilter();
+    const projects = [];
+    for (const productDetail of details) {
+        const productPath = workspaceProductPath(workspaceRoot, productDetail.product);
+        let productHasProjects = false;
+        for (const project of productDetail.modules) {
+            if (!workspaceProjectMatchesFilter(project, filter))
+                continue;
+            productHasProjects = true;
+            try {
+                const workspaceProject = await syncAxisWorkspaceProject({
+                    workspaceRoot,
+                    backendUrl,
+                    mcpUrl,
+                    owner,
+                    productDetail,
+                    project,
+                    login,
+                    account,
+                });
+                projects.push(workspaceProject);
+                if (workspaceProject.warning)
+                    warnings.push(workspaceProject.warning);
+            }
+            catch (error) {
+                warnings.push(`Project ${project.name} could not be added to Axis workspace: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+        if (productHasProjects) {
+            const productBinding = buildProductLineBinding({
+                rootPath: productPath,
+                backendUrl,
+                mcpUrl,
+                productDetail,
+                login,
+                account,
+                owner,
+            });
+            await writeProductLineBinding(productPath, productBinding);
+        }
+    }
+    if ((filter.id || filter.uuid) && projects.length === 0) {
+        warnings.push(`No accessible AxisNode project matched ${filter.id ? `--project-id ${filter.id}` : ''}${filter.id && filter.uuid ? ' and ' : ''}${filter.uuid ? `--project-uuid ${filter.uuid}` : ''}.`);
+    }
+    else if (projects.length === 0) {
+        warnings.push('No accessible AxisNode projects found in the user workspace.');
+    }
+    const workspace = {
+        workspaceRoot,
+        backendUrl,
+        account,
+        login,
+        projects,
+        warnings,
+        catalogPath: axisWorkspaceCatalogPath(workspaceRoot),
+    };
+    await writeAxisWorkspaceCatalog(workspace);
+    return workspace;
+}
 async function pullCloudStructure() {
-    const rootPath = path.resolve(getArg('--root') ?? process.cwd());
-    const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
-    const mcpUrl = resolveMcpUrl(getArg('--mcp-url'));
+    const config = await readGlobalOrbitConfig();
+    const rootPath = path.resolve(getArg('--root') ?? axisHomeDir());
+    const backendUrl = getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl();
+    const mcpUrl = resolveMcpUrl(getArg('--mcp-url'), safeString(config.mcpUrl));
     const productConfigs = [];
     const projectConfigs = [];
     const gitResults = [];
@@ -3995,6 +4181,181 @@ function summarizeWorkLoop(iterations, requested) {
     }
     return summary;
 }
+function baseWorkLanes() {
+    return {
+        refine: {
+            description: 'Refine pending-confirmation pool seeds into confirmed requirements/work-items.',
+            query: 'pool-seeds?status=pending-confirmation',
+            methodologyByKind: poolMethodologyMap(),
+            items: [],
+            warning: null,
+        },
+        execute: {
+            description: 'Execute confirmed/ready requirements and work-items.',
+            query: 'work-items?status=ready',
+            items: [],
+            warning: null,
+        },
+    };
+}
+function appendLaneItemsAndWarnings(targetLanes, sourcePayload, warnings) {
+    const sourceLanes = isJson(sourcePayload.lanes) ? sourcePayload.lanes : {};
+    for (const laneName of ['refine', 'execute']) {
+        const sourceLane = isJson(sourceLanes[laneName]) ? sourceLanes[laneName] : {};
+        const targetLane = isJson(targetLanes[laneName]) ? targetLanes[laneName] : {};
+        const targetItems = Array.isArray(targetLane.items) ? targetLane.items : [];
+        const sourceItems = Array.isArray(sourceLane.items) ? sourceLane.items.filter(isJson) : [];
+        targetLane.items = [...targetItems, ...sourceItems];
+        pushUniqueWarning(warnings, sourceLane.warning);
+        targetLanes[laneName] = targetLane;
+    }
+}
+function summarizeWorkspaceIteration(projectPayloads, workerType, warnings) {
+    const summary = {
+        pending: 0,
+        ready: 0,
+        conversions: 0,
+        converted: 0,
+        failed: 0,
+        blocked: 0,
+        idle: projectPayloads.length === 0 ? 1 : 0,
+        warnings: [],
+    };
+    for (const warning of warnings)
+        pushUniqueWarning(summary.warnings, warning);
+    for (const projectPayload of projectPayloads) {
+        const projectSummary = summarizeWorkIteration(projectPayload);
+        summary.pending += projectSummary.pending;
+        summary.ready += projectSummary.ready;
+        summary.conversions += projectSummary.conversions;
+        summary.converted += projectSummary.converted;
+        summary.failed += projectSummary.failed;
+        summary.blocked += projectSummary.blocked;
+        summary.idle += projectSummary.idle;
+        for (const warning of projectSummary.warnings)
+            pushUniqueWarning(summary.warnings, warning);
+    }
+    if (workerType === 'coding' && summary.ready === 0 && summary.blocked === 0 && projectPayloads.length > 0) {
+        summary.idle = Math.max(summary.idle, projectPayloads.length);
+    }
+    return summary;
+}
+function workspaceWorkLoopStopReason(workerType, payload, summary) {
+    const review = isJson(payload.review) ? payload.review : {};
+    if (workerType === 'review') {
+        const reviewWarning = safeString(review.warning) ?? safeString(payload.warning);
+        if (summary.conversions === 0 && reviewWarning?.includes('No worker Agent is available'))
+            return 'no-worker-agent';
+        if (summary.failed > 0)
+            return 'worker-failure';
+    }
+    return null;
+}
+async function buildWorkspaceWorkerIteration(workspace, workerType, options = {}) {
+    const projects = [];
+    const lanes = baseWorkLanes();
+    const warnings = [...workspace.warnings];
+    const review = {
+        agent: null,
+        prerequisites: null,
+        results: [],
+        warning: null,
+    };
+    const coding = {
+        ok: true,
+        status: 'idle',
+        readyCount: 0,
+        items: [],
+        warning: null,
+        todo: null,
+    };
+    if (workspace.projects.length === 0) {
+        const warning = workspace.warnings.find((entry) => /No accessible AxisNode/.test(entry))
+            ?? 'No accessible AxisNode projects found in the user workspace; worker is idle.';
+        warnings.push(warning);
+        if (workerType === 'review')
+            review.warning = warning;
+        else
+            coding.warning = warning;
+    }
+    for (const project of workspace.projects) {
+        const projectId = project.binding.projectId ?? project.binding.projectUuid ?? project.project.id;
+        const projectName = project.binding.projectName ?? project.project.name;
+        options.progress?.(`project: ${projectId} ${projectName} (${project.repoPath})`);
+        if (project.warning)
+            options.progress?.(`project warning: ${project.warning}`);
+        const run = workerType === 'review'
+            ? await buildReviewWorkerIteration(project.repoPath, { spawn: true, progress: options.progress, mode: options.mode ? `${options.mode}-project` : 'work-review-project-iteration' })
+            : await buildCodingWorkerIteration(project.repoPath, { progress: options.progress, mode: options.mode ? `${options.mode}-project` : 'work-coding-project-iteration' });
+        const projectPayload = {
+            ...run,
+            scope: 'project',
+            workspaceRoot: workspace.workspaceRoot,
+            productLineId: project.binding.productLineId ?? project.binding.productLineUuid ?? null,
+            productLineName: project.binding.productLineName ?? project.product.name,
+            projectId: project.binding.projectId ?? project.binding.projectUuid ?? null,
+            projectName,
+            repoPath: project.repoPath,
+            materialized: project.materialized,
+            syncStatus: project.syncStatus,
+            syncWarning: project.warning,
+        };
+        projects.push(projectPayload);
+        appendLaneItemsAndWarnings(lanes, projectPayload, warnings);
+        const projectReview = isJson(projectPayload.review) ? projectPayload.review : {};
+        const projectCoding = isJson(projectPayload.coding) ? projectPayload.coding : {};
+        const projectResults = Array.isArray(projectReview.results) ? projectReview.results.filter(isJson) : [];
+        review.results = [...(Array.isArray(review.results) ? review.results : []), ...projectResults];
+        if (!review.agent && safeString(projectReview.agent))
+            review.agent = projectReview.agent;
+        if (!review.prerequisites && isJson(projectReview.prerequisites))
+            review.prerequisites = projectReview.prerequisites;
+        pushUniqueWarning(warnings, projectReview.warning);
+        const projectItems = Array.isArray(projectCoding.items) ? projectCoding.items.filter(isJson) : [];
+        coding.items = [...(Array.isArray(coding.items) ? coding.items : []), ...projectItems];
+        coding.readyCount = numericValue(coding.readyCount) + numericValue(projectCoding.readyCount);
+        if (safeString(projectCoding.status) === 'blocked') {
+            coding.ok = false;
+            coding.status = 'blocked';
+            coding.todo = safeString(projectCoding.todo) ?? coding.todo;
+        }
+        pushUniqueWarning(warnings, projectCoding.warning);
+    }
+    const summary = summarizeWorkspaceIteration(projects, workerType, warnings);
+    if (workerType === 'review') {
+        review.warning = review.warning ?? (summary.warnings.length > 0 ? summary.warnings.join(' ') : null);
+    }
+    else {
+        coding.warning = coding.warning ?? (summary.warnings.length > 0 ? summary.warnings.join(' ') : null);
+    }
+    const payload = {
+        ok: true,
+        mode: options.mode ?? (workerType === 'review' ? 'work-review-workspace-iteration' : 'work-coding-workspace-iteration'),
+        workerType,
+        scope: 'workspace',
+        repo: null,
+        workspaceRoot: workspace.workspaceRoot,
+        projectCount: workspace.projects.length,
+        projects,
+        lanes,
+        warning: summary.warnings.length > 0 ? summary.warnings.join(' ') : null,
+        summary,
+        plan: [
+            'Sync accessible AxisNode projects into the user workspace.',
+            workerType === 'review'
+                ? 'Run the existing review worker for each accessible project queue.'
+                : 'Probe ready coding WorkItems for each accessible project queue without executing them.',
+        ],
+    };
+    if (workerType === 'review') {
+        payload.review = review;
+        payload.refine = review;
+    }
+    else {
+        payload.coding = coding;
+    }
+    return payload;
+}
 function workLoopStopReason(workerType, payload, summary) {
     const lanes = isJson(payload.lanes) ? payload.lanes : {};
     const refineLane = isJson(lanes.refine) ? lanes.refine : {};
@@ -4061,7 +4422,13 @@ function printWorkLoop(payload) {
         console.log(JSON.stringify(payload, null, 2));
         return;
     }
-    console.log(`repo: ${payload.repo}`);
+    if (safeString(payload.scope) === 'workspace') {
+        console.log(`workspace root: ${payload.workspaceRoot}`);
+        console.log(`projects: ${payload.projectCount ?? 0}`);
+    }
+    else {
+        console.log(`repo: ${payload.repo}`);
+    }
     console.log(`mode: ${payload.mode}`);
     console.log(`worker: ${payload.workerType ?? 'review'}`);
     console.log(`loop: ${payload.infinite ? 'infinite' : 'bounded'}`);
@@ -4072,10 +4439,12 @@ function printWorkLoop(payload) {
     for (const iteration of iterations) {
         const summary = isJson(iteration.summary) ? iteration.summary : summarizeWorkIteration(iteration);
         if (workerType === 'coding') {
-            console.log(`iteration ${iteration.iteration}/${payload.maxIterations ?? 'unbounded'}: ready ${summary.ready}, blocked ${summary.blocked}, idle ${summary.idle}`);
+            const projectText = safeString(payload.scope) === 'workspace' ? `projects ${iteration.projectCount ?? payload.projectCount ?? 0}, ` : '';
+            console.log(`iteration ${iteration.iteration}/${payload.maxIterations ?? 'unbounded'}: ${projectText}ready ${summary.ready}, blocked ${summary.blocked}, idle ${summary.idle}`);
         }
         else {
-            console.log(`iteration ${iteration.iteration}/${payload.maxIterations ?? 'unbounded'}: pending ${summary.pending}, converted ${summary.converted}/${summary.conversions}, idle ${summary.idle}`);
+            const projectText = safeString(payload.scope) === 'workspace' ? `projects ${iteration.projectCount ?? payload.projectCount ?? 0}, ` : '';
+            console.log(`iteration ${iteration.iteration}/${payload.maxIterations ?? 'unbounded'}: ${projectText}pending ${summary.pending}, converted ${summary.converted}/${summary.conversions}, idle ${summary.idle}`);
         }
         const warnings = Array.isArray(summary.warnings) ? summary.warnings : [];
         for (const warning of warnings)
@@ -4186,6 +4555,104 @@ async function runWorkWorkerLoop(repoPath, workerType, options = {}) {
         mode: options.mode ?? (workerType === 'review' ? 'work-review' : 'work-coding'),
         workerType,
         repo: repoPath,
+        bounded,
+        infinite: !bounded,
+        maxIterations,
+        intervalSeconds,
+        iterations,
+        sleeps,
+        summary,
+        stopReason,
+        warning: summary.warnings.length > 0 ? summary.warnings.join(' ') : null,
+    };
+    emitWorkProgress(`stop reason: ${stopReason}`);
+    return payload;
+}
+async function runWorkspaceWorkWorkerLoop(workerType, options = {}) {
+    const maxIterations = workLoopMaxIterationsArg();
+    const bounded = maxIterations !== null;
+    const intervalSeconds = secondsArgAny(['--interval', '--sleep'], 10, 3600);
+    const iterations = [];
+    const sleeps = [];
+    let stopReason = 'max-iterations';
+    const startupLabel = options.startupLabel ?? `axis work-${workerType === 'review' ? 'review' : 'coding'}`;
+    const workspace = await resolveAxisWorkspaceForWorker();
+    const cleanup = installWorkLoopInterruptHandlers(emitWorkProgress);
+    emitWorkProgress(`${startupLabel} starting`);
+    emitWorkProgress(`workspace root: ${workspace.workspaceRoot}`);
+    emitWorkProgress(`projects: ${workspace.projects.length}`);
+    emitWorkProgress(`worker: ${workerType}`);
+    emitWorkProgress(`loop: ${bounded ? `bounded (${maxIterations} iteration${maxIterations === 1 ? '' : 's'})` : 'infinite'}`);
+    emitWorkProgress(`interval seconds: ${intervalSeconds}`);
+    for (const warning of workspace.warnings)
+        emitWorkProgress(`workspace warning: ${warning}`);
+    try {
+        for (let index = 0; maxIterations === null || index < maxIterations; index++) {
+            if (workLoopInterrupted) {
+                stopReason = 'interrupted';
+                break;
+            }
+            const iterationNumber = index + 1;
+            const startedAt = new Date().toISOString();
+            emitWorkProgress(`iteration ${iterationNumber}: start`);
+            const run = await buildWorkspaceWorkerIteration(workspace, workerType, {
+                spawn: workerType === 'review',
+                progress: emitWorkProgress,
+                mode: options.iterationMode,
+            });
+            const iteration = {
+                iteration: iterationNumber,
+                startedAt,
+                finishedAt: new Date().toISOString(),
+                ...run,
+            };
+            const iterationSummary = isJson(iteration.summary) ? iteration.summary : summarizeWorkIteration(iteration);
+            iteration.summary = iterationSummary;
+            iterations.push(iteration);
+            if (workerType === 'coding') {
+                emitWorkProgress(`iteration ${iterationNumber}: projects ${workspace.projects.length}, ready ${iterationSummary.ready}, blocked ${iterationSummary.blocked}, idle ${iterationSummary.idle}`);
+            }
+            else {
+                emitWorkProgress(`iteration ${iterationNumber}: projects ${workspace.projects.length}, pending ${iterationSummary.pending}, converted ${iterationSummary.converted}/${iterationSummary.conversions}, idle ${iterationSummary.idle}`);
+            }
+            if (workLoopInterrupted) {
+                stopReason = 'interrupted';
+                break;
+            }
+            const reason = workspaceWorkLoopStopReason(workerType, iteration, iterationSummary);
+            if (reason) {
+                stopReason = reason;
+                break;
+            }
+            const reachedBound = maxIterations !== null && iterationNumber >= maxIterations;
+            if (reachedBound) {
+                stopReason = 'max-iterations';
+                break;
+            }
+            emitWorkProgress(`idle: sleeping ${intervalSeconds}s before next poll`);
+            const sleep = await sleepWorkLoop(intervalSeconds);
+            sleeps.push({ afterIteration: iterationNumber, seconds: intervalSeconds, skipped: sleep.skipped, interrupted: sleep.interrupted });
+            if (sleep.interrupted) {
+                stopReason = 'interrupted';
+                break;
+            }
+        }
+    }
+    finally {
+        cleanup();
+    }
+    const summary = summarizeWorkLoop(iterations, maxIterations);
+    const payload = {
+        ok: true,
+        mode: options.mode ?? (workerType === 'review' ? 'work-review' : 'work-coding'),
+        workerType,
+        scope: 'workspace',
+        repo: null,
+        workspaceRoot: workspace.workspaceRoot,
+        backendUrl: normalizeBackendUrl(workspace.backendUrl),
+        projectCount: workspace.projects.length,
+        workspaceProjects: workspace.projects.map(safeWorkspaceProject),
+        catalogPath: workspace.catalogPath,
         bounded,
         infinite: !bounded,
         maxIterations,
@@ -4367,7 +4834,9 @@ async function main() {
             printWorkWorkerUsage('review');
             return;
         }
-        printWorkLoop(await runWorkWorkerLoop(resolveRepoArg(), 'review'));
+        printWorkLoop(await (getArg('--repo')
+            ? runWorkWorkerLoop(resolveRepoArg(), 'review')
+            : runWorkspaceWorkWorkerLoop('review')));
         return;
     }
     if (group === 'work-coding') {
@@ -4375,7 +4844,9 @@ async function main() {
             printWorkWorkerUsage('coding');
             return;
         }
-        printWorkLoop(await runWorkWorkerLoop(resolveRepoArg(), 'coding'));
+        printWorkLoop(await (getArg('--repo')
+            ? runWorkWorkerLoop(resolveRepoArg(), 'coding')
+            : runWorkspaceWorkWorkerLoop('coding')));
         return;
     }
     if (group === 'install') {

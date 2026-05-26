@@ -442,7 +442,44 @@ async function writeWorkPrerequisites(home) {
 }
 
 async function withPoolServer(fn, options = {}) {
-  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0 };
+  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0, loginCount: 0, accountByToken: {} };
+  const catalog = {
+    products: [
+      {
+        product: {
+          id: 'pl_2',
+          uuid: '8f938fdc-f2be-44d6-8c48-91bc9156836d',
+          name: 'Hermes',
+          summary: 'Hermes product line',
+          status: 'active',
+        },
+        modules: [
+          {
+            id: 'mod_1',
+            uuid: '71533d74-80e3-4e7e-adbb-69c42a25db0c',
+            productId: 'pl_2',
+            projectId: 'proj_1',
+            name: 'Hermes Console',
+            summary: 'Console project',
+            status: 'active',
+            repoPath: options.repoPath ?? '/tmp/hermes-console',
+            repositoryUrl: options.repositoryUrl,
+            githubRepo: options.githubRepo,
+          },
+          {
+            id: 'mod_2',
+            uuid: 'bd53b010-e6b3-4ac6-9df6-f7558d5c1189',
+            productId: 'pl_2',
+            projectId: 'proj_2',
+            name: 'Hermes Docs',
+            summary: 'Docs project',
+            status: 'active',
+          },
+        ],
+      },
+    ],
+    runtime: { store: 'mock' },
+  };
   const server = http.createServer((req, res) => {
     res.setHeader('content-type', 'application/json');
     state.requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
@@ -462,6 +499,61 @@ async function withPoolServer(fn, options = {}) {
       req.on('end', () => resolve(body ? JSON.parse(body) : {}));
     });
 
+    if (req.method === 'POST' && req.url === '/api/login') {
+      state.loginCount++;
+      readJson().then((payload) => {
+        if (!payload.account || !payload.password) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'account and password are required' }));
+          return;
+        }
+        state.accountByToken['orbit-dev-token'] = payload.account;
+        res.end(JSON.stringify({
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          session: 'orbit-dev-session',
+          user: {
+            id: 'orbit-dev-user',
+            account: payload.account,
+            displayName: 'Orbit User',
+            name: 'Orbit User',
+            role: 'admin',
+            permissions: ['products:read', 'projects:bind'],
+          },
+        }));
+      });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/me') {
+      if (!requireAuth()) return;
+      const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      const account = state.accountByToken[token] ?? 'orbit-user';
+      res.end(JSON.stringify({
+        user: {
+          id: 'orbit-dev-user',
+          account,
+          displayName: 'Orbit User',
+          name: 'Orbit User',
+          role: 'admin',
+          permissions: ['products:read', 'projects:bind'],
+        },
+      }));
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/products') {
+      if (!requireAuth()) return;
+      if (options.emptyProducts) {
+        res.end(JSON.stringify({ products: [], runtime: catalog.runtime }));
+        return;
+      }
+      res.end(JSON.stringify(catalog));
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/api/products/pl_2') {
+      if (!requireAuth()) return;
+      res.end(JSON.stringify({ ...catalog.products[0], runtime: catalog.runtime }));
+      return;
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/pool-templates')) {
       if (!requireAuth()) return;
       const url = new URL(req.url, 'http://127.0.0.1');
@@ -1974,6 +2066,167 @@ await withTempDir(async (dir) => {
     assert.equal(payload.summary.ready, 1);
     assert.equal(payload.summary.blocked, 1);
   });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const unbound = path.join(dir, 'unbound-cwd');
+    const fakeBin = path.join(dir, 'fake-bin');
+    await mkdir(unbound, { recursive: true });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+    await writeWorkPrerequisites(home);
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Workspace review seed","summary":"Converted by workspace worker","status":"draft","markdown":"# Workspace review seed\\n","sections":[],"workItems":[{"title":"Build workspace review"}]}
+JSON
+`);
+
+    const result = await run([
+      'work-review',
+      '--agent',
+      'codex',
+      '--iterations',
+      '1',
+      '--json',
+      '--backend-url',
+      backendUrl,
+    ], {
+      cwd: unbound,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'work-review');
+    assert.equal(payload.scope, 'workspace');
+    assert.equal(payload.repo, null);
+    assert.equal(payload.workspaceRoot, path.join(home, '.axis'));
+    assert.equal(payload.catalogPath, path.join(home, '.axis', 'catalog.json'));
+    assert.equal(payload.projectCount, 2);
+    assert.notEqual(payload.stopReason, 'no-project-binding');
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.iterations[0].projects.length, 2);
+    assert.equal(payload.iterations[0].projects[0].projectId, 'proj_1');
+    assert.equal(payload.iterations[0].projects[0].review.results[0].seedId, 'seed-workspace-review');
+    assert.equal(payload.iterations[0].projects[0].review.results[0].submit.mode, 'hub');
+    assert.equal(payload.summary.converted, 1);
+    const catalog = JSON.parse(await readFile(payload.catalogPath, 'utf8'));
+    assert.equal(catalog.schemaVersion, 'axis.workspace.catalog.v1');
+    assert.equal(catalog.workspaceRoot, path.join(home, '.axis'));
+    assert.equal(catalog.projectCount, 2);
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.lastPoolDocument.kind, 'requirement');
+  }, {
+    poolSeeds: [
+      { id: 'seed-workspace-review', kind: 'requirement', title: 'Workspace review seed', seed: 'Convert from workspace mode', status: 'pending-confirmation' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(dir, 'custom-axis-home');
+    const unbound = path.join(dir, 'unbound-cwd');
+    await mkdir(unbound, { recursive: true });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    const result = await run([
+      'work-coding',
+      '--iterations',
+      '1',
+      '--json',
+      '--backend-url',
+      backendUrl,
+    ], {
+      cwd: unbound,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        AXIS_WORK_LOOP_SKIP_SLEEP: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'work-coding');
+    assert.equal(payload.scope, 'workspace');
+    assert.equal(payload.repo, null);
+    assert.equal(payload.workspaceRoot, axisHome);
+    assert.equal(payload.catalogPath, path.join(axisHome, 'catalog.json'));
+    assert.equal(payload.projectCount, 2);
+    assert.notEqual(payload.stopReason, 'no-project-binding');
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.iterations[0].projects.length, 2);
+    assert.deepEqual(payload.iterations[0].projects.map((project) => project.projectId), ['proj_1', 'proj_2']);
+    assert.equal(payload.iterations[0].projects[0].coding.status, 'blocked');
+    assert.equal(payload.iterations[0].projects[0].coding.readyCount, 1);
+    assert.match(payload.iterations[0].projects[0].coding.warning, /TODO/i);
+    assert.equal(payload.summary.ready, 1);
+    assert.equal(payload.summary.blocked, 1);
+    const catalog = JSON.parse(await readFile(payload.catalogPath, 'utf8'));
+    assert.equal(catalog.workspaceRoot, axisHome);
+    assert.equal(catalog.projectCount, 2);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    const unbound = path.join(dir, 'unbound-cwd');
+    await mkdir(unbound, { recursive: true });
+
+    await assert.rejects(
+      run([
+        'work-review',
+        '--iterations',
+        '1',
+        '--json',
+        '--backend-url',
+        backendUrl,
+      ], { cwd: unbound, env: { HOME: home } }),
+      (error) => /Please login/.test(error.stderr)
+        && !/no-project-binding|No AxisNode project binding/.test(error.stderr),
+    );
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    const unbound = path.join(dir, 'unbound-cwd');
+    await mkdir(unbound, { recursive: true });
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    const result = await run([
+      'work-coding',
+      '--iterations',
+      '1',
+      '--json',
+      '--backend-url',
+      backendUrl,
+    ], {
+      cwd: unbound,
+      env: {
+        HOME: home,
+        AXIS_WORK_LOOP_SKIP_SLEEP: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope, 'workspace');
+    assert.equal(payload.projectCount, 0);
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.match(payload.warning, /No accessible AxisNode projects/);
+    assert.equal(payload.summary.idle, 1);
+  }, { emptyProducts: true });
 });
 
 await withTempDir(async (dir) => {

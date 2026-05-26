@@ -43,8 +43,10 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
 - `axis project show`
   - 查看当前 repo 的 AxisNode 绑定
 - `axis work-review` / `axis work-coding`
+  - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
   - `work-review` 持续运行 review/refine worker，把待确认 seed 转成 pool document / WorkItems
   - `work-coding` 持续探测 confirmed/ready WorkItems；Hub claim/execute/writeback API 未完成前会明确 blocked/TODO，不会假装实现成功
+  - `--repo <path>` 是显式窄模式，只处理该路径下已绑定的单个 repo/project
 
 ## 仓库结构
 
@@ -203,13 +205,27 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis work-review` / `axis work-coding` 是后续自动化开发循环的主命令。两个 worker 默认都会持续轮询直到用户 Ctrl+C/SIGINT/SIGTERM；需要 debug/test 时再用显式 bounded flags。
+`axis work-review` / `axis work-coding` 是后续自动化开发循环的主命令。两个 worker 是用户级 worker：默认从 `AXIS_HOME`（未设置时为 `~/.axis`）读取/同步当前登录账号可访问的产品线、项目和工作队列，并持续轮询所有有权限的项目。可以在未绑定 repo 或任意目录运行；当前 cwd 没有 `.axis/project.json` 不再是默认 worker 的停止条件。
+
+新电脑或新环境的最短路径：
 
 ```bash
+axis login
+axis pull
+axis work-review
+```
+
+默认都会持续轮询直到用户 Ctrl+C/SIGINT/SIGTERM；需要 debug/test 时再用显式 bounded flags。
+
+```bash
+axis work-review
+axis work-review --iterations 1 --json
+axis work-review --max-iterations 3 --interval 30
+axis work-review --once --json
+axis work-coding
+axis work-coding --once --json
 axis work-review --repo /path/to/repo
 axis work-review --repo /path/to/repo --iterations 1 --json
-axis work-review --repo /path/to/repo --max-iterations 3 --interval 30
-axis work-review --repo /path/to/repo --once --json
 axis work-coding --repo /path/to/repo
 axis work-coding --repo /path/to/repo --once --json
 ```
@@ -226,10 +242,12 @@ axis work-coding --repo /path/to/repo --once --json
 - `--iterations <n>` / `--max-iterations <n>`：bounded 迭代次数；不传时为 infinite/continuous loop。
 - `--once`：等价于 `--iterations 1`。
 - `--interval <seconds>` / `--sleep <seconds>`：轮询之间的等待时间；默认 10 秒。测试可设置 `AXIS_WORK_LOOP_SKIP_SLEEP=1` 跳过真实 sleep。
+- `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定；未传时使用用户 workspace。
+- `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
 - `--agent <codex|claude-code|none>`：选择 review worker Agent；未传时沿用项目绑定或本机可用 Agent。`work-coding` 当前只 probe，不启动 Agent。
 - `--json`：stdout 只输出 JSON；progress 和 Agent stderr 走 stderr 或被抑制。输出包含 `mode: "work-review"` / `mode: "work-coding"`、`workerType`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。
 
-如果没有项目绑定或绑定缺少 project id，worker 会 cleanly stop 并输出 warning / summary / stopReason。没有 pending review seeds 或没有 ready coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。
+默认 workspace 模式需要已登录 session；未登录会提示先执行 `axis login`，不会用 `no-project-binding` 误导。没有可访问项目、没有 pending review seeds 或没有 ready coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。`--repo <path>` 窄模式仍要求该 repo 有可用项目绑定；缺失绑定时保持单 repo 的 clean stop 行为。
 
 review worker 会把 seed kind 映射到方法论技能，并把本机 `SKILL.md` 内容直接注入传给 Agent 的 prompt/context，而不是只写一个技能名：
 
@@ -267,7 +285,7 @@ axis bind
 axis pull
 ```
 
-`pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后在当前目录下用安全 slug 创建产品线和项目目录。只有项目维护了 clone URL 时才会创建本地项目目录：`repositoryAddress`、`repositoryUrl`、`gitUrl`、`remoteUrl`、`githubRepo` 或 `sourceRepo`。仅有旧机器上的绝对 `repoPath` 不会被当成可 clone 地址。
+`pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后默认在 `AXIS_HOME` 或 `~/.axis` 下用安全 slug 创建产品线和项目目录。也可以用 `--root <path>` 显式指定目录。只有项目维护了 clone URL 时才会创建本地项目 repo 目录：`repositoryAddress`、`repositoryUrl`、`gitUrl`、`remoteUrl`、`githubRepo` 或 `sourceRepo`。仅有旧机器上的绝对 `repoPath` 不会被当成可 clone 地址。
 
 - 目标目录不存在或为空：执行 `git clone`
 - 目标目录已经是 git repo：执行 `git fetch --all --prune` 和 `git pull --ff-only`
