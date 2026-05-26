@@ -587,8 +587,8 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /^axis\n/);
   assert.match(usage.stdout, /Aliases: axis-tools, orbit, orbit-tools/);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
-  assert.match(usage.stdout, /axis work-once --repo <path>/);
-  assert.match(usage.stdout, /axis work-loop --repo <path>/);
+  assert.match(usage.stdout, /axis work-review \[--repo <path>\]/);
+  assert.match(usage.stdout, /axis work-coding \[--repo <path>\]/);
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.equal(linkedHelp.stdout, usage.stdout);
@@ -1418,16 +1418,18 @@ await withTempDir(async (dir) => {
     await writeWorkPrerequisites(home);
     await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
 cat <<'JSON'
-{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Top-level once converts seed","summary":"Converted by work-once","status":"draft","markdown":"# Top-level once converts seed\\n","sections":[],"workItems":[{"title":"Build work-once worker"}]}
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Work review converts seed","summary":"Converted by work-review","status":"draft","markdown":"# Work review converts seed\\n","sections":[],"workItems":[{"title":"Build work-review worker"}]}
 JSON
 `);
 
     const result = await run([
-      'work-once',
+      'work-review',
       '--repo',
       repo,
       '--agent',
       'codex',
+      '--iterations',
+      '1',
       '--json',
     ], {
       env: {
@@ -1438,17 +1440,23 @@ JSON
 
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
-    assert.equal(payload.mode, 'work-once');
-    assert.equal(payload.spawn, true);
-    assert.equal(payload.refine.agent, 'codex');
-    assert.equal(payload.refine.results.length, 1);
-    assert.equal(payload.refine.results[0].seedId, 'seed-work-once');
-    assert.equal(payload.refine.results[0].submit.mode, 'hub');
+    assert.equal(payload.mode, 'work-review');
+    assert.notEqual(payload.mode, 'loop-skeleton');
+    assert.equal(payload.workerType, 'review');
+    assert.equal(payload.bounded, true);
+    assert.equal(payload.maxIterations, 1);
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.iterations[0].mode, 'work-review-iteration');
+    assert.equal(payload.iterations[0].workerType, 'review');
+    assert.equal(payload.iterations[0].review.agent, 'codex');
+    assert.equal(payload.iterations[0].review.results.length, 1);
+    assert.equal(payload.iterations[0].review.results[0].seedId, 'seed-work-review');
+    assert.equal(payload.iterations[0].review.results[0].submit.mode, 'hub');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'requirement');
   }, {
     poolSeeds: [
-      { id: 'seed-work-once', kind: 'requirement', title: 'Top-level once converts seed', seed: 'Convert this in work-once', status: 'pending-confirmation' },
+      { id: 'seed-work-review', kind: 'requirement', title: 'Work review converts seed', seed: 'Convert this in work-review', status: 'pending-confirmation' },
     ],
   });
 });
@@ -1765,7 +1773,7 @@ JSON
 `);
 
     const result = await run([
-      'work-loop',
+      'work-review',
       '--repo',
       repo,
       '--iterations',
@@ -1781,7 +1789,8 @@ JSON
 
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
-    assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.mode, 'work-review');
+    assert.equal(payload.workerType, 'review');
     assert.notEqual(payload.mode, 'loop-skeleton');
     assert.equal(payload.bounded, true);
     assert.equal(payload.infinite, false);
@@ -1789,12 +1798,13 @@ JSON
     assert.equal(payload.stopReason, 'max-iterations');
     assert.equal(payload.iterations.length, 1);
     assert.equal(payload.iterations[0].iteration, 1);
-    assert.equal(payload.iterations[0].mode, 'work-once');
+    assert.equal(payload.iterations[0].mode, 'work-review-iteration');
+    assert.equal(payload.iterations[0].workerType, 'review');
     assert.equal(payload.iterations[0].spawn, true);
-    assert.equal(payload.iterations[0].refine.results.length, 1);
-    assert.equal(payload.iterations[0].refine.results[0].seedId, 'seed-loop');
-    assert.equal(payload.iterations[0].refine.results[0].methodologySkill, 'superpowers:brainstorm');
-    assert.equal(payload.iterations[0].refine.results[0].submit.mode, 'hub');
+    assert.equal(payload.iterations[0].review.results.length, 1);
+    assert.equal(payload.iterations[0].review.results[0].seedId, 'seed-loop');
+    assert.equal(payload.iterations[0].review.results[0].methodologySkill, 'superpowers:brainstorm');
+    assert.equal(payload.iterations[0].review.results[0].submit.mode, 'hub');
     assert.equal(payload.summary.converted, 1);
     assert.equal(payload.summary.conversions, 1);
     assert.equal(state.poolDocuments, 1);
@@ -1826,7 +1836,7 @@ JSON
 `);
 
     const result = await run([
-      'work-loop',
+      'work-review',
       '--repo',
       repo,
       '--max-iterations',
@@ -1844,7 +1854,8 @@ JSON
 
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
-    assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.mode, 'work-review');
+    assert.equal(payload.workerType, 'review');
     assert.equal(payload.bounded, true);
     assert.equal(payload.infinite, false);
     assert.equal(payload.maxIterations, 2);
@@ -1852,8 +1863,8 @@ JSON
     assert.equal(payload.stopReason, 'max-iterations');
     assert.equal(payload.iterations.length, 2);
     assert.deepEqual(payload.iterations.map((entry) => entry.iteration), [1, 2]);
-    assert.equal(payload.iterations[0].refine.results[0].seedId, 'seed-loop-bug');
-    assert.equal(payload.iterations[1].refine.results[0].seedId, 'seed-loop-bug');
+    assert.equal(payload.iterations[0].review.results[0].seedId, 'seed-loop-bug');
+    assert.equal(payload.iterations[1].review.results[0].seedId, 'seed-loop-bug');
     assert.equal(payload.sleeps.length, 1);
     assert.equal(payload.sleeps[0].afterIteration, 1);
     assert.equal(payload.sleeps[0].skipped, true);
@@ -1873,7 +1884,7 @@ await withTempDir(async (dir) => {
     await writeProjectBinding(repo, backendUrl);
 
     const result = await run([
-      'work-loop',
+      'work-review',
       '--repo',
       repo,
       '--iterations',
@@ -1887,20 +1898,60 @@ await withTempDir(async (dir) => {
 
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
-    assert.equal(payload.mode, 'loop-work');
+    assert.equal(payload.mode, 'work-review');
+    assert.equal(payload.workerType, 'review');
     assert.equal(payload.bounded, true);
     assert.equal(payload.infinite, false);
     assert.equal(payload.maxIterations, 3);
     assert.equal(payload.stopReason, 'max-iterations');
     assert.equal(payload.iterations.length, 3);
-    assert.deepEqual(payload.iterations.map((entry) => entry.refine.results.length), [0, 0, 0]);
+    assert.deepEqual(payload.iterations.map((entry) => entry.review.results.length), [0, 0, 0]);
     assert.equal(payload.sleeps.length, 2);
     assert.equal(payload.sleeps[0].skipped, true);
     assert.match(payload.warning, /No pending-confirmation pool seeds/);
     assert.equal(payload.summary.pending, 0);
+    assert.equal(payload.summary.idle, 3);
     assert.equal(payload.summary.converted, 0);
     assert.equal(state.poolDocuments, 0);
   }, { poolSeeds: [] });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run([
+      'work-coding',
+      '--repo',
+      repo,
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      env: {
+        AXIS_WORK_LOOP_SKIP_SLEEP: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'work-coding');
+    assert.notEqual(payload.mode, 'loop-skeleton');
+    assert.equal(payload.workerType, 'coding');
+    assert.equal(payload.bounded, true);
+    assert.equal(payload.maxIterations, 1);
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.iterations[0].mode, 'work-coding-iteration');
+    assert.equal(payload.iterations[0].workerType, 'coding');
+    assert.equal(payload.iterations[0].coding.status, 'blocked');
+    assert.equal(payload.iterations[0].coding.readyCount, 1);
+    assert.match(payload.iterations[0].coding.warning, /TODO/i);
+    assert.match(payload.iterations[0].coding.warning, /claim\/execute\/writeback APIs/i);
+    assert.equal(payload.summary.ready, 1);
+    assert.equal(payload.summary.blocked, 1);
+  });
 });
 
 await withTempDir(async (dir) => {
@@ -1908,7 +1959,7 @@ await withTempDir(async (dir) => {
   await mkdir(repo, { recursive: true });
 
   const result = await run([
-    'work-loop',
+    'work-review',
     '--repo',
     repo,
     '--json',
@@ -1916,7 +1967,8 @@ await withTempDir(async (dir) => {
 
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.ok, true);
-  assert.equal(payload.mode, 'loop-work');
+  assert.equal(payload.mode, 'work-review');
+  assert.equal(payload.workerType, 'review');
   assert.equal(payload.bounded, false);
   assert.equal(payload.infinite, true);
   assert.equal(payload.maxIterations, null);
@@ -2036,6 +2088,39 @@ await withTempDir(async (dir) => {
   const saved = await readFile(imported.savedPath, 'utf8');
   assert.match(saved, /source: axis-bug run/);
   assert.match(saved, /command: axis-bug/);
+});
+
+await withTempDir(async (dir) => {
+  const repo = path.join(dir, 'bound-repo');
+  const fakeBin = path.join(dir, 'fake-bin');
+  const fakeLog = path.join(dir, 'fake-agent.log');
+  await writeProjectBinding(repo, 'http://127.0.0.1:1', { selectedAgent: 'codex' });
+  await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+printf 'codex launched\\n' >> "$AXIS_FAKE_LOG"
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Should Not Launch","summary":"Should not launch","status":"draft","markdown":"# Should Not Launch\\n","sections":[],"workItems":[]}
+JSON
+`);
+
+  await assert.rejects(
+    run([
+      'axis-req',
+      'run',
+      'do not launch from pool command',
+      '--repo',
+      repo,
+      '--agent',
+      'codex',
+      '--json',
+    ], {
+      env: {
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_FAKE_LOG: fakeLog,
+      },
+    }),
+    /Pool run no longer launches Agents/,
+  );
+  await assert.rejects(readFile(fakeLog, 'utf8'));
 });
 
 await withTempDir(async (dir) => {
