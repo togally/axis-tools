@@ -268,7 +268,7 @@ async function withEmployeeRegisterServer(fn) {
     await writeFakeSoulCodex(binDir);
 
     await withEmployeeRegisterServer(async (backendUrl, requests) => {
-      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'en', '--backend-url', backendUrl, '--json'], {
+      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'en', '--role', 'qa', '--backend-url', backendUrl, '--json'], {
         env: {
           HOME: home,
           AXIS_HOME: path.join(home, '.axis'),
@@ -283,6 +283,7 @@ async function withEmployeeRegisterServer(fn) {
       assert.match(payload.employeeId, /^emp_[A-Za-z0-9_-]{20,40}$/);
       assert.equal(payload.name, 'Nova Vale');
       assert.equal(payload.language, 'en');
+      assert.equal(payload.role, 'qa');
       assert.equal(payload.agent, 'codex');
       assert.equal(payload.cloud.ok, true);
       assert.equal(requests.length, 1);
@@ -290,6 +291,7 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(requests[0].body.agentType, 'codex');
       assert.equal(requests[0].body.name, 'Nova Vale');
       assert.equal(requests[0].body.language, 'en');
+      assert.equal(requests[0].body.role, 'qa');
       assert.match(requests[0].body.documents.soul, /Nova Vale/);
       assert.match(requests[0].body.documents.skill, /Axis employee skills/);
       assert.match(requests[0].body.documents.memory, /Axis employee memory/);
@@ -304,6 +306,7 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(config.agentType, 'codex');
       assert.equal(config.name, 'Nova Vale');
       assert.equal(config.language, 'en');
+      assert.equal(config.role, 'qa');
       assert.equal(config.backendUrl, backendUrl);
 
       const prompt = await readFile(promptPath, 'utf8');
@@ -344,6 +347,7 @@ Role: Axis employee focused on careful delivery.
       assert.equal(payload.name, 'Evelyn Hart');
       assert.equal(requests[0].body.name, 'Evelyn Hart');
       assert.equal(requests[0].body.language, 'en');
+      assert.equal(requests[0].body.role, undefined);
       assert.doesNotMatch(requests[0].body.name, /^emp_|^Agent\s+\d+$/i);
 
       const employeeDir = path.join(home, '.axis', 'employees', payload.employeeId);
@@ -1161,7 +1165,7 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /me = show current AxisNode user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = clone\/pull maintained repos from AxisNode/);
-  assert.match(usage.stdout, /create-employee \[--agent <codex\|claude-code\|cc>\] \[--language <zh\|en>\]/);
+  assert.match(usage.stdout, /create-employee \[--agent <codex\|claude-code\|cc>\] \[--language <zh\|en>\] \[--role <development\|qa\|devops\|architecture\|product\|design>\]/);
   assert.doesNotMatch(usage.stdout, /\n  register(\s|\n)/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
   await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);
@@ -1962,6 +1966,108 @@ await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_structured_qa';
+    const employeeDir = path.join(axisHome, 'employees', employeeId);
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-role-selection-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await mkdir(employeeDir, { recursive: true });
+    await writeFile(path.join(employeeDir, 'soul.md'), '# Soul\n\nLocal development engineer. Should never override Hub role.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'skill.md'), '# Skill\n\nLocal backend implementation skills.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'memory.md'), '# Memory\n\nLocal preference for development tasks.\n', 'utf8');
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--employee-id',
+      employeeId,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+        AXIS_TEST_AGENT_INVALID_SELECTION: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 1);
+    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-regression']);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'executed');
+    assert.equal(projectResult.workItemId, 'wi-regression');
+    assert.equal(projectResult.selection.selectedWorkItemId, 'wi-regression');
+    assert.equal(projectResult.selection.source, 'fallback');
+    assert.match(projectResult.selection.reason, /qa\/测试|testing\/QA/);
+    assert.match(projectResult.selection.warning, /invalid JSON/);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /employee\.role: qa/);
+    assert.match(prompts, /Employee structured role is the highest-priority responsibility signal/);
+    assert.match(prompts, /General delivery/);
+    assert.doesNotMatch(prompts, /Local development engineer/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-development',
+        title: 'Implement billing calculation module',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Development work: implement service logic and persistence.',
+        sourceArtifactId: 'doc-development',
+      },
+      {
+        id: 'wi-regression',
+        title: 'Add checkout regression coverage',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Testing work: add QA regression tests for checkout failure paths.',
+        sourceArtifactId: 'doc-testing',
+      },
+    ],
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Project Soul\n\nHermes checkout project context.', markdown: '# Project Soul\n\nHermes checkout project context.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Project Skill\n\nUse repository conventions.', markdown: '# Project Skill\n\nUse repository conventions.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Project Memory\n\nRecent checkout changes touched payment flows.', markdown: '# Project Memory\n\nRecent checkout changes touched payment flows.' },
+    },
+    employees: {
+      emp_structured_qa: {
+        role: 'qa',
+        documents: {
+          soul: '# Soul\n\nGeneral delivery employee with no explicit task family.\n',
+          skill: '# Skill\n\nKeeps implementation, verification, and release notes clear.\n',
+          memory: '# Memory\n\nNo durable role-specific preference yet.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
     const fakeBin = path.join(dir, 'fake-bin');
     const promptLog = path.join(dir, 'start-work-prompt.txt');
 
@@ -2071,6 +2177,7 @@ await withTempDir(async (dir) => {
         PATH: `${fakeBin}:${process.env.PATH}`,
         AXIS_TEST_AGENT_PROMPT: promptLog,
         AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+        AXIS_TEST_AGENT_INVALID_SELECTION: '1',
       },
     });
 
@@ -2087,7 +2194,9 @@ await withTempDir(async (dir) => {
     assert.equal(projectResult.status, 'executed');
     assert.equal(projectResult.workItemId, 'wi-regression');
     assert.equal(projectResult.selection.selectedWorkItemId, 'wi-regression');
-    assert.match(projectResult.selection.reason, /QA\/testing responsibilities/);
+    assert.equal(projectResult.selection.source, 'fallback');
+    assert.match(projectResult.selection.reason, /qa\/测试|testing\/QA|QA\/测试/);
+    assert.match(projectResult.selection.warning, /invalid JSON/);
     assert.match(result.stderr, /selection: selected wi-regression/);
 
     const prompts = await readFile(promptLog, 'utf8');

@@ -119,6 +119,16 @@ type InstallAgentChoice = 'codex' | 'claude-code' | 'all';
 type StartWorkAgentChoice = 'codex' | 'claude-code' | 'claude';
 type CreateEmployeeAgentChoice = 'codex' | 'claude-code';
 type CreateEmployeeLanguage = 'zh' | 'en';
+type EmployeeRole = 'development' | 'qa' | 'devops' | 'architecture' | 'product' | 'design';
+
+const EMPLOYEE_ROLE_OPTIONS: { value: EmployeeRole; label: string }[] = [
+  { value: 'development', label: '开发' },
+  { value: 'qa', label: '测试' },
+  { value: 'devops', label: '运维' },
+  { value: 'architecture', label: '架构' },
+  { value: 'product', label: '产品' },
+  { value: 'design', label: '美工' },
+];
 
 interface PoolConfig {
   command: string;
@@ -329,6 +339,7 @@ interface StartWorkContextDocument {
   found?: boolean;
   warning?: string;
   source?: 'employee' | 'project';
+  employeeRole?: EmployeeRole;
 }
 
 interface StartWorkHeartbeatState {
@@ -459,6 +470,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 
 function printUsage(): void {
   console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`Employee role flag:\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>]\n`);
   console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 
@@ -468,7 +480,7 @@ function printStartWorkUsage(): void {
 }
 
 function printCreateEmployeeUsage(): void {
-  console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --language <zh|en>               Document/profile language. Aliases: chinese, english. Interactive default is 中文.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
+  console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --language <zh|en>               Document/profile language. Aliases: chinese, english. Interactive default is 中文.\n  --role <role>                    Optional structured role: development, qa, devops, architecture, product, or design.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
 }
 
 function printWorkWorkerUsage(workerType: WorkWorkerType): void {
@@ -3773,6 +3785,24 @@ function parseCreateEmployeeLanguageArg(value: string | null): CreateEmployeeLan
   throw new Error('--language must be one of: zh, en, chinese, english');
 }
 
+function parseEmployeeRole(value: string | null): EmployeeRole | null {
+  const normalized = value?.trim().toLowerCase();
+  if (!normalized) return null;
+  const match = EMPLOYEE_ROLE_OPTIONS.find((option) => option.value === normalized);
+  if (match) return match.value;
+  throw new Error('--role must be one of: development, qa, devops, architecture, product, design');
+}
+
+function employeeRoleLabel(role: EmployeeRole): string {
+  return EMPLOYEE_ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
+}
+
+function normalizeEmployeeRoleValue(value: unknown): EmployeeRole | null {
+  const normalized = safeString(value)?.trim().toLowerCase();
+  if (!normalized) return null;
+  return EMPLOYEE_ROLE_OPTIONS.find((option) => option.value === normalized)?.value ?? null;
+}
+
 async function resolveCreateEmployeeLanguage(): Promise<CreateEmployeeLanguage> {
   const explicit = parseCreateEmployeeLanguageArg(getArg('--language'));
   if (explicit) return explicit;
@@ -4088,19 +4118,22 @@ async function registerEmployeeToHub(values: {
   employeeId: string;
   name: string;
   language: CreateEmployeeLanguage;
+  role: EmployeeRole | null;
   agent: CreateEmployeeAgentChoice;
   documents: { soul: string; skill: string; memory: string };
 }): Promise<{ ok: boolean; status: string; warning: string | null; response: unknown | null }> {
   const cached = await cachedLoginSession(values.backendUrl);
   try {
-    const response = await postOrbitJson(values.backendUrl, '/api/employees/register', {
+    const payload: Json = {
       employeeId: values.employeeId,
       name: values.name,
       language: values.language,
       agentType: values.agent,
       status: 'active',
       documents: values.documents,
-    }, cached?.token);
+    };
+    if (values.role) payload.role = values.role;
+    const response = await postOrbitJson(values.backendUrl, '/api/employees/register', payload, cached?.token);
     return { ok: true, status: 'registered', warning: null, response };
   } catch (error) {
     return { ok: false, status: 'failed', warning: error instanceof Error ? error.message : String(error), response: null };
@@ -4115,6 +4148,7 @@ async function createEmployeeCommand(): Promise<void> {
   const config = await readGlobalOrbitConfig();
   const backendUrl = normalizeBackendUrl(getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl());
   const language = await resolveCreateEmployeeLanguage();
+  const role = parseEmployeeRole(getArg('--role'));
   const agent = await resolveCreateEmployeeAgent();
   const employeeId = createEmployeeId();
   const employeeDir = axisEmployeeDir(employeeId);
@@ -4143,6 +4177,7 @@ async function createEmployeeCommand(): Promise<void> {
     employeeId,
     name,
     language,
+    role,
     agent,
     documents: {
       soul: runtime.soul,
@@ -4155,6 +4190,7 @@ async function createEmployeeCommand(): Promise<void> {
     employeeId,
     name,
     language,
+    ...(role ? { role } : {}),
     agentType: agent,
     backendUrl,
     localPath: runtime.employeeDir,
@@ -4173,6 +4209,7 @@ async function createEmployeeCommand(): Promise<void> {
     employeeId,
     name,
     language,
+    ...(role ? { role } : {}),
     agent,
     localPath: runtime.employeeDir,
     cloud: {
@@ -4189,6 +4226,7 @@ async function createEmployeeCommand(): Promise<void> {
   console.log(`employeeId: ${employeeId}`);
   console.log(`name: ${name}`);
   console.log(`language: ${language}`);
+  if (role) console.log(`role: ${role} (${employeeRoleLabel(role)})`);
   console.log(`agent: ${agent}`);
   console.log(`local path: ${runtime.employeeDir}`);
   console.log(`cloud registration: ${cloud.status}`);
@@ -4442,6 +4480,32 @@ function startWorkRemoteEmployeeDocumentsRoot(payload: unknown): Json {
   return {};
 }
 
+function startWorkRemoteEmployeeRole(payload: unknown): EmployeeRole | null {
+  if (!isJson(payload)) return null;
+  if (isJson(payload.employee)) {
+    return normalizeEmployeeRoleValue(payload.employee.role);
+  }
+  return normalizeEmployeeRoleValue(payload.role);
+}
+
+function startWorkEmployeeRoleDocument(role: EmployeeRole): StartWorkContextDocument {
+  const label = employeeRoleLabel(role);
+  const content = [
+    `employee.role: ${role}`,
+    `label: ${label}`,
+    'Employee structured role is the highest-priority responsibility signal.',
+    'Use soul.md, skill.md, and memory.md only as supporting context for this role.',
+  ].join('\n');
+  return {
+    key: 'employee.role',
+    found: true,
+    content,
+    markdown: content,
+    source: 'employee',
+    employeeRole: role,
+  };
+}
+
 function remoteEmployeeDocumentContent(raw: unknown): { content: string; found: boolean; warning?: string } | null {
   if (typeof raw === 'string') {
     const content = raw.trim() ? raw : '';
@@ -4471,6 +4535,10 @@ function startWorkEmployeeContextDocumentsFromPayload(employeeId: string, payloa
   const warnings: string[] = [];
   const documents: StartWorkContextDocument[] = [];
   const rawDocuments = startWorkRemoteEmployeeDocumentsRoot(payload);
+  const role = startWorkRemoteEmployeeRole(payload);
+  if (role) {
+    documents.push(startWorkEmployeeRoleDocument(role));
+  }
 
   for (const entry of keys) {
     const parsed = remoteEmployeeDocumentContent(rawDocuments[entry.remoteKey] ?? rawDocuments[entry.key]);
@@ -4700,9 +4768,11 @@ function buildStartWorkSelectionPrompt(values: {
     '# Selection Rules',
     '',
     'Use Employee Context as the only authority for this employee\'s role and responsibilities.',
+    'When employee.role is present, treat that structured field as the highest-priority responsibility signal.',
     'Use Project Agent Context only as supplemental project information; do not infer or replace the employee role from it.',
-    'Choose the one WorkItem that best matches this employee\'s responsibilities from soul.md, skill.md, and memory.md.',
-    'Use broad岗位职责 categories: 开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual.',
+    'Choose the one WorkItem that best matches this employee\'s structured role, using soul.md, skill.md, and memory.md only as supporting context.',
+    'Top-level employee roles are exactly: development/开发, qa/测试, devops/运维, architecture/架构, product/产品, design/美工.',
+    'Do not treat frontend/backend as top-level employee roles; they are ordinary task terms under broader work categories.',
     'Do not choose based on queue order. Prefer responsibility fit over first available item.',
     'If no candidate matches the employee responsibilities, select null and explain why the worker should idle.',
     'Only select an id that appears in Candidate WorkItems.',
@@ -4764,32 +4834,38 @@ function parseStartWorkSelectionOutput(output: string, candidateIds: Set<string>
 
 const START_WORK_RESPONSIBILITY_KEYWORD_GROUPS = [
   {
+    role: 'development',
     name: 'development/开发',
     contextKeywords: ['development', 'developer', 'software development', 'coding', 'code', 'implementation', 'programming', 'programmer', 'feature work', 'frontend', 'front-end', 'front end', 'backend', 'back-end', 'back end', 'api', 'server', 'service', 'database', 'react', 'vue', 'node', 'go', '开发', '研发', '编码', '代码', '实现', '程序', '工程', '前端', '后端', '接口', '服务端', '数据库'],
     taskKeywords: ['development', 'develop', 'developer', 'coding', 'code', 'implementation', 'implement', 'feature', 'frontend', 'front-end', 'front end', 'backend', 'back-end', 'back end', 'api', 'endpoint', 'server', 'service', 'database', 'db', 'sql', 'migration', 'schema', 'auth', 'react', 'vue', 'component', '开发', '研发', '编码', '代码', '实现', '程序', '工程', '前端', '后端', '接口', '服务端', '数据库'],
   },
   {
-    name: 'testing/QA/测试',
+    role: 'qa',
+    name: 'qa/测试',
     contextKeywords: ['testing', 'qa', 'quality assurance', 'quality', 'tester', 'test automation', 'e2e', 'playwright', 'unit test', 'integration test', 'regression', 'verification', 'validation', 'release quality', '测试', '质量', '验证', '回归', '自动化测试', '用例'],
     taskKeywords: ['testing', 'qa', 'test', 'tests', 'quality', 'e2e', 'playwright', 'unit test', 'integration test', 'coverage', 'regression', 'verification', 'validation', 'release quality', '测试', '质量', '验证', '回归', '自动化测试', '用例'],
   },
   {
+    role: 'devops',
     name: 'devops/运维',
     contextKeywords: ['devops', 'ops', 'operations', 'sre', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'deploy', 'release', 'docker', 'kubernetes', 'terraform', 'observability', 'monitoring', 'pipeline', '运维', '部署', '发布', '基础设施', '监控', '流水线', '容器'],
     taskKeywords: ['devops', 'ops', 'operations', 'sre', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'deploy', 'release', 'rollback', 'docker', 'kubernetes', 'terraform', 'pipeline', 'observability', 'monitoring', '运维', '部署', '发布', '回滚', '基础设施', '监控', '流水线', '容器'],
   },
   {
+    role: 'architecture',
     name: 'architecture/架构',
     contextKeywords: ['architecture', 'architect', 'system design', 'technical design', 'platform design', 'scalability', 'distributed system', 'domain model', '架构', '架构师', '系统设计', '技术方案', '技术设计', '领域模型', '可扩展'],
     taskKeywords: ['architecture', 'architect', 'system design', 'technical design', 'platform design', 'scalability', 'distributed system', 'domain model', 'refactor architecture', '架构', '系统设计', '技术方案', '技术设计', '领域模型', '可扩展'],
   },
   {
+    role: 'product',
     name: 'product/产品',
     contextKeywords: ['product', 'product manager', 'pm', 'prd', 'roadmap', 'planning', 'requirements', 'acceptance criteria', 'user story', 'scope', 'tradeoff', '产品', '产品经理', '需求', '验收', '规划', '路线图', '范围', '方案'],
     taskKeywords: ['product', 'product manager', 'prd', 'roadmap', 'planning', 'acceptance criteria', 'user story', 'scope', 'tradeoff', '产品', '产品经理', '验收标准', '路线图', '范围', '产品方案', '需求文档'],
   },
   {
-    name: 'design/visual/美工',
+    role: 'design',
+    name: 'design/美工',
     contextKeywords: ['design', 'designer', 'visual', 'visual design', 'ui design', 'ux', 'interaction design', 'interface design', 'graphic', 'art', 'mockup', 'prototype', 'figma', 'typography', 'color system', 'layout', 'css', '美工', '设计', '视觉', '界面', '交互', '原型', '高保真', '配色', '字体', '排版', '样式'],
     taskKeywords: ['design', 'designer', 'visual', 'visual design', 'ui', 'ui design', 'ux', 'interaction', 'interface', 'screen', 'layout', 'color', 'typography', 'polish', 'mockup', 'prototype', 'figma', 'css', '美工', '设计', '视觉', '界面', '交互', '原型', '高保真', '配色', '字体', '排版', '样式'],
   },
@@ -4838,6 +4914,17 @@ function startWorkCandidateSearchText(summary: Json): string {
   ].filter((entry): entry is string => Boolean(entry)).join('\n').toLowerCase();
 }
 
+function startWorkStructuredEmployeeRole(documents: StartWorkContextDocument[]): EmployeeRole | null {
+  for (const document of startWorkContextDocumentsForSource(documents, 'employee')) {
+    if (document.employeeRole) return document.employeeRole;
+    const text = `${document.key}\n${document.markdown ?? document.content}`;
+    const match = text.match(/\bemployee\.role\s*:\s*([a-z-]+)/i);
+    const role = normalizeEmployeeRoleValue(match?.[1]);
+    if (role) return role;
+  }
+  return null;
+}
+
 function fallbackStartWorkSelection(
   contextDocuments: StartWorkContextDocument[],
   workItems: Json[],
@@ -4861,9 +4948,15 @@ function fallbackStartWorkSelection(
     .map((document) => `${document.key}\n${document.markdown ?? document.content}`)
     .join('\n\n')
     .toLowerCase();
-  const contextGroups = START_WORK_RESPONSIBILITY_KEYWORD_GROUPS
-    .map((group) => ({ group, hits: keywordHits(contextText, group.contextKeywords, { ignoreNegated: true }) }))
-    .filter((entry) => entry.hits.length > 0);
+  const structuredRole = startWorkStructuredEmployeeRole(contextDocuments);
+  const structuredRoleGroup = structuredRole
+    ? START_WORK_RESPONSIBILITY_KEYWORD_GROUPS.find((group) => group.role === structuredRole)
+    : null;
+  const contextGroups = structuredRoleGroup
+    ? [{ group: structuredRoleGroup, hits: [`employee.role:${structuredRole}`], structuredRole: true }]
+    : START_WORK_RESPONSIBILITY_KEYWORD_GROUPS
+      .map((group) => ({ group, hits: keywordHits(contextText, group.contextKeywords, { ignoreNegated: true }), structuredRole: false }))
+      .filter((entry) => entry.hits.length > 0);
 
   if (contextGroups.length === 0) {
     return {
@@ -4892,7 +4985,9 @@ function fallbackStartWorkSelection(
     return {
       selectedWorkItemId: null,
       source: 'fallback',
-      reason: `No WorkItem matched the employee responsibility keywords; skipped instead of claiming unrelated work. Fallback used because ${fallbackCause}.`,
+      reason: structuredRole
+        ? `No WorkItem matched the structured employee.role ${structuredRole}/${employeeRoleLabel(structuredRole)}; skipped instead of claiming unrelated work. Fallback used because ${fallbackCause}.`
+        : `No WorkItem matched the employee responsibility keywords; skipped instead of claiming unrelated work. Fallback used because ${fallbackCause}.`,
       warning: fallbackCause,
     };
   }
@@ -4900,7 +4995,9 @@ function fallbackStartWorkSelection(
   return {
     selectedWorkItemId: best.id,
     source: 'fallback',
-    reason: `Fallback selected ${best.id} because employee context and WorkItem text share responsibility keywords: ${best.matchedGroups.join('; ')}. Fallback used because ${fallbackCause}.`,
+    reason: structuredRole
+      ? `Fallback selected ${best.id} because structured employee.role ${structuredRole}/${employeeRoleLabel(structuredRole)} matched WorkItem responsibility keywords: ${best.matchedGroups.join('; ')}. Fallback used because ${fallbackCause}.`
+      : `Fallback selected ${best.id} because employee context and WorkItem text share responsibility keywords: ${best.matchedGroups.join('; ')}. Fallback used because ${fallbackCause}.`,
     warning: fallbackCause,
   };
 }
