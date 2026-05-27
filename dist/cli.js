@@ -3751,7 +3751,7 @@ async function resolveStartWorkTargets() {
         .filter((target) => Boolean(target));
     return { targets, warnings: workspace.warnings, workspace };
 }
-function fallbackAgentContextDocument(key, warning) {
+function fallbackAgentContextDocument(key, warning, source = 'project') {
     const message = warning ?? `Agent context document ${key} was not found; using empty fallback.`;
     return {
         key,
@@ -3759,6 +3759,7 @@ function fallbackAgentContextDocument(key, warning) {
         content: `# ${key}\n\n${message}`,
         markdown: `# ${key}\n\n${message}`,
         warning: message,
+        source,
     };
 }
 function startWorkContextDocumentsFromPayload(payload) {
@@ -3782,6 +3783,7 @@ function startWorkContextDocumentsFromPayload(payload) {
             content: content || fallbackAgentContextDocument(key).content,
             markdown: safeString(raw.markdown) ?? content,
             warning: safeString(raw.warning) ?? undefined,
+            source: 'project',
         };
         if (document.warning)
             warnings.push(document.warning);
@@ -3805,12 +3807,75 @@ async function fetchStartWorkContext(target) {
         };
     }
 }
+function localEmployeeContextMissingWarning(employeeId, key) {
+    return `Local employee context document ${key} was not found for employee ${employeeId}; using empty fallback.`;
+}
+function loadLocalEmployeeContextDocuments(employeeId) {
+    const keys = ['soul.md', 'skill.md', 'memory.md'];
+    const employeeDir = axisEmployeeDir(employeeId);
+    const present = keys.filter((key) => existsSync(path.join(employeeDir, key)));
+    if (present.length === 0) {
+        return { documents: [], warnings: [], foundAny: false };
+    }
+    const documents = [];
+    const warnings = [];
+    for (const key of keys) {
+        const filePath = path.join(employeeDir, key);
+        if (!existsSync(filePath)) {
+            const fallback = fallbackAgentContextDocument(key, localEmployeeContextMissingWarning(employeeId, key), 'employee');
+            documents.push(fallback);
+            warnings.push(fallback.warning ?? '');
+            continue;
+        }
+        try {
+            const content = readFileSync(filePath, 'utf8');
+            documents.push({
+                key,
+                found: true,
+                content,
+                markdown: content,
+                source: 'employee',
+            });
+        }
+        catch (error) {
+            const warning = `Local employee context document ${key} could not be read for employee ${employeeId}; using empty fallback. ${error instanceof Error ? error.message : String(error)}`;
+            const fallback = fallbackAgentContextDocument(key, warning, 'employee');
+            documents.push(fallback);
+            warnings.push(warning);
+        }
+    }
+    return { documents, warnings: warnings.filter(Boolean), foundAny: true };
+}
+function hubMissingAgentContextWarning(warning) {
+    return /Agent context document (?:soul|skill|memory)\.md was not found; using empty fallback\./.test(warning);
+}
+function mergeStartWorkContextDocuments(values) {
+    if (!values.employee.foundAny) {
+        return {
+            documents: values.project.documents,
+            warnings: values.project.warnings,
+        };
+    }
+    const usableProjectDocuments = values.project.documents.filter((document) => document.found !== false);
+    return {
+        documents: [...values.employee.documents, ...usableProjectDocuments],
+        warnings: [
+            ...values.employee.warnings,
+            ...values.project.warnings.filter((warning) => !hubMissingAgentContextWarning(warning)),
+        ],
+    };
+}
 async function preloadStartWorkContexts(targets, progress) {
     const contexts = new Map();
     const warnings = [];
+    const employeeId = getArg('--employee-id');
+    const employeeContext = employeeId
+        ? loadLocalEmployeeContextDocuments(employeeId)
+        : { documents: [], warnings: [], foundAny: false };
     for (const target of targets) {
         progress(`context: fetching soul.md, skill.md, memory.md for ${target.projectId}`);
-        const context = await fetchStartWorkContext(target);
+        const projectContext = await fetchStartWorkContext(target);
+        const context = mergeStartWorkContextDocuments({ employee: employeeContext, project: projectContext });
         contexts.set(target.projectId, context.documents);
         for (const warning of context.warnings)
             pushUniqueWarning(warnings, warning);
@@ -3830,8 +3895,35 @@ function startWorkContextMarkdown(documents) {
     })
         .join('\n\n');
 }
+function startWorkContextDocumentsForSource(documents, source) {
+    return documents.filter((document) => document.source === source);
+}
+function startWorkResponsibilityContextDocuments(documents) {
+    const employeeDocuments = startWorkContextDocumentsForSource(documents, 'employee');
+    return employeeDocuments.length > 0 ? employeeDocuments : documents;
+}
+function startWorkPromptContextSections(documents, fallbackTitle) {
+    const employeeDocuments = startWorkContextDocumentsForSource(documents, 'employee');
+    if (employeeDocuments.length === 0) {
+        return [
+            fallbackTitle,
+            '',
+            startWorkContextMarkdown(documents),
+        ];
+    }
+    const projectDocuments = startWorkContextDocumentsForSource(documents, 'project');
+    const sections = [
+        '# Employee Context',
+        '',
+        startWorkContextMarkdown(employeeDocuments),
+    ];
+    if (projectDocuments.length > 0) {
+        sections.push('', '# Project Agent Context', '', startWorkContextMarkdown(projectDocuments));
+    }
+    return sections;
+}
 function buildStartWorkAgentPrompt(values) {
-    const context = startWorkContextMarkdown(values.contextDocuments);
+    const contextSections = startWorkPromptContextSections(values.contextDocuments, '# Agent Context');
     const safeBinding = safeProjectBinding(values.target.binding, values.target.repoPath);
     return [
         '# Axis start-work coding execution',
@@ -3841,9 +3933,7 @@ function buildStartWorkAgentPrompt(values) {
         `Employee id: ${getArg('--employee-id') ?? 'unassigned'}`,
         `Repository: ${values.target.repoPath}`,
         '',
-        '# Agent Context',
-        '',
-        context,
+        ...contextSections,
         '',
         '# Project Scope',
         '',
@@ -3873,7 +3963,7 @@ function startWorkCandidateSummary(item) {
     };
 }
 function buildStartWorkSelectionPrompt(values) {
-    const context = startWorkContextMarkdown(values.contextDocuments);
+    const contextSections = startWorkPromptContextSections(values.contextDocuments, '# Employee Context');
     const safeBinding = safeProjectBinding(values.target.binding, values.target.repoPath);
     return [
         '# Axis start-work task selection',
@@ -3883,9 +3973,7 @@ function buildStartWorkSelectionPrompt(values) {
         `Employee id: ${getArg('--employee-id') ?? 'unassigned'}`,
         `Repository: ${values.target.repoPath}`,
         '',
-        '# Employee Context',
-        '',
-        context,
+        ...contextSections,
         '',
         '# Project Scope',
         '',
@@ -4032,7 +4120,8 @@ function fallbackStartWorkSelection(contextDocuments, workItems, fallbackCause) 
             warning: fallbackCause,
         };
     }
-    const contextText = contextDocuments
+    const responsibilityContextDocuments = startWorkResponsibilityContextDocuments(contextDocuments);
+    const contextText = responsibilityContextDocuments
         .map((document) => `${document.key}\n${document.markdown ?? document.content}`)
         .join('\n\n')
         .toLowerCase();

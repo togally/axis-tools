@@ -161,8 +161,12 @@ if printf '%s\\n' "$@" | grep -q "Axis start-work task selection"; then
     printf 'not json\\n'
     exit 0
   fi
-  if printf '%s\\n' "$@" | grep -q "wi-regression"; then
+  if printf '%s\\n' "$@" | grep -q "wi-regression" && printf '%s\\n' "$@" | grep -q "QA testing engineer"; then
     printf '%s\\n' '{"selectedWorkItemId":"wi-regression","reason":"QA/testing responsibilities match the regression task."}'
+    exit 0
+  fi
+  if printf '%s\\n' "$@" | grep -q "wi-development"; then
+    printf '%s\\n' '{"selectedWorkItemId":"wi-development","reason":"Development task appeared to match the available context."}'
     exit 0
   fi
   if printf '%s\\n' "$@" | grep -q "wi-visual-design"; then
@@ -2014,16 +2018,25 @@ await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_qa_local';
+    const employeeDir = path.join(axisHome, 'employees', employeeId);
     const fakeBin = path.join(dir, 'fake-bin');
     const promptLog = path.join(dir, 'start-work-selection-prompts.txt');
 
     await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await mkdir(employeeDir, { recursive: true });
+    await writeFile(path.join(employeeDir, 'soul.md'), '# Soul\n\nQA testing engineer for Axis release quality.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'skill.md'), '# Skill\n\nRegression testing, test automation, Playwright, and release verification.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'memory.md'), '# Memory\n\nPrefer testing tasks over general development work.\n', 'utf8');
     await writeFakeCodex(fakeBin);
 
     const result = await run([
       'start-work',
       '--repo',
       repo,
+      '--employee-id',
+      employeeId,
       '--foreground',
       '--heartbeat-interval',
       '1',
@@ -2036,6 +2049,7 @@ await withTempDir(async (dir) => {
       timeout: 5000,
       env: {
         HOME: home,
+        AXIS_HOME: axisHome,
         PATH: `${fakeBin}:${process.env.PATH}`,
         AXIS_TEST_AGENT_PROMPT: promptLog,
         AXIS_TEST_AGENT_PROMPT_APPEND: '1',
@@ -2048,6 +2062,7 @@ await withTempDir(async (dir) => {
     assert.equal(payload.summary.executed, 1);
     assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-regression']);
     assert.deepEqual(state.lifecycleActions.map((entry) => entry.id), ['wi-regression', 'wi-regression']);
+    assert.ok(!payload.summary.warnings.some((warning) => /Agent context document .* was not found/.test(warning)));
 
     const projectResult = payload.iterations[0].results[0];
     assert.equal(projectResult.status, 'executed');
@@ -2058,7 +2073,10 @@ await withTempDir(async (dir) => {
 
     const prompts = await readFile(promptLog, 'utf8');
     assert.match(prompts, /# Axis start-work task selection/);
+    assert.match(prompts, /Employee id: emp_qa_local/);
     assert.match(prompts, /QA testing engineer/);
+    assert.match(prompts, /Regression testing, test automation/);
+    assert.match(prompts, /Prefer testing tasks over general development work/);
     assert.match(prompts, /wi-development/);
     assert.match(prompts, /Implement billing calculation module/);
     assert.match(prompts, /Development work/);
@@ -2089,9 +2107,9 @@ await withTempDir(async (dir) => {
       },
     ],
     agentContextDocuments: {
-      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nQA testing engineer for Axis release quality.', markdown: '# Soul\n\nQA testing engineer for Axis release quality.' },
-      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nRegression testing, test automation, Playwright, and release verification.', markdown: '# Skill\n\nRegression testing, test automation, Playwright, and release verification.' },
-      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrefer testing tasks over general development work.', markdown: '# Memory\n\nPrefer testing tasks over general development work.' },
+      'soul.md': { key: 'soul.md', found: false, content: '', markdown: '', warning: 'Agent context document soul.md was not found; using empty fallback.' },
+      'skill.md': { key: 'skill.md', found: false, content: '', markdown: '', warning: 'Agent context document skill.md was not found; using empty fallback.' },
+      'memory.md': { key: 'memory.md', found: false, content: '', markdown: '', warning: 'Agent context document memory.md was not found; using empty fallback.' },
     },
   });
 });
