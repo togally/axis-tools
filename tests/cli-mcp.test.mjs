@@ -929,6 +929,24 @@ async function withPoolServer(fn, options = {}) {
       }));
       return;
     }
+    {
+      const employeeMatch = req.url.match(/^\/api\/employees\/([^/?]+)$/);
+      if (req.method === 'GET' && employeeMatch) {
+        if (!requireAuth()) return;
+        const employeeId = decodeURIComponent(employeeMatch[1]);
+        const employee = options.employees?.[employeeId];
+        if (!employee) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: 'employee not found' }));
+          return;
+        }
+        res.end(JSON.stringify({
+          employee: { id: employeeId, ...employee },
+          runtime: { store: 'mock' },
+        }));
+        return;
+      }
+    }
     if (req.method === 'POST' && req.url === '/api/agent-workers/heartbeat') {
       if (!requireAuth()) return;
       readJson().then((payload) => {
@@ -2019,16 +2037,16 @@ await withTempDir(async (dir) => {
     const repo = path.join(dir, 'bound-repo');
     const home = path.join(dir, 'home');
     const axisHome = path.join(home, '.axis');
-    const employeeId = 'emp_qa_local';
+    const employeeId = 'emp_qa_remote';
     const employeeDir = path.join(axisHome, 'employees', employeeId);
     const fakeBin = path.join(dir, 'fake-bin');
     const promptLog = path.join(dir, 'start-work-selection-prompts.txt');
 
     await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
     await mkdir(employeeDir, { recursive: true });
-    await writeFile(path.join(employeeDir, 'soul.md'), '# Soul\n\nQA testing engineer for Axis release quality.\n', 'utf8');
-    await writeFile(path.join(employeeDir, 'skill.md'), '# Skill\n\nRegression testing, test automation, Playwright, and release verification.\n', 'utf8');
-    await writeFile(path.join(employeeDir, 'memory.md'), '# Memory\n\nPrefer testing tasks over general development work.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'soul.md'), '# Soul\n\nDevelopment engineer for billing service implementation.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'skill.md'), '# Skill\n\nBackend development, APIs, persistence, and coding features.\n', 'utf8');
+    await writeFile(path.join(employeeDir, 'memory.md'), '# Memory\n\nPrefer development tasks over testing work.\n', 'utf8');
     await writeFakeCodex(fakeBin);
 
     const result = await run([
@@ -2063,6 +2081,7 @@ await withTempDir(async (dir) => {
     assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-regression']);
     assert.deepEqual(state.lifecycleActions.map((entry) => entry.id), ['wi-regression', 'wi-regression']);
     assert.ok(!payload.summary.warnings.some((warning) => /Agent context document .* was not found/.test(warning)));
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
 
     const projectResult = payload.iterations[0].results[0];
     assert.equal(projectResult.status, 'executed');
@@ -2073,10 +2092,15 @@ await withTempDir(async (dir) => {
 
     const prompts = await readFile(promptLog, 'utf8');
     assert.match(prompts, /# Axis start-work task selection/);
-    assert.match(prompts, /Employee id: emp_qa_local/);
+    assert.match(prompts, /Employee id: emp_qa_remote/);
+    assert.match(prompts, /# Employee Context/);
     assert.match(prompts, /QA testing engineer/);
     assert.match(prompts, /Regression testing, test automation/);
     assert.match(prompts, /Prefer testing tasks over general development work/);
+    assert.doesNotMatch(prompts, /Development engineer for billing service implementation/);
+    assert.match(prompts, /# Project Agent Context/);
+    assert.match(prompts, /Use Employee Context as the only authority/);
+    assert.match(prompts, /Project Agent Context only as supplemental project information/);
     assert.match(prompts, /wi-development/);
     assert.match(prompts, /Implement billing calculation module/);
     assert.match(prompts, /Development work/);
@@ -2107,9 +2131,94 @@ await withTempDir(async (dir) => {
       },
     ],
     agentContextDocuments: {
-      'soul.md': { key: 'soul.md', found: false, content: '', markdown: '', warning: 'Agent context document soul.md was not found; using empty fallback.' },
-      'skill.md': { key: 'skill.md', found: false, content: '', markdown: '', warning: 'Agent context document skill.md was not found; using empty fallback.' },
-      'memory.md': { key: 'memory.md', found: false, content: '', markdown: '', warning: 'Agent context document memory.md was not found; using empty fallback.' },
+      'soul.md': { key: 'soul.md', found: true, content: '# Project Soul\n\nHermes checkout project context.', markdown: '# Project Soul\n\nHermes checkout project context.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Project Skill\n\nUse repository conventions.', markdown: '# Project Skill\n\nUse repository conventions.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Project Memory\n\nRecent checkout changes touched payment flows.', markdown: '# Project Memory\n\nRecent checkout changes touched payment flows.' },
+    },
+    employees: {
+      emp_qa_remote: {
+        documents: {
+          soul: '# Soul\n\nQA testing engineer for Axis release quality.\n',
+          skill: '# Skill\n\nRegression testing, test automation, Playwright, and release verification.\n',
+          memory: '# Memory\n\nPrefer testing tasks over general development work.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-missing-employee-docs-prompts.txt');
+    const employeeId = 'emp_missing_remote_docs';
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--employee-id',
+      employeeId,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.ready, 1);
+    assert.equal(payload.summary.claimed, 0);
+    assert.equal(payload.summary.executed, 0);
+    assert.equal(payload.summary.idle, 1);
+    assert.deepEqual(state.claims, []);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
+    assert.ok(payload.summary.warnings.some((warning) => /Remote employee context document soul\.md was not available/.test(warning)));
+    assert.ok(payload.summary.warnings.some((warning) => /Remote employee context documents were unavailable/.test(warning)));
+    assert.match(result.stderr, /Remote employee context documents were unavailable/);
+    assert.doesNotThrow(() => JSON.parse(result.stdout));
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'idle');
+    assert.equal(projectResult.selection.selectedWorkItemId, null);
+    assert.equal(projectResult.selection.source, 'fallback');
+    assert.match(projectResult.selection.reason, /Remote employee context documents were unavailable/);
+    assert.match(projectResult.selection.warning, /Remote employee context documents were unavailable/);
+
+    await assert.rejects(readFile(promptLog, 'utf8'), /ENOENT/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-development',
+        title: 'Implement billing calculation module',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Development work: implement service logic and persistence.',
+        sourceArtifactId: 'doc-development',
+      },
+    ],
+    employees: {
+      emp_missing_remote_docs: {
+        documents: {},
+      },
     },
   });
 });

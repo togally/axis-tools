@@ -463,7 +463,7 @@ function printUsage(): void {
 }
 
 function printStartWorkUsage(): void {
-  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. The worker reads soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, and heartbeats.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. With --employee-id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
   console.log(`Responsibility categories:\n  开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual\n`);
 }
 
@@ -4431,6 +4431,70 @@ function startWorkContextDocumentsFromPayload(payload: unknown): { documents: St
   return { documents, warnings: warnings.filter(Boolean) };
 }
 
+function remoteEmployeeContextMissingWarning(employeeId: string, key: string): string {
+  return `Remote employee context document ${key} was not available for employee ${employeeId}; worker will not use local employee files as fallback.`;
+}
+
+function startWorkRemoteEmployeeDocumentsRoot(payload: unknown): Json {
+  if (!isJson(payload)) return {};
+  if (isJson(payload.employee) && isJson(payload.employee.documents)) return payload.employee.documents as Json;
+  if (isJson(payload.documents)) return payload.documents as Json;
+  return {};
+}
+
+function remoteEmployeeDocumentContent(raw: unknown): { content: string; found: boolean; warning?: string } | null {
+  if (typeof raw === 'string') {
+    const content = raw.trim() ? raw : '';
+    return content ? { content, found: true } : null;
+  }
+  if (!isJson(raw)) return null;
+  if (raw.found === false) {
+    return { content: '', found: false, warning: safeString(raw.warning) ?? undefined };
+  }
+  const content = safeString(raw.content)
+    ?? safeString(raw.markdown)
+    ?? safeString(raw.text)
+    ?? safeString(raw.value)
+    ?? '';
+  if (!content.trim()) {
+    return { content: '', found: false, warning: safeString(raw.warning) ?? undefined };
+  }
+  return { content, found: true, warning: safeString(raw.warning) ?? undefined };
+}
+
+function startWorkEmployeeContextDocumentsFromPayload(employeeId: string, payload: unknown): { documents: StartWorkContextDocument[]; warnings: string[] } {
+  const keys = [
+    { key: 'soul.md', remoteKey: 'soul' },
+    { key: 'skill.md', remoteKey: 'skill' },
+    { key: 'memory.md', remoteKey: 'memory' },
+  ];
+  const warnings: string[] = [];
+  const documents: StartWorkContextDocument[] = [];
+  const rawDocuments = startWorkRemoteEmployeeDocumentsRoot(payload);
+
+  for (const entry of keys) {
+    const parsed = remoteEmployeeDocumentContent(rawDocuments[entry.remoteKey] ?? rawDocuments[entry.key]);
+    if (!parsed?.found) {
+      const warning = parsed?.warning ?? remoteEmployeeContextMissingWarning(employeeId, entry.key);
+      documents.push(fallbackAgentContextDocument(entry.key, warning, 'employee'));
+      warnings.push(warning);
+      continue;
+    }
+    const document: StartWorkContextDocument = {
+      key: entry.key,
+      found: true,
+      content: parsed.content,
+      markdown: parsed.content,
+      warning: parsed.warning,
+      source: 'employee',
+    };
+    if (document.warning) warnings.push(document.warning);
+    documents.push(document);
+  }
+
+  return { documents, warnings: warnings.filter(Boolean) };
+}
+
 async function fetchStartWorkContext(target: StartWorkTarget): Promise<{ documents: StartWorkContextDocument[]; warnings: string[] }> {
   const token = await tokenForBinding(target.binding);
   try {
@@ -4438,7 +4502,7 @@ async function fetchStartWorkContext(target: StartWorkTarget): Promise<{ documen
     const payload = await fetchOrbitJson(target.binding.backendUrl, `/api/agent-context${query}`, token);
     return startWorkContextDocumentsFromPayload(payload);
   } catch (error) {
-    const warning = `Axis Hub agent context fetch failed for ${target.projectId}; using local fallback context. ${error instanceof Error ? error.message : String(error)}`;
+    const warning = `Axis Hub project agent-context fetch failed for ${target.projectId}; using empty project context fallback. ${error instanceof Error ? error.message : String(error)}`;
     return {
       documents: ['soul.md', 'skill.md', 'memory.md'].map((key) => fallbackAgentContextDocument(key, warning)),
       warnings: [warning],
@@ -4446,56 +4510,29 @@ async function fetchStartWorkContext(target: StartWorkTarget): Promise<{ documen
   }
 }
 
-function localEmployeeContextMissingWarning(employeeId: string, key: string): string {
-  return `Local employee context document ${key} was not found for employee ${employeeId}; using empty fallback.`;
-}
-
-function loadLocalEmployeeContextDocuments(employeeId: string): { documents: StartWorkContextDocument[]; warnings: string[]; foundAny: boolean } {
-  const keys = ['soul.md', 'skill.md', 'memory.md'];
-  const employeeDir = axisEmployeeDir(employeeId);
-  const present = keys.filter((key) => existsSync(path.join(employeeDir, key)));
-  if (present.length === 0) {
-    return { documents: [], warnings: [], foundAny: false };
-  }
-
-  const documents: StartWorkContextDocument[] = [];
-  const warnings: string[] = [];
-  for (const key of keys) {
-    const filePath = path.join(employeeDir, key);
-    if (!existsSync(filePath)) {
-      const fallback = fallbackAgentContextDocument(key, localEmployeeContextMissingWarning(employeeId, key), 'employee');
-      documents.push(fallback);
-      warnings.push(fallback.warning ?? '');
-      continue;
-    }
-    try {
-      const content = readFileSync(filePath, 'utf8');
-      documents.push({
-        key,
-        found: true,
-        content,
-        markdown: content,
-        source: 'employee',
-      });
-    } catch (error) {
-      const warning = `Local employee context document ${key} could not be read for employee ${employeeId}; using empty fallback. ${error instanceof Error ? error.message : String(error)}`;
-      const fallback = fallbackAgentContextDocument(key, warning, 'employee');
-      documents.push(fallback);
-      warnings.push(warning);
-    }
-  }
-  return { documents, warnings: warnings.filter(Boolean), foundAny: true };
-}
-
 function hubMissingAgentContextWarning(warning: string): boolean {
   return /Agent context document (?:soul|skill|memory)\.md was not found; using empty fallback\./.test(warning);
 }
 
+async function fetchStartWorkEmployeeContext(target: StartWorkTarget, employeeId: string): Promise<{ documents: StartWorkContextDocument[]; warnings: string[] }> {
+  const token = await tokenForBinding(target.binding);
+  try {
+    const payload = await fetchOrbitJson(target.binding.backendUrl, `/api/employees/${encodeURIComponent(employeeId)}`, token);
+    return startWorkEmployeeContextDocumentsFromPayload(employeeId, payload);
+  } catch (error) {
+    const warning = `Axis Hub employee context fetch failed for employee ${employeeId}; worker will not use local employee files as fallback. ${error instanceof Error ? error.message : String(error)}`;
+    return {
+      documents: ['soul.md', 'skill.md', 'memory.md'].map((key) => fallbackAgentContextDocument(key, warning, 'employee')),
+      warnings: [warning],
+    };
+  }
+}
+
 function mergeStartWorkContextDocuments(values: {
-  employee: { documents: StartWorkContextDocument[]; warnings: string[]; foundAny: boolean };
+  employee: { documents: StartWorkContextDocument[]; warnings: string[] } | null;
   project: { documents: StartWorkContextDocument[]; warnings: string[] };
 }): { documents: StartWorkContextDocument[]; warnings: string[] } {
-  if (!values.employee.foundAny) {
+  if (!values.employee) {
     return {
       documents: values.project.documents,
       warnings: values.project.warnings,
@@ -4519,15 +4556,17 @@ async function preloadStartWorkContexts(
   const contexts = new Map<string, StartWorkContextDocument[]>();
   const warnings: string[] = [];
   const employeeId = getArg('--employee-id');
-  const employeeContext = employeeId
-    ? loadLocalEmployeeContextDocuments(employeeId)
-    : { documents: [], warnings: [], foundAny: false };
   for (const target of targets) {
-    progress(`context: fetching soul.md, skill.md, memory.md for ${target.projectId}`);
+    progress(`context: fetching project agent-context for ${target.projectId}`);
+    const employeeContext = employeeId ? await fetchStartWorkEmployeeContext(target, employeeId) : null;
+    if (employeeId) progress(`context: fetched remote employee documents for ${employeeId}`);
     const projectContext = await fetchStartWorkContext(target);
     const context = mergeStartWorkContextDocuments({ employee: employeeContext, project: projectContext });
     contexts.set(target.projectId, context.documents);
-    for (const warning of context.warnings) pushUniqueWarning(warnings, warning);
+    for (const warning of context.warnings) {
+      pushUniqueWarning(warnings, warning);
+      progress(`context warning: ${warning}`);
+    }
   }
   return { contexts, warnings };
 }
@@ -4553,6 +4592,11 @@ function startWorkContextDocumentsForSource(documents: StartWorkContextDocument[
 function startWorkResponsibilityContextDocuments(documents: StartWorkContextDocument[]): StartWorkContextDocument[] {
   const employeeDocuments = startWorkContextDocumentsForSource(documents, 'employee');
   return employeeDocuments.length > 0 ? employeeDocuments : documents;
+}
+
+function startWorkEmployeeContextUnavailable(documents: StartWorkContextDocument[]): boolean {
+  const employeeDocuments = startWorkContextDocumentsForSource(documents, 'employee');
+  return employeeDocuments.length > 0 && employeeDocuments.every((document) => document.found !== true);
 }
 
 function startWorkPromptContextSections(documents: StartWorkContextDocument[], fallbackTitle: string): string[] {
@@ -4607,6 +4651,7 @@ function buildStartWorkAgentPrompt(values: {
     '# Instructions',
     '',
     'Implement the requested coding work in this repository.',
+    'Use Employee Context as the employee identity and responsibility authority. Project Agent Context can supplement project details but must not redefine the employee role.',
     'Run the relevant verification commands for the changed surface when practical.',
     'Keep changes scoped to the WorkItem. Do not include Axis tokens, sessions, keys, or passwords in files or output.',
     'If execution is blocked, report the concrete blocker and the next required action.',
@@ -4654,6 +4699,8 @@ function buildStartWorkSelectionPrompt(values: {
     '',
     '# Selection Rules',
     '',
+    'Use Employee Context as the only authority for this employee\'s role and responsibilities.',
+    'Use Project Agent Context only as supplemental project information; do not infer or replace the employee role from it.',
     'Choose the one WorkItem that best matches this employee\'s responsibilities from soul.md, skill.md, and memory.md.',
     'Use broad岗位职责 categories: 开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual.',
     'Do not choose based on queue order. Prefer responsibility fit over first available item.',
@@ -4874,6 +4921,15 @@ async function selectStartWorkItem(values: {
       source: 'fallback',
       reason: 'No candidate WorkItem had an id; skipped instead of claiming unrelated work.',
       warning: 'No candidate WorkItem had an id.',
+    };
+  }
+  if (startWorkEmployeeContextUnavailable(values.contextDocuments)) {
+    const warning = 'Remote employee context documents were unavailable; worker idled instead of claiming work without authoritative employee responsibilities.';
+    return {
+      selectedWorkItemId: null,
+      source: 'fallback',
+      reason: warning,
+      warning,
     };
   }
 
