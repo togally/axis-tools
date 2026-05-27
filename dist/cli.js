@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { execFile, spawn } from 'node:child_process';
+import { createHash, randomBytes } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
@@ -95,11 +96,14 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function printStartWorkUsage() {
-    console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n`);
+    console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, and heartbeats.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+}
+function printCreateEmployeeUsage() {
+    console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
 }
 function printWorkWorkerUsage(workerType) {
     const command = workerType === 'review' ? 'work-review' : 'work-coding';
@@ -137,10 +141,10 @@ function homeDir() {
     return process.env.HOME ?? process.cwd();
 }
 function defaultBackendUrl() {
-    return process.env.ORBIT_BACKEND_URL ?? SHARED_BACKEND_URL;
+    return process.env.AXIS_BACKEND_URL ?? process.env.ORBIT_BACKEND_URL ?? SHARED_BACKEND_URL;
 }
 function defaultMcpUrl(backendUrl) {
-    return process.env.ORBIT_MCP_URL ?? `${backendUrl.replace(/\/$/, '')}/api/mcp`;
+    return process.env.AXIS_MCP_URL ?? process.env.ORBIT_MCP_URL ?? `${backendUrl.replace(/\/$/, '')}/api/mcp`;
 }
 function resolveMcpUrl(explicit, existing) {
     return explicit ?? existing ?? undefined;
@@ -3135,6 +3139,295 @@ async function runPoolAgent(agent, repoPath, prompt, options = {}) {
         });
     });
 }
+function parseCreateEmployeeAgentArg(value) {
+    if (!value)
+        return null;
+    if (value === 'codex' || value === 'claude-code')
+        return value;
+    if (value === 'cc' || value === 'claude')
+        return 'claude-code';
+    throw new Error('--agent must be one of: codex, claude-code, cc');
+}
+async function resolveCreateEmployeeAgent() {
+    const explicit = parseCreateEmployeeAgentArg(getArg('--agent'));
+    if (explicit)
+        return explicit;
+    const available = [];
+    if (await commandAvailable('codex'))
+        available.push('codex');
+    if (await commandAvailable('claude'))
+        available.push('claude-code');
+    if (available.length === 1)
+        return available[0];
+    if (available.length > 1 && process.stdin.isTTY && !hasFlag('--json')) {
+        const prompt = await createPromptSession();
+        return promptSelect(prompt, 'Select employee agent runtime:', available, (choice) => choice === 'codex' ? 'Codex' : 'Claude Code');
+    }
+    return available[0] ?? 'codex';
+}
+function machineIdentifier() {
+    for (const filePath of ['/etc/machine-id', '/var/lib/dbus/machine-id']) {
+        try {
+            const value = readFileSync(filePath, 'utf8').trim();
+            if (value)
+                return value;
+        }
+        catch {
+            // Fall through to hostname.
+        }
+    }
+    return os.hostname();
+}
+function localIPAddresses() {
+    const addresses = [];
+    const interfaces = os.networkInterfaces();
+    for (const entries of Object.values(interfaces)) {
+        for (const entry of entries ?? []) {
+            if (!entry.address)
+                continue;
+            addresses.push(`${entry.family}:${entry.address}`);
+        }
+    }
+    return [...new Set(addresses)].sort();
+}
+function createEmployeeId(now = new Date(), salt = randomBytes(16).toString('base64url')) {
+    const digest = createHash('sha256')
+        .update(JSON.stringify({
+        machine: machineIdentifier(),
+        ips: localIPAddresses(),
+        timestamp: now.toISOString(),
+        salt,
+    }))
+        .digest('base64url')
+        .slice(0, 28);
+    return `emp_${digest}`;
+}
+function axisEmployeesRootDir() {
+    return path.join(axisHomeDir(), 'employees');
+}
+function axisEmployeeDir(employeeId) {
+    return path.join(axisEmployeesRootDir(), employeeId);
+}
+function buildEmployeeSoulPrompt(employeeId, agent) {
+    return [
+        '# Axis employee creation',
+        '',
+        `Employee id seed/context: ${employeeId}`,
+        `Agent runtime: ${agent}`,
+        '',
+        'Create your own Axis employee soul profile as Markdown.',
+        'Include a clear display name, gender, personality, role/persona, strengths, working style, and operating principles as an Axis employee.',
+        'Do not include secrets, credentials, raw machine fingerprints, IP addresses, or private local paths.',
+        'Return only Markdown content for soul.md.',
+    ].join('\n');
+}
+function fallbackEmployeeSoul(employeeId, agent, warning) {
+    return [
+        `# Axis Employee ${employeeId.slice(4, 12)}`,
+        '',
+        `Name: Axis Employee ${employeeId.slice(4, 12)}`,
+        'Gender: unspecified',
+        `Role: Axis employee operating through ${agent}`,
+        '',
+        'Personality: careful, concise, and execution-oriented.',
+        '',
+        'Operating principles:',
+        '- Keep work scoped to the current Axis objective.',
+        '- Preserve user data, credentials, and local machine details.',
+        '- Record useful memory and skills as they become relevant.',
+        '',
+        `Creation note: Agent soul generation failed, so axis-tools wrote this deterministic fallback. ${warning}`,
+    ].join('\n');
+}
+function initialEmployeeSkill(employeeId, agent) {
+    return [
+        '# Axis employee skills',
+        '',
+        `Employee: ${employeeId}`,
+        `Agent runtime: ${agent}`,
+        '',
+        '- Read the current task, repository context, and Hub documents before changing code.',
+        '- Keep implementation scoped and verify changed behavior.',
+        '- Update memory.md when new durable context matters.',
+    ].join('\n');
+}
+function initialEmployeeMemory(employeeId) {
+    return [
+        '# Axis employee memory',
+        '',
+        `Employee: ${employeeId}`,
+        '',
+        '- Created by axis create-employee.',
+        '- No durable project-specific memory has been recorded yet.',
+    ].join('\n');
+}
+function extractEmployeeDisplayName(markdown, employeeId) {
+    for (const line of markdown.split(/\r?\n/)) {
+        const heading = line.match(/^#\s+(.+?)\s*$/);
+        if (heading?.[1] && !/axis employee creation/i.test(heading[1]))
+            return heading[1].trim();
+        const named = line.match(/^\s*(?:name|display name)\s*:\s*(.+?)\s*$/i);
+        if (named?.[1])
+            return named[1].trim().replace(/^["']|["']$/g, '');
+    }
+    return `Axis Employee ${employeeId.slice(4, 12)}`;
+}
+async function runEmployeeSoulAgent(agent, employeeDir, prompt) {
+    const command = agent === 'codex' ? 'codex' : 'claude';
+    if (!await commandAvailable(command)) {
+        throw new Error(`agent not found: ${command}`);
+    }
+    const args = agent === 'codex' ? ['exec', prompt] : ['-p', prompt];
+    const timeoutMs = Math.max(5_000, Number.parseInt(process.env.AXIS_EMPLOYEE_AGENT_TIMEOUT_MS ?? '120000', 10) || 120_000);
+    return new Promise((resolve, reject) => {
+        const child = spawn(command, args, {
+            cwd: employeeDir,
+            stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let stdout = '';
+        let stderr = '';
+        const timer = setTimeout(() => {
+            child.kill('SIGTERM');
+            reject(new Error(`${command} command timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+        });
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk;
+        });
+        child.on('error', (error) => {
+            clearTimeout(timer);
+            reject(new Error(`${command} command failed: ${error.message}`));
+        });
+        child.on('close', (code, signal) => {
+            clearTimeout(timer);
+            if (code === 0) {
+                resolve(stdout.trim());
+                return;
+            }
+            const suffix = stderr.trim() || stdout.trim() || (signal ? `signal ${signal}` : `exit code ${code}`);
+            reject(new Error(`${command} command failed: ${suffix}`));
+        });
+    });
+}
+async function ensureEmployeeRuntimeFiles(employeeId, agent, soul) {
+    const employeeDir = axisEmployeeDir(employeeId);
+    ensureDir(employeeDir);
+    const soulPath = path.join(employeeDir, 'soul.md');
+    const skillPath = path.join(employeeDir, 'skill.md');
+    const memoryPath = path.join(employeeDir, 'memory.md');
+    await writeFile(soulPath, `${soul.trim()}\n`, 'utf8');
+    if (!existsSync(skillPath)) {
+        await writeFile(skillPath, `${initialEmployeeSkill(employeeId, agent)}\n`, 'utf8');
+    }
+    if (!existsSync(memoryPath)) {
+        await writeFile(memoryPath, `${initialEmployeeMemory(employeeId)}\n`, 'utf8');
+    }
+    return {
+        employeeDir,
+        soul: await readFile(soulPath, 'utf8'),
+        skill: await readFile(skillPath, 'utf8'),
+        memory: await readFile(memoryPath, 'utf8'),
+    };
+}
+async function registerEmployeeToHub(values) {
+    const cached = await cachedLoginSession(values.backendUrl);
+    try {
+        const response = await postOrbitJson(values.backendUrl, '/api/employees/register', {
+            employeeId: values.employeeId,
+            name: values.name,
+            agentType: values.agent,
+            status: 'active',
+            documents: values.documents,
+        }, cached?.token);
+        return { ok: true, status: 'registered', warning: null, response };
+    }
+    catch (error) {
+        return { ok: false, status: 'failed', warning: error instanceof Error ? error.message : String(error), response: null };
+    }
+}
+async function createEmployeeCommand() {
+    if (isHelpFlag(process.argv[3])) {
+        printCreateEmployeeUsage();
+        return;
+    }
+    const config = await readGlobalOrbitConfig();
+    const backendUrl = normalizeBackendUrl(getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl());
+    const agent = await resolveCreateEmployeeAgent();
+    const employeeId = createEmployeeId();
+    const employeeDir = axisEmployeeDir(employeeId);
+    ensureDir(employeeDir);
+    const warnings = [];
+    let soul;
+    try {
+        soul = await runEmployeeSoulAgent(agent, employeeDir, buildEmployeeSoulPrompt(employeeId, agent));
+        if (!soul.trim()) {
+            throw new Error('agent returned empty soul profile');
+        }
+    }
+    catch (error) {
+        const warning = error instanceof Error ? error.message : String(error);
+        warnings.push(`Agent soul generation failed; wrote fallback soul.md. ${warning}`);
+        soul = fallbackEmployeeSoul(employeeId, agent, warning);
+    }
+    const runtime = await ensureEmployeeRuntimeFiles(employeeId, agent, soul);
+    const name = extractEmployeeDisplayName(runtime.soul, employeeId);
+    const cloud = await registerEmployeeToHub({
+        backendUrl,
+        employeeId,
+        name,
+        agent,
+        documents: {
+            soul: runtime.soul,
+            skill: runtime.skill,
+            memory: runtime.memory,
+        },
+    });
+    if (cloud.warning)
+        warnings.push(`Hub registration failed. ${cloud.warning}`);
+    await writeJsonFile(path.join(runtime.employeeDir, 'config.json'), {
+        employeeId,
+        name,
+        agentType: agent,
+        backendUrl,
+        localPath: runtime.employeeDir,
+        status: 'active',
+        cloud: {
+            ok: cloud.ok,
+            status: cloud.status,
+            warning: cloud.warning,
+        },
+        createdAt: new Date().toISOString(),
+    });
+    const payload = {
+        ok: true,
+        mode: 'create-employee',
+        employeeId,
+        name,
+        agent,
+        localPath: runtime.employeeDir,
+        cloud: {
+            ok: cloud.ok,
+            status: cloud.status,
+            warning: cloud.warning,
+        },
+        warnings,
+    };
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+    }
+    console.log(`employeeId: ${employeeId}`);
+    console.log(`name: ${name}`);
+    console.log(`agent: ${agent}`);
+    console.log(`local path: ${runtime.employeeDir}`);
+    console.log(`cloud registration: ${cloud.status}`);
+    for (const warning of warnings)
+        console.error(`warning: ${warning}`);
+}
 function parseStartWorkAgentArg(value) {
     if (!value)
         return null;
@@ -3235,6 +3528,7 @@ function startWorkTargetScope(target) {
         repoPath: target.repoPath,
         backendUrl: normalizeBackendUrl(target.binding.backendUrl),
         account: target.binding.account ?? target.binding.user?.account ?? null,
+        employeeId: getArg('--employee-id'),
         productLineId: target.productLineId,
         productLineName: target.productLineName,
         projectId: target.projectId,
@@ -3254,9 +3548,11 @@ function requestedStartWorkScope() {
     const projectUuid = getArg('--project-uuid');
     const productLineId = getArg('--product-line-id');
     const productLineUuid = getArg('--product-line-uuid');
+    const employeeId = getArg('--employee-id');
     return {
         type: repo ? 'project' : 'workspace',
         repoPath: repo ? path.resolve(repo) : null,
+        employeeId,
         projectId,
         projectUuid,
         productLineId,
@@ -3398,6 +3694,7 @@ function buildStartWorkAgentPrompt(values) {
         '',
         `Worker session: ${values.sessionId}`,
         `Agent runtime: ${values.agent}`,
+        `Employee id: ${getArg('--employee-id') ?? 'unassigned'}`,
         `Repository: ${values.target.repoPath}`,
         '',
         '# Agent Context',
@@ -3427,6 +3724,7 @@ function startWorkClaimPayload(values) {
         agentId: values.sessionId,
         agentName: startWorkAgentName(values.agent),
         agentType: values.agent,
+        employeeId: getArg('--employee-id'),
         host: os.hostname(),
         sessionId: values.sessionId,
         client: 'axis-tools',
@@ -3548,6 +3846,7 @@ async function sendStartWorkHeartbeat(values) {
         sessionId,
         agentType: agent,
         agentName: startWorkAgentName(agent),
+        employeeId: getArg('--employee-id'),
         host: os.hostname(),
         pid: process.pid,
         cliVersion: cliVersion(),
@@ -3796,8 +4095,11 @@ function backgroundStartWorkArgs(values) {
     const projectUuid = getArg('--project-uuid');
     const productLineId = getArg('--product-line-id');
     const productLineUuid = getArg('--product-line-uuid');
+    const employeeId = getArg('--employee-id');
     if (repo)
         args.push('--repo', repo);
+    if (employeeId)
+        args.push('--employee-id', employeeId);
     if (projectId)
         args.push('--project-id', projectId);
     if (projectUuid)
@@ -3884,6 +4186,9 @@ function printStartWorkResult(payload) {
     console.log(`mode: ${payload.mode}`);
     console.log(`session: ${payload.sessionId}`);
     console.log(`agent: ${payload.agent}`);
+    const scope = isJson(payload.scope) ? payload.scope : {};
+    if (safeString(scope.employeeId))
+        console.log(`employee: ${scope.employeeId}`);
     console.log(`background: ${payload.background ? 'true' : 'false'}`);
     if (payload.pid !== undefined && payload.pid !== null)
         console.log(`pid: ${payload.pid}`);
@@ -6085,6 +6390,10 @@ async function main() {
     }
     if (group === 'pull') {
         await pullCloudStructure();
+        return;
+    }
+    if (group === 'create-employee') {
+        await createEmployeeCommand();
         return;
     }
     if (group === 'work') {

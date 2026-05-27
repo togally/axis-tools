@@ -157,6 +157,118 @@ exit 0
 `);
 }
 
+async function writeFakeSoulCodex(binDir) {
+  await writeExecutable(path.join(binDir, 'codex'), `#!/bin/sh
+if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
+  printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
+fi
+cat <<'EOF'
+# Nova Vale
+
+Name: Nova Vale
+Gender: nonbinary
+Role: Axis employee focused on high-signal execution.
+
+Nova is careful, concise, and steady under ambiguous work.
+EOF
+exit 0
+`);
+}
+
+async function withEmployeeRegisterServer(fn) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      raw += chunk;
+    });
+    req.on('end', () => {
+      if (req.method === 'POST' && req.url === '/api/employees/register') {
+        const body = raw ? JSON.parse(raw) : {};
+        requests.push({ method: req.method, url: req.url, body, authorization: req.headers.authorization ?? '' });
+        const payload = {
+          employee: {
+            id: body.employeeId ?? body.id,
+            name: body.name,
+            agentType: body.agentType,
+            status: body.status,
+            documents: {
+              soul: { kind: 'soul', content: body.documents?.soul ?? '' },
+              skill: { kind: 'skill', content: body.documents?.skill ?? '' },
+              memory: { kind: 'memory', content: body.documents?.memory ?? '' },
+            },
+          },
+          runtime: { store: 'test' },
+        };
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(payload));
+        return;
+      }
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    return await fn(`http://127.0.0.1:${address.port}`, requests);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+{
+  await withTempDir(async (dir) => {
+    const home = path.join(dir, 'home');
+    const binDir = path.join(dir, 'bin');
+    const promptPath = path.join(dir, 'agent-prompt.txt');
+    await mkdir(home, { recursive: true });
+    await writeFakeSoulCodex(binDir);
+
+    await withEmployeeRegisterServer(async (backendUrl, requests) => {
+      const { stdout } = await run(['create-employee', '--agent', 'codex', '--backend-url', backendUrl, '--json'], {
+        env: {
+          HOME: home,
+          AXIS_HOME: path.join(home, '.axis'),
+          PATH: `${binDir}:${process.env.PATH}`,
+          AXIS_TEST_AGENT_PROMPT: promptPath,
+        },
+      });
+
+      const payload = JSON.parse(stdout);
+      assert.equal(payload.ok, true);
+      assert.equal(payload.mode, 'create-employee');
+      assert.match(payload.employeeId, /^emp_[A-Za-z0-9_-]{20,40}$/);
+      assert.equal(payload.name, 'Nova Vale');
+      assert.equal(payload.agent, 'codex');
+      assert.equal(payload.cloud.ok, true);
+      assert.equal(requests.length, 1);
+      assert.equal(requests[0].body.employeeId, payload.employeeId);
+      assert.equal(requests[0].body.agentType, 'codex');
+      assert.equal(requests[0].body.name, 'Nova Vale');
+      assert.match(requests[0].body.documents.soul, /Nova Vale/);
+      assert.match(requests[0].body.documents.skill, /Axis employee skills/);
+      assert.match(requests[0].body.documents.memory, /Axis employee memory/);
+
+      const employeeDir = path.join(home, '.axis', 'employees', payload.employeeId);
+      assert.equal(payload.localPath, employeeDir);
+      assert.match(await readFile(path.join(employeeDir, 'soul.md'), 'utf8'), /Nova Vale/);
+      assert.match(await readFile(path.join(employeeDir, 'skill.md'), 'utf8'), /Axis employee skills/);
+      assert.match(await readFile(path.join(employeeDir, 'memory.md'), 'utf8'), /Axis employee memory/);
+      const config = JSON.parse(await readFile(path.join(employeeDir, 'config.json'), 'utf8'));
+      assert.equal(config.employeeId, payload.employeeId);
+      assert.equal(config.agentType, 'codex');
+      assert.equal(config.name, 'Nova Vale');
+      assert.equal(config.backendUrl, backendUrl);
+
+      const prompt = await readFile(promptPath, 'utf8');
+      assert.match(prompt, new RegExp(payload.employeeId));
+      assert.doesNotMatch(payload.employeeId, /127|localhost|jasper|axis/i);
+    });
+  });
+}
+
 async function runViaLinkedBin(args) {
   return withTempDir(async (dir) => {
     const binPath = path.join(dir, 'axis');
@@ -885,7 +997,8 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /me = show current AxisNode user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = clone\/pull maintained repos from AxisNode/);
-  assert.doesNotMatch(usage.stdout, /\bregister\b/);
+  assert.match(usage.stdout, /create-employee \[--agent <codex\|claude-code\|cc>\]/);
+  assert.doesNotMatch(usage.stdout, /\n  register(\s|\n)/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
   await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);
 }
