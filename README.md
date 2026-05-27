@@ -44,7 +44,7 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 查看当前 repo 的 AxisNode 绑定
 - `axis start-work`
   - 新的开发执行 worker；默认后台启动，立即返回 session id、pid 和日志路径
-  - 读取 Hub 上的 `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，并领取 `WAIT_CODE` WorkItems 执行
+  - 读取 Hub 上的 `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，让员工根据自己的职责挑对应 `WAIT_CODE` WorkItem，再只领取所选任务执行
   - 支持 `--agent codex` 和 `--agent claude-code`，也可用 `--foreground` 在当前终端调试
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
@@ -209,7 +209,7 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis start-work` 是新的开发执行 worker。它默认从后台启动一个本地 worker session，立即返回 `sessionId`、`pid` 和日志路径；worker 会持续向 Axis Hub 发送 heartbeat，读取 `soul.md` / `skill.md` / `memory.md` 作为 Agent 上下文，然后领取 `WAIT_CODE` WorkItems 执行。
+`axis start-work` 是新的开发执行 worker。它默认从后台启动一个本地 worker session，立即返回 `sessionId`、`pid` 和日志路径；worker 会持续向 Axis Hub 发送 heartbeat，读取 `soul.md` / `skill.md` / `memory.md` 作为 Agent 上下文，然后让员工根据自己的职责从 `WAIT_CODE` 候选中挑对应 WorkItem，再只领取所选任务执行。
 
 新电脑或新环境的最短路径：
 
@@ -265,8 +265,10 @@ axis start-work --project-id <id> --product-line-id <id>
 `start-work` 的执行语义：
 
 - 只消费 coding execution queue：`WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新写入仍使用 canonical lifecycle status。
-- 领取前调用 Hub claim lease API；遇到 `409` 会跳过该 WorkItem 继续找下一个，避免两个 worker 同时执行同一条。
-- Agent prompt 包含 Hub context docs、项目绑定摘要和完整 WorkItem JSON。
+- 领取前会先把候选 WorkItem 摘要交给 Agent 选择，选择 prompt 包含 `soul.md` / `skill.md` / `memory.md` 和候选的 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的职责挑任务，而不是固定拿第一条 `WAIT_CODE`。
+- 如果 Agent 选择 `null`、输出不可用且 fallback 也找不到职责匹配，worker 会 idle/skip 并记录原因，不会静默领取无关任务。
+- 选择后才调用 Hub claim lease API；遇到 `409` 会跳过本轮所选 WorkItem，等待下一轮重新按职责选择，避免两个 worker 同时执行同一条。
+- 执行 Agent prompt 包含 Hub context docs、项目绑定摘要和完整 WorkItem JSON。
 - 执行后会尽力写回 notes/result，并调用 WorkItem `complete` lifecycle；如果 Agent 或写回失败，会明确记录 failed/blocker，不会静默假装完成。
 
 `axis work-review` 和 `axis work-coding` 仍保留为兼容入口。`work-review` 继续负责 review/refine：把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems。`work-coding` 是旧 coding probe，不再作为开发执行入口推广。

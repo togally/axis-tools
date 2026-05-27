@@ -346,6 +346,15 @@ interface StartWorkSummary {
   warnings: string[];
 }
 
+type StartWorkSelectionSource = 'agent' | 'fallback';
+
+interface StartWorkSelectionDecision {
+  selectedWorkItemId: string | null;
+  reason: string;
+  source: StartWorkSelectionSource;
+  warning?: string;
+}
+
 interface AxisWorkspaceResolution {
   workspaceRoot: string;
   backendUrl: string;
@@ -453,7 +462,7 @@ function printUsage(): void {
 }
 
 function printStartWorkUsage(): void {
-  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, and heartbeats.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. The worker reads soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, and heartbeats.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
 }
 
 function printCreateEmployeeUsage(): void {
@@ -4453,6 +4462,15 @@ function truncateText(value: string, maxChars: number): string {
   return `${value.slice(0, maxChars)}\n\n[axis-tools: truncated to ${maxChars} characters]`;
 }
 
+function startWorkContextMarkdown(documents: StartWorkContextDocument[]): string {
+  return documents
+    .map((document) => {
+      const content = truncateText(document.markdown ?? document.content, 20_000);
+      return `## ${document.key}\n\n${content}`;
+    })
+    .join('\n\n');
+}
+
 function buildStartWorkAgentPrompt(values: {
   sessionId: string;
   agent: StartWorkAgentChoice;
@@ -4460,12 +4478,7 @@ function buildStartWorkAgentPrompt(values: {
   workItem: Json;
   contextDocuments: StartWorkContextDocument[];
 }): string {
-  const context = values.contextDocuments
-    .map((document) => {
-      const content = truncateText(document.markdown ?? document.content, 20_000);
-      return `## ${document.key}\n\n${content}`;
-    })
-    .join('\n\n');
+  const context = startWorkContextMarkdown(values.contextDocuments);
   const safeBinding = safeProjectBinding(values.target.binding, values.target.repoPath);
   return [
     '# Axis start-work coding execution',
@@ -4494,6 +4507,290 @@ function buildStartWorkAgentPrompt(values: {
     'Keep changes scoped to the WorkItem. Do not include Axis tokens, sessions, keys, or passwords in files or output.',
     'If execution is blocked, report the concrete blocker and the next required action.',
   ].join('\n');
+}
+
+function startWorkCandidateSummary(item: Json): Json {
+  return {
+    id: workItemId(item),
+    title: workItemTitle(item),
+    type: safeString(item.type) ?? safeString(item.kind) ?? safeString(item.sourceType),
+    pool: safeString(item.pool) ?? safeString(item.category),
+    status: safeString(item.status),
+    notes: safeString(item.notes) ?? safeString(item.summary),
+    sourceArtifactId: safeString(item.sourceArtifactId) ?? safeString(item.documentId),
+  };
+}
+
+function buildStartWorkSelectionPrompt(values: {
+  sessionId: string;
+  agent: StartWorkAgentChoice;
+  target: StartWorkTarget;
+  contextDocuments: StartWorkContextDocument[];
+  candidates: Json[];
+}): string {
+  const context = startWorkContextMarkdown(values.contextDocuments);
+  const safeBinding = safeProjectBinding(values.target.binding, values.target.repoPath);
+  return [
+    '# Axis start-work task selection',
+    '',
+    `Worker session: ${values.sessionId}`,
+    `Agent runtime: ${values.agent}`,
+    `Employee id: ${getArg('--employee-id') ?? 'unassigned'}`,
+    `Repository: ${values.target.repoPath}`,
+    '',
+    '# Employee Context',
+    '',
+    context,
+    '',
+    '# Project Scope',
+    '',
+    JSON.stringify(safeBinding, null, 2),
+    '',
+    '# Candidate WorkItems',
+    '',
+    JSON.stringify(values.candidates, null, 2),
+    '',
+    '# Selection Rules',
+    '',
+    'Choose the one WorkItem that best matches this employee\'s responsibilities from soul.md, skill.md, and memory.md.',
+    'Do not choose based on queue order. Prefer responsibility fit over first available item.',
+    'If no candidate matches the employee responsibilities, select null and explain why the worker should idle.',
+    'Only select an id that appears in Candidate WorkItems.',
+    'Return strict JSON only, with no Markdown, code fences, or commentary.',
+    'Required shape: {"selectedWorkItemId":"...","reason":"..."} or {"selectedWorkItemId":null,"reason":"..."}',
+  ].join('\n');
+}
+
+function startWorkSelectionJson(selection: StartWorkSelectionDecision): Json {
+  return {
+    selectedWorkItemId: selection.selectedWorkItemId,
+    reason: selection.reason,
+    source: selection.source,
+    warning: selection.warning,
+  };
+}
+
+function parseStartWorkSelectionOutput(output: string, candidateIds: Set<string>): { selection: StartWorkSelectionDecision | null; warning: string | null } {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return { selection: null, warning: 'selection agent returned empty output' };
+  }
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(trimmed);
+  } catch {
+    return { selection: null, warning: 'selection agent returned invalid JSON' };
+  }
+
+  if (!isJson(raw)) {
+    return { selection: null, warning: 'selection agent JSON was not an object' };
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(raw, 'selectedWorkItemId')) {
+    return { selection: null, warning: 'selection agent JSON omitted selectedWorkItemId' };
+  }
+
+  const reason = safeString(raw.reason);
+  if (!reason) {
+    return { selection: null, warning: 'selection agent JSON omitted reason' };
+  }
+
+  const rawSelected = raw.selectedWorkItemId;
+  if (rawSelected === null) {
+    return { selection: { selectedWorkItemId: null, reason, source: 'agent' }, warning: null };
+  }
+
+  const selectedWorkItemId = safeString(rawSelected);
+  if (!selectedWorkItemId) {
+    return { selection: null, warning: 'selection agent selectedWorkItemId must be a string or null' };
+  }
+  if (!candidateIds.has(selectedWorkItemId)) {
+    return { selection: null, warning: `selection agent selected non-candidate WorkItem ${selectedWorkItemId}` };
+  }
+
+  return { selection: { selectedWorkItemId, reason, source: 'agent' }, warning: null };
+}
+
+const START_WORK_RESPONSIBILITY_KEYWORD_GROUPS = [
+  {
+    name: 'frontend/ui',
+    contextKeywords: ['frontend', 'front-end', 'front end', 'ui', 'ux', 'user interface', 'react', 'vue', 'css', 'html', 'component', 'design system', 'browser', 'client-side', 'web screen', 'page layout', '前端', '界面', '页面', '交互', '样式', '组件'],
+    taskKeywords: ['frontend', 'front-end', 'front end', 'ui', 'ux', 'user interface', 'react', 'vue', 'css', 'html', 'component', 'design system', 'browser', 'client-side', 'screen', 'layout', 'button', 'form', 'modal', '前端', '界面', '页面', '交互', '样式', '组件'],
+  },
+  {
+    name: 'backend/api',
+    contextKeywords: ['backend', 'back-end', 'back end', 'api', 'server', 'service', 'database', 'db', 'sql', 'endpoint', 'worker', 'queue', 'go', 'node', 'auth', '后端', '接口', '服务端', '数据库', '队列'],
+    taskKeywords: ['backend', 'back-end', 'back end', 'api', 'server', 'service', 'database', 'db', 'sql', 'endpoint', 'worker', 'queue', 'migration', 'schema', 'auth', '后端', '接口', '服务端', '数据库', '队列'],
+  },
+  {
+    name: 'documentation/research',
+    contextKeywords: ['documentation', 'docs', 'research', 'technical writer', 'writer', 'guide', 'manual', 'readme', 'knowledge base', '文档', '研究', '调研', '指南', '说明'],
+    taskKeywords: ['documentation', 'docs', 'research', 'guide', 'manual', 'readme', 'copy', 'content', 'knowledge base', '文档', '研究', '调研', '指南', '说明'],
+  },
+  {
+    name: 'testing/qa',
+    contextKeywords: ['testing', 'qa', 'quality', 'test automation', 'e2e', 'playwright', 'unit test', 'integration test', '验证', '测试', '质量'],
+    taskKeywords: ['testing', 'qa', 'test', 'e2e', 'playwright', 'unit test', 'integration test', 'coverage', 'regression', '验证', '测试', '质量'],
+  },
+  {
+    name: 'devops/infra',
+    contextKeywords: ['devops', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'docker', 'kubernetes', 'terraform', 'observability', '监控', '部署', '基础设施'],
+    taskKeywords: ['devops', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'docker', 'kubernetes', 'terraform', 'pipeline', 'observability', '监控', '部署', '基础设施'],
+  },
+  {
+    name: 'data/ai',
+    contextKeywords: ['data', 'analytics', 'ai', 'ml', 'model', 'embedding', 'prompt', 'llm', '数据', '分析', '模型', '智能'],
+    taskKeywords: ['data', 'analytics', 'ai', 'ml', 'model', 'embedding', 'prompt', 'llm', 'dataset', '数据', '分析', '模型', '智能'],
+  },
+] as const;
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function keywordPattern(keyword: string): RegExp {
+  const escaped = escapeRegExp(keyword.toLowerCase());
+  const pattern = /^[a-z0-9]+$/.test(keyword) ? `\\b${escaped}\\b` : escaped;
+  return new RegExp(pattern, 'g');
+}
+
+function keywordIsNegated(text: string, index: number): boolean {
+  const prefix = text.slice(Math.max(0, index - 96), index);
+  const clause = prefix.split(/[.!?\n;。！？；]/).pop() ?? prefix;
+  return /\b(skip|skips|skipped|not|avoid|avoids|avoided|without|exclude|excludes|excluded|unrelated|no)\b/i.test(clause)
+    || /(不要|避免|跳过|不是|非)/.test(clause);
+}
+
+function keywordHits(text: string, keywords: readonly string[], options: { ignoreNegated?: boolean } = {}): string[] {
+  const hits: string[] = [];
+  const normalized = text.toLowerCase();
+  for (const keyword of keywords) {
+    const pattern = keywordPattern(keyword);
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(normalized)) !== null) {
+      if (options.ignoreNegated && keywordIsNegated(normalized, match.index)) continue;
+      hits.push(keyword);
+      break;
+    }
+  }
+  return [...new Set(hits)];
+}
+
+function startWorkCandidateSearchText(summary: Json): string {
+  return [
+    safeString(summary.title),
+    safeString(summary.type),
+    safeString(summary.pool),
+    safeString(summary.status),
+    safeString(summary.notes),
+    safeString(summary.sourceArtifactId),
+  ].filter((entry): entry is string => Boolean(entry)).join('\n').toLowerCase();
+}
+
+function fallbackStartWorkSelection(
+  contextDocuments: StartWorkContextDocument[],
+  workItems: Json[],
+  fallbackCause: string,
+): StartWorkSelectionDecision {
+  const claimable = workItems
+    .map((item, index) => ({ item, index, id: workItemId(item), summary: startWorkCandidateSummary(item) }))
+    .filter((entry): entry is { item: Json; index: number; id: string; summary: Json } => Boolean(entry.id));
+
+  if (claimable.length === 0) {
+    return {
+      selectedWorkItemId: null,
+      source: 'fallback',
+      reason: `No claimable WorkItem IDs were available; skipped instead of claiming unrelated work. Fallback used because ${fallbackCause}.`,
+      warning: fallbackCause,
+    };
+  }
+
+  const contextText = contextDocuments
+    .map((document) => `${document.key}\n${document.markdown ?? document.content}`)
+    .join('\n\n')
+    .toLowerCase();
+  const contextGroups = START_WORK_RESPONSIBILITY_KEYWORD_GROUPS
+    .map((group) => ({ group, hits: keywordHits(contextText, group.contextKeywords, { ignoreNegated: true }) }))
+    .filter((entry) => entry.hits.length > 0);
+
+  if (contextGroups.length === 0) {
+    return {
+      selectedWorkItemId: null,
+      source: 'fallback',
+      reason: `No recognizable responsibility keywords were found in employee context; skipped instead of claiming unrelated work. Fallback used because ${fallbackCause}.`,
+      warning: fallbackCause,
+    };
+  }
+
+  const scored = claimable.map((candidate) => {
+    let score = 0;
+    const matchedGroups: string[] = [];
+    const candidateText = startWorkCandidateSearchText(candidate.summary);
+    for (const contextGroup of contextGroups) {
+      const hits = keywordHits(candidateText, contextGroup.group.taskKeywords);
+      if (hits.length === 0) continue;
+      score += hits.length * 10 + contextGroup.hits.length;
+      matchedGroups.push(`${contextGroup.group.name} (${hits.slice(0, 3).join(', ')})`);
+    }
+    return { ...candidate, score, matchedGroups };
+  }).sort((left, right) => right.score - left.score || left.index - right.index);
+
+  const best = scored[0];
+  if (!best || best.score <= 0) {
+    return {
+      selectedWorkItemId: null,
+      source: 'fallback',
+      reason: `No WorkItem matched the employee responsibility keywords; skipped instead of claiming unrelated work. Fallback used because ${fallbackCause}.`,
+      warning: fallbackCause,
+    };
+  }
+
+  return {
+    selectedWorkItemId: best.id,
+    source: 'fallback',
+    reason: `Fallback selected ${best.id} because employee context and WorkItem text share responsibility keywords: ${best.matchedGroups.join('; ')}. Fallback used because ${fallbackCause}.`,
+    warning: fallbackCause,
+  };
+}
+
+async function selectStartWorkItem(values: {
+  sessionId: string;
+  agent: StartWorkAgentChoice;
+  target: StartWorkTarget;
+  contextDocuments: StartWorkContextDocument[];
+  workItems: Json[];
+  progress: (message: string) => void;
+}): Promise<StartWorkSelectionDecision> {
+  const candidates = values.workItems.map(startWorkCandidateSummary);
+  const candidateIds = new Set(candidates.map((candidate) => safeString(candidate.id)).filter((id): id is string => Boolean(id)));
+  if (candidateIds.size === 0) {
+    return {
+      selectedWorkItemId: null,
+      source: 'fallback',
+      reason: 'No candidate WorkItem had an id; skipped instead of claiming unrelated work.',
+      warning: 'No candidate WorkItem had an id.',
+    };
+  }
+
+  const prompt = buildStartWorkSelectionPrompt({
+    sessionId: values.sessionId,
+    agent: values.agent,
+    target: values.target,
+    contextDocuments: values.contextDocuments,
+    candidates,
+  });
+
+  values.progress(`selection: asking ${values.agent} to choose among ${candidateIds.size} candidate(s)`);
+  try {
+    const output = await runPoolAgent(startWorkRunnerAgent(values.agent), values.target.repoPath, prompt, { progress: values.progress });
+    const parsed = parseStartWorkSelectionOutput(output, candidateIds);
+    if (parsed.selection) return parsed.selection;
+    return fallbackStartWorkSelection(values.contextDocuments, values.workItems, parsed.warning ?? 'selection agent returned an invalid decision');
+  } catch (error) {
+    const warning = `selection agent failed: ${error instanceof Error ? error.message : String(error)}`;
+    return fallbackStartWorkSelection(values.contextDocuments, values.workItems, warning);
+  }
 }
 
 function startWorkClaimPayload(values: {
@@ -4578,64 +4875,112 @@ async function processStartWorkTarget(values: {
     return { status: 'idle', target: startWorkTargetScope(target), ready: 0, warning: execute.warning };
   }
 
-  const claimPayload = startWorkClaimPayload({ sessionId, agent, leaseSeconds: Math.max(60, secondsArgAny(['--lease-seconds'], 600, 86400)) });
-  for (const item of workItems) {
-    const id = workItemId(item);
-    if (!id) continue;
-    progress(`claim: ${id} ${workItemTitle(item)}`);
-    const claim = await claimStartWorkItem(target, item, claimPayload);
-    if (claim.conflict) {
-      summary.conflicts++;
-      pushUniqueWarning(summary.warnings, claim.warning);
-      progress(`claim conflict: ${id}`);
-      continue;
-    }
-    if (!claim.claimed) {
-      pushUniqueWarning(summary.warnings, claim.warning);
-      continue;
-    }
-
-    summary.claimed++;
-    heartbeatState.status = 'working';
-    heartbeatState.currentWorkItemId = id;
-    progress(`agent: launching ${agent} for ${id}`);
-    try {
-      await postWorkItemLifecycle(target, id, 'start', claimPayload);
-      const prompt = buildStartWorkAgentPrompt({ sessionId, agent, target, workItem: item, contextDocuments });
-      const output = await runPoolAgent(startWorkRunnerAgent(agent), target.repoPath, prompt, { progress });
-      await patchStartWorkResult(target, id, { sessionId, agent, output, ok: true });
-      const complete = await postWorkItemLifecycle(target, id, 'complete', claimPayload);
-      summary.executed++;
-      heartbeatState.status = 'idle';
-      heartbeatState.currentWorkItemId = null;
-      return {
-        status: 'executed',
-        target: startWorkTargetScope(target),
-        workItemId: id,
-        title: workItemTitle(item),
-        claim: claim.response,
-        complete,
-        output: truncateText(output, 2_000),
-      };
-    } catch (error) {
-      summary.failed++;
-      const message = error instanceof Error ? error.message : String(error);
-      pushUniqueWarning(summary.warnings, message);
-      await patchStartWorkResult(target, id, { sessionId, agent, output: message, ok: false });
-      heartbeatState.status = 'blocked';
-      heartbeatState.currentWorkItemId = id;
-      return {
-        status: 'failed',
-        target: startWorkTargetScope(target),
-        workItemId: id,
-        title: workItemTitle(item),
-        warning: message,
-      };
-    }
+  const selection = await selectStartWorkItem({
+    sessionId,
+    agent,
+    target,
+    contextDocuments,
+    workItems,
+    progress,
+  });
+  if (selection.warning) pushUniqueWarning(summary.warnings, selection.warning);
+  if (selection.selectedWorkItemId) {
+    progress(`selection: selected ${selection.selectedWorkItemId} - ${selection.reason}`);
+  } else {
+    progress(`selection: skipped - ${selection.reason}`);
+    summary.idle++;
+    return {
+      status: 'idle',
+      target: startWorkTargetScope(target),
+      ready: workItems.length,
+      selection: startWorkSelectionJson(selection),
+      warning: selection.warning ?? execute.warning,
+    };
   }
 
-  summary.idle++;
-  return { status: 'idle', target: startWorkTargetScope(target), ready: workItems.length, warning: execute.warning };
+  const item = workItems.find((candidate) => workItemId(candidate) === selection.selectedWorkItemId);
+  if (!item) {
+    const warning = `Selected WorkItem ${selection.selectedWorkItemId} was not found in candidates; skipped instead of claiming unrelated work.`;
+    pushUniqueWarning(summary.warnings, warning);
+    progress(`selection: skipped - ${warning}`);
+    summary.idle++;
+    return {
+      status: 'idle',
+      target: startWorkTargetScope(target),
+      ready: workItems.length,
+      selection: startWorkSelectionJson({ ...selection, selectedWorkItemId: null, warning }),
+      warning,
+    };
+  }
+
+  const claimPayload = startWorkClaimPayload({ sessionId, agent, leaseSeconds: Math.max(60, secondsArgAny(['--lease-seconds'], 600, 86400)) });
+  const id = selection.selectedWorkItemId;
+  progress(`claim: ${id} ${workItemTitle(item)}`);
+  const claim = await claimStartWorkItem(target, item, claimPayload);
+  if (claim.conflict) {
+    summary.conflicts++;
+    summary.idle++;
+    pushUniqueWarning(summary.warnings, claim.warning);
+    progress(`claim conflict: ${id}`);
+    return {
+      status: 'idle',
+      target: startWorkTargetScope(target),
+      ready: workItems.length,
+      selection: startWorkSelectionJson(selection),
+      warning: claim.warning,
+    };
+  }
+  if (!claim.claimed) {
+    summary.idle++;
+    pushUniqueWarning(summary.warnings, claim.warning);
+    return {
+      status: 'idle',
+      target: startWorkTargetScope(target),
+      ready: workItems.length,
+      selection: startWorkSelectionJson(selection),
+      warning: claim.warning ?? execute.warning,
+    };
+  }
+
+  summary.claimed++;
+  heartbeatState.status = 'working';
+  heartbeatState.currentWorkItemId = id;
+  progress(`agent: launching ${agent} for ${id}`);
+  try {
+    await postWorkItemLifecycle(target, id, 'start', claimPayload);
+    const prompt = buildStartWorkAgentPrompt({ sessionId, agent, target, workItem: item, contextDocuments });
+    const output = await runPoolAgent(startWorkRunnerAgent(agent), target.repoPath, prompt, { progress });
+    await patchStartWorkResult(target, id, { sessionId, agent, output, ok: true });
+    const complete = await postWorkItemLifecycle(target, id, 'complete', claimPayload);
+    summary.executed++;
+    heartbeatState.status = 'idle';
+    heartbeatState.currentWorkItemId = null;
+    return {
+      status: 'executed',
+      target: startWorkTargetScope(target),
+      workItemId: id,
+      title: workItemTitle(item),
+      selection: startWorkSelectionJson(selection),
+      claim: claim.response,
+      complete,
+      output: truncateText(output, 2_000),
+    };
+  } catch (error) {
+    summary.failed++;
+    const message = error instanceof Error ? error.message : String(error);
+    pushUniqueWarning(summary.warnings, message);
+    await patchStartWorkResult(target, id, { sessionId, agent, output: message, ok: false });
+    heartbeatState.status = 'blocked';
+    heartbeatState.currentWorkItemId = id;
+    return {
+      status: 'failed',
+      target: startWorkTargetScope(target),
+      workItemId: id,
+      title: workItemTitle(item),
+      selection: startWorkSelectionJson(selection),
+      warning: message,
+    };
+  }
 }
 
 async function sendStartWorkHeartbeat(values: {

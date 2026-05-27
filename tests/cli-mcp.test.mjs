@@ -150,7 +150,27 @@ async function writeExecutable(filePath, text) {
 async function writeFakeCodex(binDir) {
   await writeExecutable(path.join(binDir, 'codex'), `#!/bin/sh
 if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
-  printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
+  if [ -n "$AXIS_TEST_AGENT_PROMPT_APPEND" ]; then
+    printf '%s\\n---PROMPT---\\n' "$@" >> "$AXIS_TEST_AGENT_PROMPT"
+  else
+    printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
+  fi
+fi
+if printf '%s\\n' "$@" | grep -q "Axis start-work task selection"; then
+  if [ -n "$AXIS_TEST_AGENT_INVALID_SELECTION" ]; then
+    printf 'not json\\n'
+    exit 0
+  fi
+  if printf '%s\\n' "$@" | grep -q "wi-frontend"; then
+    printf '%s\\n' '{"selectedWorkItemId":"wi-frontend","reason":"Frontend/UI responsibilities match the UI task."}'
+    exit 0
+  fi
+  if printf '%s\\n' "$@" | grep -q "wi-start-work"; then
+    printf '%s\\n' '{"selectedWorkItemId":"wi-start-work","reason":"Only candidate matches the employee context."}'
+    exit 0
+  fi
+  printf '%s\\n' '{"selectedWorkItemId":null,"reason":"No candidate matches the employee responsibilities."}'
+  exit 0
 fi
 printf 'fake codex completed\\n'
 exit 0
@@ -1982,6 +2002,176 @@ await withTempDir(async (dir) => {
       'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nBuild reliable workers.', markdown: '# Soul\n\nBuild reliable workers.' },
       'skill.md': { key: 'skill.md', found: false, content: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', markdown: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', warning: 'Agent context document skill.md was not found; using empty fallback.' },
       'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrevious queue was idle.', markdown: '# Memory\n\nPrevious queue was idle.' },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-selection-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 1);
+    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-frontend']);
+    assert.deepEqual(state.lifecycleActions.map((entry) => entry.id), ['wi-frontend', 'wi-frontend']);
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'executed');
+    assert.equal(projectResult.workItemId, 'wi-frontend');
+    assert.equal(projectResult.selection.selectedWorkItemId, 'wi-frontend');
+    assert.match(projectResult.selection.reason, /Frontend\/UI responsibilities/);
+    assert.match(result.stderr, /selection: selected wi-frontend/);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /# Axis start-work task selection/);
+    assert.match(prompts, /Frontend\/UI product engineer/);
+    assert.match(prompts, /wi-backend/);
+    assert.match(prompts, /Build admin API endpoint/);
+    assert.match(prompts, /Backend\/API work/);
+    assert.match(prompts, /doc-backend/);
+    assert.match(prompts, /wi-frontend/);
+    assert.match(prompts, /Build settings UI panel/);
+    assert.match(prompts, /Frontend\/UI work/);
+    assert.match(prompts, /doc-frontend/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-backend',
+        title: 'Build admin API endpoint',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Backend/API work: add REST API and database persistence.',
+        sourceArtifactId: 'doc-backend',
+      },
+      {
+        id: 'wi-frontend',
+        title: 'Build settings UI panel',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Frontend/UI work: React screen, form layout, CSS states.',
+        sourceArtifactId: 'doc-frontend',
+      },
+    ],
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nFrontend/UI product engineer for Axis web experiences.', markdown: '# Soul\n\nFrontend/UI product engineer for Axis web experiences.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nReact components, CSS states, accessible UI flows.', markdown: '# Skill\n\nReact components, CSS states, accessible UI flows.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrefer UI tasks and skip backend API work.', markdown: '# Memory\n\nPrefer UI tasks and skip backend API work.' },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-no-match-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+        AXIS_TEST_AGENT_INVALID_SELECTION: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.ready, 2);
+    assert.equal(payload.summary.claimed, 0);
+    assert.equal(payload.summary.executed, 0);
+    assert.equal(payload.summary.idle, 1);
+    assert.deepEqual(state.claims, []);
+    assert.deepEqual(state.lifecycleActions, []);
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'idle');
+    assert.equal(projectResult.ready, 2);
+    assert.equal(projectResult.selection.selectedWorkItemId, null);
+    assert.equal(projectResult.selection.source, 'fallback');
+    assert.match(projectResult.selection.reason, /No WorkItem matched/);
+    assert.match(projectResult.selection.warning, /invalid JSON/);
+    assert.match(result.stderr, /selection: skipped/);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /# Axis start-work task selection/);
+    assert.match(prompts, /Documentation and research specialist/);
+    assert.doesNotMatch(prompts, /# Axis start-work coding execution/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-backend-api',
+        title: 'Create billing API endpoint',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Backend-only task: REST API handlers, database schema, service validation.',
+        sourceArtifactId: 'doc-api',
+      },
+      {
+        id: 'wi-backend-worker',
+        title: 'Implement queue worker retry policy',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Backend-only task: worker leases, retry state, server-side scheduling.',
+        sourceArtifactId: 'doc-worker',
+      },
+    ],
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nDocumentation and research specialist for Axis knowledge work.', markdown: '# Soul\n\nDocumentation and research specialist for Axis knowledge work.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nWrite product docs, research notes, and user-facing guides.', markdown: '# Skill\n\nWrite product docs, research notes, and user-facing guides.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nSkip coding tasks that are purely backend implementation.', markdown: '# Memory\n\nSkip coding tasks that are purely backend implementation.' },
     },
   });
 });
