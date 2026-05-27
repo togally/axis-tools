@@ -96,14 +96,14 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function printStartWorkUsage() {
     console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, and heartbeats.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
 }
 function printCreateEmployeeUsage() {
-    console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
+    console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --language <zh|en>               Document/profile language. Aliases: chinese, english. Interactive default is 中文.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
 }
 function printWorkWorkerUsage(workerType) {
     const command = workerType === 'review' ? 'work-review' : 'work-coding';
@@ -3148,6 +3148,37 @@ function parseCreateEmployeeAgentArg(value) {
         return 'claude-code';
     throw new Error('--agent must be one of: codex, claude-code, cc');
 }
+function parseCreateEmployeeLanguageArg(value) {
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized)
+        return null;
+    if (normalized === 'zh' || normalized === 'cn' || normalized === 'chinese' || normalized === '中文')
+        return 'zh';
+    if (normalized === 'en' || normalized === 'english')
+        return 'en';
+    throw new Error('--language must be one of: zh, en, chinese, english');
+}
+async function resolveCreateEmployeeLanguage() {
+    const explicit = parseCreateEmployeeLanguageArg(getArg('--language'));
+    if (explicit)
+        return explicit;
+    if (!process.stdin.isTTY || hasFlag('--json'))
+        return 'zh';
+    const prompt = await createPromptSession();
+    console.log('选择员工语言 / Select employee language:');
+    console.log('  1. 中文 (default)');
+    console.log('  2. English');
+    while (true) {
+        const answer = (await prompt.question('Enter number: ')).trim();
+        if (answer === '')
+            return 'zh';
+        if (answer === '1')
+            return 'zh';
+        if (answer === '2')
+            return 'en';
+        console.log('Please enter 1, 2, or press Enter for 中文.');
+    }
+}
 async function resolveCreateEmployeeAgent() {
     const explicit = parseCreateEmployeeAgentArg(getArg('--agent'));
     if (explicit)
@@ -3208,7 +3239,23 @@ function axisEmployeesRootDir() {
 function axisEmployeeDir(employeeId) {
     return path.join(axisEmployeesRootDir(), employeeId);
 }
-function buildEmployeeSoulPrompt(employeeId, agent) {
+function employeeFallbackName(language) {
+    return language === 'zh' ? '林知远' : 'Evelyn Hart';
+}
+function buildEmployeeSoulPrompt(employeeId, agent, language) {
+    const languageInstructions = language === 'zh'
+        ? [
+            'Language: 中文. soul.md, skill.md, and memory.md must be written in Chinese.',
+            'Name requirement: choose a natural human-like name in the selected language: Chinese-style name or tasteful persona name.',
+            'Do not use meaningless IDs or generic names such as emp_abc, Agent 1, Axis Employee, random tokens, or the employee id.',
+            'The profile itself must be in Chinese and should include 姓名、性别、人格、角色定位、优势、工作方式、工作原则。',
+        ]
+        : [
+            'Language: English. soul.md, skill.md, and memory.md must be written in English.',
+            'Name requirement: choose a natural human-like name in the selected language: a human-like English name.',
+            'Do not use meaningless IDs or generic names such as emp_abc, Agent 1, Axis Employee, random tokens, or the employee id.',
+            'The profile itself must be in English and should include display name, gender, personality, role/persona, strengths, working style, and operating principles.',
+        ];
     return [
         '# Axis employee creation',
         '',
@@ -3216,16 +3263,36 @@ function buildEmployeeSoulPrompt(employeeId, agent) {
         `Agent runtime: ${agent}`,
         '',
         'Create your own Axis employee soul profile as Markdown.',
-        'Include a clear display name, gender, personality, role/persona, strengths, working style, and operating principles as an Axis employee.',
+        'Use a natural human-like name/person-like display name that is suitable for the selected language.',
+        ...languageInstructions,
         'Do not include secrets, credentials, raw machine fingerprints, IP addresses, or private local paths.',
         'Return only Markdown content for soul.md.',
     ].join('\n');
 }
-function fallbackEmployeeSoul(employeeId, agent, warning) {
+function fallbackEmployeeSoul(employeeId, agent, language, warning) {
+    const name = employeeFallbackName(language);
+    if (language === 'zh') {
+        return [
+            `# ${name}`,
+            '',
+            `姓名：${name}`,
+            '性别：未指定',
+            `角色：通过 ${agent} 运行的 Axis 员工`,
+            '',
+            '人格：谨慎、简洁、重视执行质量。',
+            '',
+            '工作原则：',
+            '- 始终围绕当前 Axis 目标保持范围清晰。',
+            '- 保护用户数据、凭据和本机细节。',
+            '- 在出现值得长期保留的上下文时更新 memory.md。',
+            '',
+            `创建说明：Agent 生成 soul.md 失败，因此 axis-tools 写入了中文 fallback。${warning}`,
+        ].join('\n');
+    }
     return [
-        `# Axis Employee ${employeeId.slice(4, 12)}`,
+        `# ${name}`,
         '',
-        `Name: Axis Employee ${employeeId.slice(4, 12)}`,
+        `Name: ${name}`,
         'Gender: unspecified',
         `Role: Axis employee operating through ${agent}`,
         '',
@@ -3236,10 +3303,22 @@ function fallbackEmployeeSoul(employeeId, agent, warning) {
         '- Preserve user data, credentials, and local machine details.',
         '- Record useful memory and skills as they become relevant.',
         '',
-        `Creation note: Agent soul generation failed, so axis-tools wrote this deterministic fallback. ${warning}`,
+        `Creation note: Agent soul generation failed, so axis-tools wrote this English fallback. ${warning}`,
     ].join('\n');
 }
-function initialEmployeeSkill(employeeId, agent) {
+function initialEmployeeSkill(employeeId, agent, language) {
+    if (language === 'zh') {
+        return [
+            '# Axis 员工技能',
+            '',
+            `员工：${employeeId}`,
+            `Agent 运行时：${agent}`,
+            '',
+            '- 修改代码前先阅读当前任务、仓库上下文和 Hub 文档。',
+            '- 保持实现范围清晰，并验证变更后的行为。',
+            '- 当出现新的持久上下文时更新 memory.md。',
+        ].join('\n');
+    }
     return [
         '# Axis employee skills',
         '',
@@ -3251,7 +3330,17 @@ function initialEmployeeSkill(employeeId, agent) {
         '- Update memory.md when new durable context matters.',
     ].join('\n');
 }
-function initialEmployeeMemory(employeeId) {
+function initialEmployeeMemory(employeeId, language) {
+    if (language === 'zh') {
+        return [
+            '# Axis 员工记忆',
+            '',
+            `员工：${employeeId}`,
+            '',
+            '- 由 axis create-employee 创建。',
+            '- 暂无持久项目记忆。',
+        ].join('\n');
+    }
     return [
         '# Axis employee memory',
         '',
@@ -3261,16 +3350,58 @@ function initialEmployeeMemory(employeeId) {
         '- No durable project-specific memory has been recorded yet.',
     ].join('\n');
 }
-function extractEmployeeDisplayName(markdown, employeeId) {
+function normalizeEmployeeNameCandidate(value) {
+    return value.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+}
+function isMeaninglessEmployeeName(name, employeeId) {
+    const normalized = name.trim();
+    if (!normalized)
+        return true;
+    const lower = normalized.toLowerCase();
+    if (lower === employeeId.toLowerCase())
+        return true;
+    if (lower.startsWith('emp_'))
+        return true;
+    if (/^agent\s*\d*$/i.test(normalized))
+        return true;
+    if (/^axis\s+employee(?:\s+[a-z0-9_-]+)?$/i.test(normalized))
+        return true;
+    if (/^(employee|worker|assistant|unknown|unnamed)$/i.test(normalized))
+        return true;
+    if (/^[a-z0-9_-]{8,}$/i.test(normalized) && /[0-9_-]/.test(normalized))
+        return true;
+    return false;
+}
+function isHumanizedEmployeeName(name, employeeId, language) {
+    if (isMeaninglessEmployeeName(name, employeeId))
+        return false;
+    if (language === 'zh') {
+        return /[\u4e00-\u9fff]/.test(name) && !/(员工|助手|智能体|代理|测试|未命名)/.test(name);
+    }
+    if (/[\u4e00-\u9fff]/.test(name))
+        return false;
+    return /[A-Za-z]{2,}/.test(name);
+}
+function extractEmployeeDisplayName(markdown, employeeId, language) {
+    const candidates = [];
     for (const line of markdown.split(/\r?\n/)) {
         const heading = line.match(/^#\s+(.+?)\s*$/);
-        if (heading?.[1] && !/axis employee creation/i.test(heading[1]))
-            return heading[1].trim();
-        const named = line.match(/^\s*(?:name|display name)\s*:\s*(.+?)\s*$/i);
-        if (named?.[1])
-            return named[1].trim().replace(/^["']|["']$/g, '');
+        if (heading?.[1] && !/axis employee creation/i.test(heading[1])) {
+            candidates.push(normalizeEmployeeNameCandidate(heading[1]));
+        }
+        const named = line.match(/^\s*(?:name|display name|human name|姓名|显示名称|名字)\s*[:：]\s*(.+?)\s*$/i);
+        if (named?.[1]) {
+            candidates.push(normalizeEmployeeNameCandidate(named[1]));
+        }
     }
-    return `Axis Employee ${employeeId.slice(4, 12)}`;
+    return candidates.find((candidate) => isHumanizedEmployeeName(candidate, employeeId, language))
+        ?? employeeFallbackName(language);
+}
+function employeeSoulMatchesLanguage(markdown, language) {
+    const hasChinese = /[\u4e00-\u9fff]/.test(markdown);
+    if (language === 'zh')
+        return hasChinese;
+    return true;
 }
 async function runEmployeeSoulAgent(agent, employeeDir, prompt) {
     const command = agent === 'codex' ? 'codex' : 'claude';
@@ -3313,7 +3444,7 @@ async function runEmployeeSoulAgent(agent, employeeDir, prompt) {
         });
     });
 }
-async function ensureEmployeeRuntimeFiles(employeeId, agent, soul) {
+async function ensureEmployeeRuntimeFiles(employeeId, agent, language, soul) {
     const employeeDir = axisEmployeeDir(employeeId);
     ensureDir(employeeDir);
     const soulPath = path.join(employeeDir, 'soul.md');
@@ -3321,10 +3452,10 @@ async function ensureEmployeeRuntimeFiles(employeeId, agent, soul) {
     const memoryPath = path.join(employeeDir, 'memory.md');
     await writeFile(soulPath, `${soul.trim()}\n`, 'utf8');
     if (!existsSync(skillPath)) {
-        await writeFile(skillPath, `${initialEmployeeSkill(employeeId, agent)}\n`, 'utf8');
+        await writeFile(skillPath, `${initialEmployeeSkill(employeeId, agent, language)}\n`, 'utf8');
     }
     if (!existsSync(memoryPath)) {
-        await writeFile(memoryPath, `${initialEmployeeMemory(employeeId)}\n`, 'utf8');
+        await writeFile(memoryPath, `${initialEmployeeMemory(employeeId, language)}\n`, 'utf8');
     }
     return {
         employeeDir,
@@ -3339,6 +3470,7 @@ async function registerEmployeeToHub(values) {
         const response = await postOrbitJson(values.backendUrl, '/api/employees/register', {
             employeeId: values.employeeId,
             name: values.name,
+            language: values.language,
             agentType: values.agent,
             status: 'active',
             documents: values.documents,
@@ -3356,6 +3488,7 @@ async function createEmployeeCommand() {
     }
     const config = await readGlobalOrbitConfig();
     const backendUrl = normalizeBackendUrl(getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl());
+    const language = await resolveCreateEmployeeLanguage();
     const agent = await resolveCreateEmployeeAgent();
     const employeeId = createEmployeeId();
     const employeeDir = axisEmployeeDir(employeeId);
@@ -3363,22 +3496,26 @@ async function createEmployeeCommand() {
     const warnings = [];
     let soul;
     try {
-        soul = await runEmployeeSoulAgent(agent, employeeDir, buildEmployeeSoulPrompt(employeeId, agent));
+        soul = await runEmployeeSoulAgent(agent, employeeDir, buildEmployeeSoulPrompt(employeeId, agent, language));
         if (!soul.trim()) {
             throw new Error('agent returned empty soul profile');
+        }
+        if (!employeeSoulMatchesLanguage(soul, language)) {
+            throw new Error(`agent returned a soul profile that does not match language ${language}`);
         }
     }
     catch (error) {
         const warning = error instanceof Error ? error.message : String(error);
         warnings.push(`Agent soul generation failed; wrote fallback soul.md. ${warning}`);
-        soul = fallbackEmployeeSoul(employeeId, agent, warning);
+        soul = fallbackEmployeeSoul(employeeId, agent, language, warning);
     }
-    const runtime = await ensureEmployeeRuntimeFiles(employeeId, agent, soul);
-    const name = extractEmployeeDisplayName(runtime.soul, employeeId);
+    const runtime = await ensureEmployeeRuntimeFiles(employeeId, agent, language, soul);
+    const name = extractEmployeeDisplayName(runtime.soul, employeeId, language);
     const cloud = await registerEmployeeToHub({
         backendUrl,
         employeeId,
         name,
+        language,
         agent,
         documents: {
             soul: runtime.soul,
@@ -3391,6 +3528,7 @@ async function createEmployeeCommand() {
     await writeJsonFile(path.join(runtime.employeeDir, 'config.json'), {
         employeeId,
         name,
+        language,
         agentType: agent,
         backendUrl,
         localPath: runtime.employeeDir,
@@ -3407,6 +3545,7 @@ async function createEmployeeCommand() {
         mode: 'create-employee',
         employeeId,
         name,
+        language,
         agent,
         localPath: runtime.employeeDir,
         cloud: {
@@ -3422,6 +3561,7 @@ async function createEmployeeCommand() {
     }
     console.log(`employeeId: ${employeeId}`);
     console.log(`name: ${name}`);
+    console.log(`language: ${language}`);
     console.log(`agent: ${agent}`);
     console.log(`local path: ${runtime.employeeDir}`);
     console.log(`cloud registration: ${cloud.status}`);

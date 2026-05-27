@@ -175,6 +175,18 @@ exit 0
 `);
 }
 
+async function writeFakeSoulCodexWithMarkdown(binDir, markdown) {
+  await writeExecutable(path.join(binDir, 'codex'), `#!/bin/sh
+if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
+  printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
+fi
+cat <<'EOF'
+${markdown}
+EOF
+exit 0
+`);
+}
+
 async function withEmployeeRegisterServer(fn) {
   const requests = [];
   const server = http.createServer((req, res) => {
@@ -191,6 +203,7 @@ async function withEmployeeRegisterServer(fn) {
           employee: {
             id: body.employeeId ?? body.id,
             name: body.name,
+            language: body.language,
             agentType: body.agentType,
             status: body.status,
             documents: {
@@ -227,7 +240,7 @@ async function withEmployeeRegisterServer(fn) {
     await writeFakeSoulCodex(binDir);
 
     await withEmployeeRegisterServer(async (backendUrl, requests) => {
-      const { stdout } = await run(['create-employee', '--agent', 'codex', '--backend-url', backendUrl, '--json'], {
+      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'en', '--backend-url', backendUrl, '--json'], {
         env: {
           HOME: home,
           AXIS_HOME: path.join(home, '.axis'),
@@ -241,12 +254,14 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(payload.mode, 'create-employee');
       assert.match(payload.employeeId, /^emp_[A-Za-z0-9_-]{20,40}$/);
       assert.equal(payload.name, 'Nova Vale');
+      assert.equal(payload.language, 'en');
       assert.equal(payload.agent, 'codex');
       assert.equal(payload.cloud.ok, true);
       assert.equal(requests.length, 1);
       assert.equal(requests[0].body.employeeId, payload.employeeId);
       assert.equal(requests[0].body.agentType, 'codex');
       assert.equal(requests[0].body.name, 'Nova Vale');
+      assert.equal(requests[0].body.language, 'en');
       assert.match(requests[0].body.documents.soul, /Nova Vale/);
       assert.match(requests[0].body.documents.skill, /Axis employee skills/);
       assert.match(requests[0].body.documents.memory, /Axis employee memory/);
@@ -260,11 +275,114 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(config.employeeId, payload.employeeId);
       assert.equal(config.agentType, 'codex');
       assert.equal(config.name, 'Nova Vale');
+      assert.equal(config.language, 'en');
       assert.equal(config.backendUrl, backendUrl);
 
       const prompt = await readFile(promptPath, 'utf8');
       assert.match(prompt, new RegExp(payload.employeeId));
+      assert.match(prompt, /English/);
+      assert.match(prompt, /natural human-like name|person-like/);
       assert.doesNotMatch(payload.employeeId, /127|localhost|jasper|axis/i);
+    });
+  });
+}
+
+{
+  await withTempDir(async (dir) => {
+    const home = path.join(dir, 'home');
+    const binDir = path.join(dir, 'bin');
+    const promptPath = path.join(dir, 'agent-prompt.txt');
+    await mkdir(home, { recursive: true });
+    await writeFakeSoulCodexWithMarkdown(binDir, `# emp_badtoken
+
+Name: Agent 1
+Display name: Evelyn Hart
+Gender: unspecified
+Role: Axis employee focused on careful delivery.
+`);
+
+    await withEmployeeRegisterServer(async (backendUrl, requests) => {
+      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'en', '--backend-url', backendUrl, '--json'], {
+        env: {
+          HOME: home,
+          AXIS_HOME: path.join(home, '.axis'),
+          PATH: `${binDir}:${process.env.PATH}`,
+          AXIS_TEST_AGENT_PROMPT: promptPath,
+        },
+      });
+
+      const payload = JSON.parse(stdout);
+      assert.equal(payload.language, 'en');
+      assert.equal(payload.name, 'Evelyn Hart');
+      assert.equal(requests[0].body.name, 'Evelyn Hart');
+      assert.equal(requests[0].body.language, 'en');
+      assert.doesNotMatch(requests[0].body.name, /^emp_|^Agent\s+\d+$/i);
+
+      const employeeDir = path.join(home, '.axis', 'employees', payload.employeeId);
+      const config = JSON.parse(await readFile(path.join(employeeDir, 'config.json'), 'utf8'));
+      assert.equal(config.language, 'en');
+
+      const prompt = await readFile(promptPath, 'utf8');
+      assert.match(prompt, /English/);
+      assert.match(prompt, /human-like English name/);
+      assert.match(prompt, /soul\.md, skill\.md, and memory\.md must be written in English/);
+    });
+  });
+}
+
+{
+  await withTempDir(async (dir) => {
+    const home = path.join(dir, 'home');
+    await mkdir(home, { recursive: true });
+
+    await withEmployeeRegisterServer(async (backendUrl, requests) => {
+      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'zh', '--backend-url', backendUrl, '--json'], {
+        env: {
+          HOME: home,
+          AXIS_HOME: path.join(home, '.axis'),
+          PATH: '/usr/bin:/bin',
+          AXIS_EMPLOYEE_AGENT_TIMEOUT_MS: '5000',
+        },
+      });
+
+      const payload = JSON.parse(stdout);
+      assert.equal(payload.language, 'zh');
+      assert.match(payload.name, /^[\u4e00-\u9fff]{2,4}$/);
+      assert.equal(requests[0].body.language, 'zh');
+      assert.equal(requests[0].body.name, payload.name);
+
+      const employeeDir = path.join(home, '.axis', 'employees', payload.employeeId);
+      assert.match(await readFile(path.join(employeeDir, 'soul.md'), 'utf8'), /# 林知远|姓名：林知远|工作原则/);
+      assert.match(await readFile(path.join(employeeDir, 'skill.md'), 'utf8'), /# Axis 员工技能|员工：|验证变更/);
+      assert.match(await readFile(path.join(employeeDir, 'memory.md'), 'utf8'), /# Axis 员工记忆|暂无持久/);
+    });
+  });
+}
+
+{
+  await withTempDir(async (dir) => {
+    const home = path.join(dir, 'home');
+    await mkdir(home, { recursive: true });
+
+    await withEmployeeRegisterServer(async (backendUrl, requests) => {
+      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'english', '--backend-url', backendUrl, '--json'], {
+        env: {
+          HOME: home,
+          AXIS_HOME: path.join(home, '.axis'),
+          PATH: '/usr/bin:/bin',
+          AXIS_EMPLOYEE_AGENT_TIMEOUT_MS: '5000',
+        },
+      });
+
+      const payload = JSON.parse(stdout);
+      assert.equal(payload.language, 'en');
+      assert.equal(payload.name, 'Evelyn Hart');
+      assert.equal(requests[0].body.language, 'en');
+
+      const employeeDir = path.join(home, '.axis', 'employees', payload.employeeId);
+      assert.match(await readFile(path.join(employeeDir, 'soul.md'), 'utf8'), /# Evelyn Hart|Name: Evelyn Hart|Operating principles/);
+      assert.match(await readFile(path.join(employeeDir, 'skill.md'), 'utf8'), /# Axis employee skills|verify changed behavior/);
+      assert.match(await readFile(path.join(employeeDir, 'memory.md'), 'utf8'), /# Axis employee memory|No durable project-specific memory/);
     });
   });
 }
@@ -997,7 +1115,7 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /me = show current AxisNode user/);
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = clone\/pull maintained repos from AxisNode/);
-  assert.match(usage.stdout, /create-employee \[--agent <codex\|claude-code\|cc>\]/);
+  assert.match(usage.stdout, /create-employee \[--agent <codex\|claude-code\|cc>\] \[--language <zh\|en>\]/);
   assert.doesNotMatch(usage.stdout, /\n  register(\s|\n)/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
   await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);
