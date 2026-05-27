@@ -42,10 +42,14 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 高级非交互式绑定命令，保留给自动化脚本使用
 - `axis project show`
   - 查看当前 repo 的 AxisNode 绑定
+- `axis start-work`
+  - 新的开发执行 worker；默认后台启动，立即返回 session id、pid 和日志路径
+  - 读取 Hub 上的 `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，并领取 `WAIT_CODE` WorkItems 执行
+  - 支持 `--agent codex` 和 `--agent claude-code`，也可用 `--foreground` 在当前终端调试
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
   - `work-review` 持续运行 review/refine worker，把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems
-  - `work-coding` 持续探测 `WAIT_CODE` WorkItems；Hub claim/execute/writeback API 未完成前会明确 blocked/TODO，不会假装实现成功
+  - `work-coding` 是旧 coding probe 兼容入口；新开发执行请使用 `axis start-work`
   - `--repo <path>` 是显式窄模式，只处理该路径下已绑定的单个 repo/project
 
 ## 仓库结构
@@ -205,37 +209,88 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis work-review` / `axis work-coding` 是后续自动化开发循环的主命令。两个 worker 是用户级 worker：默认从 `AXIS_HOME`（未设置时为 `~/.axis`）读取/同步当前登录账号可访问的产品线、项目和工作队列，并持续轮询所有有权限的项目。可以在未绑定 repo 或任意目录运行；当前 cwd 没有 `.axis/project.json` 不再是默认 worker 的停止条件。
+`axis start-work` 是新的开发执行 worker。它默认从后台启动一个本地 worker session，立即返回 `sessionId`、`pid` 和日志路径；worker 会持续向 Axis Hub 发送 heartbeat，读取 `soul.md` / `skill.md` / `memory.md` 作为 Agent 上下文，然后领取 `WAIT_CODE` WorkItems 执行。
 
 新电脑或新环境的最短路径：
 
 ```bash
 axis login
 axis pull
-axis work-review
+axis start-work --agent codex
 ```
 
-默认都会持续轮询直到用户 Ctrl+C/SIGINT/SIGTERM；需要 debug/test 时再用显式 bounded flags。
+Claude Code 运行方式：
+
+```bash
+axis start-work --agent claude-code
+```
+
+后台 worker 日志和状态写在：
+
+```text
+~/.axis/workers/<sessionId>/worker.log
+~/.axis/workers/<sessionId>/config.json
+~/.axis/workers/<sessionId>/state.json
+~/.axis/workers/<sessionId>/last-heartbeat.json
+```
+
+查看本机 worker：
+
+```bash
+axis work-status
+axis work-status --json
+```
+
+需要 debug/test 时用前台和 bounded flags。前台模式会把 progress 打到终端；`--json` 时 stdout 只输出最终 JSON，progress/Agent stderr 走 stderr。
+
+```bash
+axis start-work --foreground --agent codex
+axis start-work --foreground --agent codex --iterations 1 --json
+axis start-work --foreground --agent claude-code --heartbeat-interval 30
+axis start-work --repo /path/to/repo --agent codex
+axis start-work --project-id <id> --product-line-id <id>
+```
+
+`axis start-work` 支持：
+
+- `--agent <codex|claude-code|claude>`：选择 Agent runtime；未传时沿用项目/全局 `selectedAgent`，再自动检测本机 `codex` 或 `claude`。
+- `--foreground`：不 fork 后台进程，在当前终端运行和输出日志。
+- `--interval <seconds>`：`WAIT_CODE` 队列轮询间隔；默认 10 秒。
+- `--heartbeat-interval <seconds>`：发往 Hub 的 worker heartbeat 间隔；默认 30 秒，失败只记录 warning 并继续重试。
+- `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定。
+- `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
+- `--product-line-id <id>` / `--product-line-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问产品线。
+- `--json`：返回机器可读输出；后台启动会包含 `sessionId`、`pid`、`agent`、`heartbeatIntervalSeconds`、`scope`、`logPath`，前台执行会额外包含 `iterations[]`、`summary` 和 `stopReason`。
+
+`start-work` 的执行语义：
+
+- 只消费 coding execution queue：`WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新写入仍使用 canonical lifecycle status。
+- 领取前调用 Hub claim lease API；遇到 `409` 会跳过该 WorkItem 继续找下一个，避免两个 worker 同时执行同一条。
+- Agent prompt 包含 Hub context docs、项目绑定摘要和完整 WorkItem JSON。
+- 执行后会尽力写回 notes/result，并调用 WorkItem `complete` lifecycle；如果 Agent 或写回失败，会明确记录 failed/blocker，不会静默假装完成。
+
+`axis work-review` 和 `axis work-coding` 仍保留为兼容入口。`work-review` 继续负责 review/refine：把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems。`work-coding` 是旧 coding probe，不再作为开发执行入口推广。
+
+旧 worker 默认从 `AXIS_HOME`（未设置时为 `~/.axis`）读取/同步当前登录账号可访问的产品线、项目和工作队列，并持续轮询所有有权限的项目。可以在未绑定 repo 或任意目录运行；当前 cwd 没有 `.axis/project.json` 不再是默认 worker 的停止条件。
+
+兼容旧命令：
 
 ```bash
 axis work-review
 axis work-review --iterations 1 --json
 axis work-review --max-iterations 3 --interval 30
 axis work-review --once --json
-axis work-coding
 axis work-coding --once --json
 axis work-review --repo /path/to/repo
-axis work-review --repo /path/to/repo --iterations 1 --json
-axis work-coding --repo /path/to/repo
 axis work-coding --repo /path/to/repo --once --json
 ```
 
-代码和输出里固定建模两条 lane：
+旧 worker 代码和输出里固定建模两条 lane：
 
 - `refine`: 读取 `NEW` / `WAIT_REVIEW` 的 pool seeds，以及 WorkItem 池 UI 中可见的 `NEW` / `WAIT_REVIEW` 想法/需求/BUG/建议优化条目；`axis work-review` 会启动 review worker，把它们转成 `WAIT_USER_CONFIRM` pool document / WorkItems。旧 `pending-confirmation` 会按兼容输入读取，但新写入不再使用它。
-- `execute`: 读取 `WAIT_CODE` requirements 或 work-items；`axis work-coding` 会探测 `WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新写入使用 `WAIT_CODE`。Hub claim/execute/writeback API 未完成前，它只返回 blocked/TODO warning，不会启动 coding Agent 或写回成功状态。
+- `execute`: 读取 `WAIT_CODE` requirements 或 work-items；`axis work-coding` 会探测 `WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新开发执行使用 `axis start-work`。
 
-兼容入口仍保留但已废弃：`axis work-once`、`axis work-loop`、`axis work once`、`axis work loop` 都映射到 review worker。`axis work once` 默认仍只做队列 probe，`axis work once --spawn` 运行单次 review worker。
+兼容入口仍保留但已废弃：`axis work-once`、`axis work-loop`、`axis work once`、`axis work loop` 都映射到 review worker。`axis work once` 默认仍只做队列 probe，`axis work once --spawn` 运行单次 review worker。`work-review` / `work-coding` help 中会继续保留参数，但新执行流优先看 `axis start-work --help`。
 
 `axis work-review` 和 `axis work-coding` 支持：
 
@@ -244,6 +299,7 @@ axis work-coding --repo /path/to/repo --once --json
 - `--interval <seconds>` / `--sleep <seconds>`：轮询之间的等待时间；默认 10 秒。测试可设置 `AXIS_WORK_LOOP_SKIP_SLEEP=1` 跳过真实 sleep。
 - `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定；未传时使用用户 workspace。
 - `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
+- `--product-line-id <id>` / `--product-line-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问产品线。
 - `--agent <codex|claude-code|none>`：选择 review worker Agent；未传时沿用项目绑定或本机可用 Agent。`work-coding` 当前只 probe，不启动 Agent。
 - `--json`：stdout 只输出 JSON；progress 和 Agent stderr 走 stderr 或被抑制。输出包含 `mode: "work-review"` / `mode: "work-coding"`、`workerType`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。review lane 还会暴露 `lanes.refine.sourceCounts`、候选 `candidateSource` / `candidateType`，以及 `summary.pendingBySource` / `summary.candidatesByType`。
 

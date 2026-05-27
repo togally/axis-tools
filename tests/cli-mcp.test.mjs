@@ -147,6 +147,16 @@ async function writeExecutable(filePath, text) {
   await chmod(filePath, 0o755);
 }
 
+async function writeFakeCodex(binDir) {
+  await writeExecutable(path.join(binDir, 'codex'), `#!/bin/sh
+if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
+  printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
+fi
+printf 'fake codex completed\\n'
+exit 0
+`);
+}
+
 async function runViaLinkedBin(args) {
   return withTempDir(async (dir) => {
     const binPath = path.join(dir, 'axis');
@@ -455,7 +465,20 @@ function statusMatches(actual, requested) {
 }
 
 async function withPoolServer(fn, options = {}) {
-  const state = { requests: [], documents: [], poolDocuments: 0, requirements: 0, poolSeeds: 0, loginCount: 0, accountByToken: {}, workItemUpdates: [], documentUpdates: [] };
+  const state = {
+    requests: [],
+    documents: [],
+    poolDocuments: 0,
+    requirements: 0,
+    poolSeeds: 0,
+    loginCount: 0,
+    accountByToken: {},
+    workItemUpdates: [],
+    documentUpdates: [],
+    heartbeats: [],
+    claims: [],
+    lifecycleActions: [],
+  };
   const catalog = {
     products: [
       {
@@ -623,6 +646,95 @@ async function withPoolServer(fn, options = {}) {
       }));
       return;
     }
+    if (req.method === 'GET' && req.url.startsWith('/api/agent-context')) {
+      if (!requireAuth()) return;
+      const url = new URL(req.url, 'http://127.0.0.1');
+      const projectId = url.searchParams.get('projectId');
+      if (projectId !== 'proj_1') {
+        res.statusCode = 404;
+        res.end(JSON.stringify({ error: 'project not found' }));
+        return;
+      }
+      const documents = options.agentContextDocuments ?? {
+        'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nBuild useful software.', markdown: '# Soul\n\nBuild useful software.' },
+        'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nUse TDD.', markdown: '# Skill\n\nUse TDD.' },
+        'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nNo recent notes.', markdown: '# Memory\n\nNo recent notes.' },
+      };
+      const warnings = Object.values(documents)
+        .map((document) => document.warning)
+        .filter(Boolean);
+      res.end(JSON.stringify({
+        projectId,
+        documents,
+        warning: warnings.join(' '),
+        runtime: { store: 'mock' },
+      }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/agent-workers/heartbeat') {
+      if (!requireAuth()) return;
+      readJson().then((payload) => {
+        state.heartbeats.push(payload);
+        res.end(JSON.stringify({
+          worker: {
+            ...payload,
+            heartbeatCount: state.heartbeats.filter((entry) => entry.sessionId === payload.sessionId).length,
+            lastHeartbeatAt: new Date().toISOString(),
+          },
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
+    {
+      const claimMatch = req.url.match(/^\/api\/work-items\/([^/]+)\/claim$/);
+      if ((req.method === 'POST' || req.method === 'PATCH') && claimMatch) {
+        if (!requireAuth()) return;
+        readJson().then((payload) => {
+          const workItemId = claimMatch[1];
+          state.claims.push({ id: workItemId, payload });
+          if (options.claimConflict) {
+            res.statusCode = 409;
+            res.end(JSON.stringify({ error: 'work item already claimed' }));
+            return;
+          }
+          const item = workItems().find((entry) => entry.id === workItemId);
+          if (!item) {
+            res.statusCode = 404;
+            res.end(JSON.stringify({ error: 'work item not found' }));
+            return;
+          }
+          item.status = 'claimed';
+          item.claimedBy = payload.agentId ?? payload.owner;
+          item.claimedBySessionId = payload.sessionId;
+          res.end(JSON.stringify({
+            item,
+            project: { id: 'proj_1', name: 'Hermes Console' },
+            runtime: { store: 'mock' },
+          }));
+        });
+        return;
+      }
+    }
+    {
+      const lifecycleMatch = req.url.match(/^\/api\/work-items\/([^/]+)\/(start|complete|release|unclaim)$/);
+      if ((req.method === 'POST' || req.method === 'PATCH') && lifecycleMatch) {
+        if (!requireAuth()) return;
+        readJson().then((payload) => {
+          const [, workItemId, action] = lifecycleMatch;
+          state.lifecycleActions.push({ id: workItemId, action, payload });
+          const item = workItems().find((entry) => entry.id === workItemId) ?? { id: workItemId, title: 'Unknown item', type: 'requirement' };
+          if (action === 'start') item.status = 'in-progress';
+          if (action === 'complete') item.status = 'done';
+          res.end(JSON.stringify({
+            item,
+            project: { id: 'proj_1', name: 'Hermes Console' },
+            runtime: { store: 'mock' },
+          }));
+        });
+        return;
+      }
+    }
     if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/pool-seeds')) {
       if (!requireAuth()) return;
       const url = new URL(req.url, 'http://127.0.0.1');
@@ -758,8 +870,11 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /^axis\n/);
   assert.match(usage.stdout, /Aliases: axis-tools, orbit, orbit-tools/);
   assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
+  assert.match(usage.stdout, /axis start-work \[--agent <codex\|claude-code\|claude>\]/);
   assert.match(usage.stdout, /axis work-review \[--repo <path>\]/);
   assert.match(usage.stdout, /axis work-coding \[--repo <path>\]/);
+  assert.match(usage.stdout, /Deprecated worker commands:/);
+  assert.match(usage.stdout, /work-review and work-coding are deprecated; use axis start-work/);
   assert.equal(longHelp.stdout, usage.stdout);
   assert.equal(shortHelp.stdout, usage.stdout);
   assert.equal(linkedHelp.stdout, usage.stdout);
@@ -796,6 +911,16 @@ await withTempDir(async (dir) => {
     }
   }, { poolSeeds: [] });
 });
+
+{
+  const result = await run(['start-work', '--help'], { timeout: 2000 });
+  assert.match(result.stdout, /axis start-work/);
+  assert.match(result.stdout, /--agent <codex\|claude-code\|claude>/);
+  assert.match(result.stdout, /--foreground/);
+  assert.match(result.stdout, /--heartbeat-interval <seconds>/);
+  assert.doesNotMatch(result.stdout, /\bstarting\b/);
+  assert.equal(result.stderr, '');
+}
 
 await withTempDir(async (dir) => {
   const repo = path.join(dir, 'repo');
@@ -1554,6 +1679,129 @@ await withTempDir(async (dir) => {
     assert.equal(prepare.projectContext.workItems.length, 1);
     assert.doesNotMatch(result.stdout, /orbit-dev-token|orbit-dev-key|orbit-dev-session/);
   });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-prompt.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'start-work');
+    assert.equal(payload.background, false);
+    assert.equal(payload.agent, 'codex');
+    assert.equal(payload.heartbeatIntervalSeconds, 1);
+    assert.equal(payload.intervalSeconds, 0);
+    assert.equal(payload.maxIterations, 1);
+    assert.equal(payload.iterations.length, 1);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 1);
+    assert.equal(payload.stopReason, 'max-iterations');
+    assert.equal(payload.sessionId.startsWith('axis-'), true);
+
+    const workerState = JSON.parse(await readFile(path.join(home, '.axis', 'workers', payload.sessionId, 'state.json'), 'utf8'));
+    assert.equal(workerState.sessionId, payload.sessionId);
+    assert.equal(workerState.agent, 'codex');
+
+    assert.ok(state.heartbeats.length >= 1);
+    assert.equal(state.heartbeats[0].sessionId, payload.sessionId);
+    assert.equal(state.heartbeats[0].agentType, 'codex');
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url.startsWith('/api/agent-context?')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
+    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-start-work']);
+    assert.deepEqual(state.lifecycleActions.map((entry) => entry.action), ['start', 'complete']);
+
+    const prompt = await readFile(promptLog, 'utf8');
+    assert.match(prompt, /# Soul/);
+    assert.match(prompt, /Build reliable workers/);
+    assert.match(prompt, /# skill.md/);
+    assert.match(prompt, /Implement start-work execution/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nBuild reliable workers.', markdown: '# Soul\n\nBuild reliable workers.' },
+      'skill.md': { key: 'skill.md', found: false, content: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', markdown: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', warning: 'Agent context document skill.md was not found; using empty fallback.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrevious queue was idle.', markdown: '# Memory\n\nPrevious queue was idle.' },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl);
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--agent',
+      'codex',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 3000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'start-work');
+    assert.equal(payload.background, true);
+    assert.equal(payload.agent, 'codex');
+    assert.equal(typeof payload.pid, 'number');
+    assert.equal(payload.sessionId.startsWith('axis-'), true);
+    assert.match(payload.logPath, /worker\.log$/);
+
+    const config = JSON.parse(await readFile(path.join(home, '.axis', 'workers', payload.sessionId, 'config.json'), 'utf8'));
+    const state = JSON.parse(await readFile(path.join(home, '.axis', 'workers', payload.sessionId, 'state.json'), 'utf8'));
+    assert.equal(config.sessionId, payload.sessionId);
+    assert.equal(config.agent, 'codex');
+    assert.equal(config.background, true);
+    assert.equal(state.pid, payload.pid);
+    assert.equal(state.background, true);
+  }, { workItems: [] });
 });
 
 await withTempDir(async (dir) => {
