@@ -101,6 +101,7 @@ function printUsage() {
 }
 function printStartWorkUsage() {
     console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. The worker reads soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, and heartbeats.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+    console.log(`Responsibility categories:\n  开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual\n`);
 }
 function printCreateEmployeeUsage() {
     console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --language <zh|en>               Document/profile language. Aliases: chinese, english. Interactive default is 中文.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
@@ -3897,6 +3898,7 @@ function buildStartWorkSelectionPrompt(values) {
         '# Selection Rules',
         '',
         'Choose the one WorkItem that best matches this employee\'s responsibilities from soul.md, skill.md, and memory.md.',
+        'Use broad岗位职责 categories: 开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual.',
         'Do not choose based on queue order. Prefer responsibility fit over first available item.',
         'If no candidate matches the employee responsibilities, select null and explain why the worker should idle.',
         'Only select an id that appears in Candidate WorkItems.',
@@ -3949,34 +3951,34 @@ function parseStartWorkSelectionOutput(output, candidateIds) {
 }
 const START_WORK_RESPONSIBILITY_KEYWORD_GROUPS = [
     {
-        name: 'frontend/ui',
-        contextKeywords: ['frontend', 'front-end', 'front end', 'ui', 'ux', 'user interface', 'react', 'vue', 'css', 'html', 'component', 'design system', 'browser', 'client-side', 'web screen', 'page layout', '前端', '界面', '页面', '交互', '样式', '组件'],
-        taskKeywords: ['frontend', 'front-end', 'front end', 'ui', 'ux', 'user interface', 'react', 'vue', 'css', 'html', 'component', 'design system', 'browser', 'client-side', 'screen', 'layout', 'button', 'form', 'modal', '前端', '界面', '页面', '交互', '样式', '组件'],
+        name: 'development/开发',
+        contextKeywords: ['development', 'developer', 'software development', 'coding', 'code', 'implementation', 'programming', 'programmer', 'feature work', 'frontend', 'front-end', 'front end', 'backend', 'back-end', 'back end', 'api', 'server', 'service', 'database', 'react', 'vue', 'node', 'go', '开发', '研发', '编码', '代码', '实现', '程序', '工程', '前端', '后端', '接口', '服务端', '数据库'],
+        taskKeywords: ['development', 'develop', 'developer', 'coding', 'code', 'implementation', 'implement', 'feature', 'frontend', 'front-end', 'front end', 'backend', 'back-end', 'back end', 'api', 'endpoint', 'server', 'service', 'database', 'db', 'sql', 'migration', 'schema', 'auth', 'react', 'vue', 'component', '开发', '研发', '编码', '代码', '实现', '程序', '工程', '前端', '后端', '接口', '服务端', '数据库'],
     },
     {
-        name: 'backend/api',
-        contextKeywords: ['backend', 'back-end', 'back end', 'api', 'server', 'service', 'database', 'db', 'sql', 'endpoint', 'worker', 'queue', 'go', 'node', 'auth', '后端', '接口', '服务端', '数据库', '队列'],
-        taskKeywords: ['backend', 'back-end', 'back end', 'api', 'server', 'service', 'database', 'db', 'sql', 'endpoint', 'worker', 'queue', 'migration', 'schema', 'auth', '后端', '接口', '服务端', '数据库', '队列'],
+        name: 'testing/QA/测试',
+        contextKeywords: ['testing', 'qa', 'quality assurance', 'quality', 'tester', 'test automation', 'e2e', 'playwright', 'unit test', 'integration test', 'regression', 'verification', 'validation', 'release quality', '测试', '质量', '验证', '回归', '自动化测试', '用例'],
+        taskKeywords: ['testing', 'qa', 'test', 'tests', 'quality', 'e2e', 'playwright', 'unit test', 'integration test', 'coverage', 'regression', 'verification', 'validation', 'release quality', '测试', '质量', '验证', '回归', '自动化测试', '用例'],
     },
     {
-        name: 'documentation/research',
-        contextKeywords: ['documentation', 'docs', 'research', 'technical writer', 'writer', 'guide', 'manual', 'readme', 'knowledge base', '文档', '研究', '调研', '指南', '说明'],
-        taskKeywords: ['documentation', 'docs', 'research', 'guide', 'manual', 'readme', 'copy', 'content', 'knowledge base', '文档', '研究', '调研', '指南', '说明'],
+        name: 'devops/运维',
+        contextKeywords: ['devops', 'ops', 'operations', 'sre', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'deploy', 'release', 'docker', 'kubernetes', 'terraform', 'observability', 'monitoring', 'pipeline', '运维', '部署', '发布', '基础设施', '监控', '流水线', '容器'],
+        taskKeywords: ['devops', 'ops', 'operations', 'sre', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'deploy', 'release', 'rollback', 'docker', 'kubernetes', 'terraform', 'pipeline', 'observability', 'monitoring', '运维', '部署', '发布', '回滚', '基础设施', '监控', '流水线', '容器'],
     },
     {
-        name: 'testing/qa',
-        contextKeywords: ['testing', 'qa', 'quality', 'test automation', 'e2e', 'playwright', 'unit test', 'integration test', '验证', '测试', '质量'],
-        taskKeywords: ['testing', 'qa', 'test', 'e2e', 'playwright', 'unit test', 'integration test', 'coverage', 'regression', '验证', '测试', '质量'],
+        name: 'architecture/架构',
+        contextKeywords: ['architecture', 'architect', 'system design', 'technical design', 'platform design', 'scalability', 'distributed system', 'domain model', '架构', '架构师', '系统设计', '技术方案', '技术设计', '领域模型', '可扩展'],
+        taskKeywords: ['architecture', 'architect', 'system design', 'technical design', 'platform design', 'scalability', 'distributed system', 'domain model', 'refactor architecture', '架构', '系统设计', '技术方案', '技术设计', '领域模型', '可扩展'],
     },
     {
-        name: 'devops/infra',
-        contextKeywords: ['devops', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'docker', 'kubernetes', 'terraform', 'observability', '监控', '部署', '基础设施'],
-        taskKeywords: ['devops', 'infra', 'infrastructure', 'ci', 'cd', 'deployment', 'docker', 'kubernetes', 'terraform', 'pipeline', 'observability', '监控', '部署', '基础设施'],
+        name: 'product/产品',
+        contextKeywords: ['product', 'product manager', 'pm', 'prd', 'roadmap', 'planning', 'requirements', 'acceptance criteria', 'user story', 'scope', 'tradeoff', '产品', '产品经理', '需求', '验收', '规划', '路线图', '范围', '方案'],
+        taskKeywords: ['product', 'product manager', 'prd', 'roadmap', 'planning', 'acceptance criteria', 'user story', 'scope', 'tradeoff', '产品', '产品经理', '验收标准', '路线图', '范围', '产品方案', '需求文档'],
     },
     {
-        name: 'data/ai',
-        contextKeywords: ['data', 'analytics', 'ai', 'ml', 'model', 'embedding', 'prompt', 'llm', '数据', '分析', '模型', '智能'],
-        taskKeywords: ['data', 'analytics', 'ai', 'ml', 'model', 'embedding', 'prompt', 'llm', 'dataset', '数据', '分析', '模型', '智能'],
+        name: 'design/visual/美工',
+        contextKeywords: ['design', 'designer', 'visual', 'visual design', 'ui design', 'ux', 'interaction design', 'interface design', 'graphic', 'art', 'mockup', 'prototype', 'figma', 'typography', 'color system', 'layout', 'css', '美工', '设计', '视觉', '界面', '交互', '原型', '高保真', '配色', '字体', '排版', '样式'],
+        taskKeywords: ['design', 'designer', 'visual', 'visual design', 'ui', 'ui design', 'ux', 'interaction', 'interface', 'screen', 'layout', 'color', 'typography', 'polish', 'mockup', 'prototype', 'figma', 'css', '美工', '设计', '视觉', '界面', '交互', '原型', '高保真', '配色', '字体', '排版', '样式'],
     },
 ];
 function escapeRegExp(value) {

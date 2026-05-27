@@ -161,8 +161,12 @@ if printf '%s\\n' "$@" | grep -q "Axis start-work task selection"; then
     printf 'not json\\n'
     exit 0
   fi
-  if printf '%s\\n' "$@" | grep -q "wi-frontend"; then
-    printf '%s\\n' '{"selectedWorkItemId":"wi-frontend","reason":"Frontend/UI responsibilities match the UI task."}'
+  if printf '%s\\n' "$@" | grep -q "wi-regression"; then
+    printf '%s\\n' '{"selectedWorkItemId":"wi-regression","reason":"QA/testing responsibilities match the regression task."}'
+    exit 0
+  fi
+  if printf '%s\\n' "$@" | grep -q "wi-visual-design"; then
+    printf '%s\\n' '{"selectedWorkItemId":"wi-visual-design","reason":"Design/visual responsibilities match the UI design task."}'
     exit 0
   fi
   if printf '%s\\n' "$@" | grep -q "wi-start-work"; then
@@ -2042,52 +2046,141 @@ await withTempDir(async (dir) => {
     assert.equal(payload.ok, true);
     assert.equal(payload.summary.claimed, 1);
     assert.equal(payload.summary.executed, 1);
-    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-frontend']);
-    assert.deepEqual(state.lifecycleActions.map((entry) => entry.id), ['wi-frontend', 'wi-frontend']);
+    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-regression']);
+    assert.deepEqual(state.lifecycleActions.map((entry) => entry.id), ['wi-regression', 'wi-regression']);
 
     const projectResult = payload.iterations[0].results[0];
     assert.equal(projectResult.status, 'executed');
-    assert.equal(projectResult.workItemId, 'wi-frontend');
-    assert.equal(projectResult.selection.selectedWorkItemId, 'wi-frontend');
-    assert.match(projectResult.selection.reason, /Frontend\/UI responsibilities/);
-    assert.match(result.stderr, /selection: selected wi-frontend/);
+    assert.equal(projectResult.workItemId, 'wi-regression');
+    assert.equal(projectResult.selection.selectedWorkItemId, 'wi-regression');
+    assert.match(projectResult.selection.reason, /QA\/testing responsibilities/);
+    assert.match(result.stderr, /selection: selected wi-regression/);
 
     const prompts = await readFile(promptLog, 'utf8');
     assert.match(prompts, /# Axis start-work task selection/);
-    assert.match(prompts, /Frontend\/UI product engineer/);
-    assert.match(prompts, /wi-backend/);
-    assert.match(prompts, /Build admin API endpoint/);
-    assert.match(prompts, /Backend\/API work/);
-    assert.match(prompts, /doc-backend/);
-    assert.match(prompts, /wi-frontend/);
-    assert.match(prompts, /Build settings UI panel/);
-    assert.match(prompts, /Frontend\/UI work/);
-    assert.match(prompts, /doc-frontend/);
+    assert.match(prompts, /QA testing engineer/);
+    assert.match(prompts, /wi-development/);
+    assert.match(prompts, /Implement billing calculation module/);
+    assert.match(prompts, /Development work/);
+    assert.match(prompts, /doc-development/);
+    assert.match(prompts, /wi-regression/);
+    assert.match(prompts, /Add checkout regression coverage/);
+    assert.match(prompts, /Testing work/);
+    assert.match(prompts, /doc-testing/);
   }, {
     workItems: [
       {
-        id: 'wi-backend',
-        title: 'Build admin API endpoint',
+        id: 'wi-development',
+        title: 'Implement billing calculation module',
         type: 'requirement',
         pool: 'requirement',
         status: 'WAIT_CODE',
-        notes: 'Backend/API work: add REST API and database persistence.',
-        sourceArtifactId: 'doc-backend',
+        notes: 'Development work: implement service logic and persistence.',
+        sourceArtifactId: 'doc-development',
       },
       {
-        id: 'wi-frontend',
-        title: 'Build settings UI panel',
+        id: 'wi-regression',
+        title: 'Add checkout regression coverage',
         type: 'requirement',
         pool: 'requirement',
         status: 'WAIT_CODE',
-        notes: 'Frontend/UI work: React screen, form layout, CSS states.',
-        sourceArtifactId: 'doc-frontend',
+        notes: 'Testing work: add QA regression tests for checkout failure paths.',
+        sourceArtifactId: 'doc-testing',
       },
     ],
     agentContextDocuments: {
-      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nFrontend/UI product engineer for Axis web experiences.', markdown: '# Soul\n\nFrontend/UI product engineer for Axis web experiences.' },
-      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nReact components, CSS states, accessible UI flows.', markdown: '# Skill\n\nReact components, CSS states, accessible UI flows.' },
-      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrefer UI tasks and skip backend API work.', markdown: '# Memory\n\nPrefer UI tasks and skip backend API work.' },
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nQA testing engineer for Axis release quality.', markdown: '# Soul\n\nQA testing engineer for Axis release quality.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nRegression testing, test automation, Playwright, and release verification.', markdown: '# Skill\n\nRegression testing, test automation, Playwright, and release verification.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrefer testing tasks over general development work.', markdown: '# Memory\n\nPrefer testing tasks over general development work.' },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-design-selection-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+        AXIS_TEST_AGENT_INVALID_SELECTION: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 1);
+    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-visual-design']);
+    assert.deepEqual(state.lifecycleActions.map((entry) => entry.id), ['wi-visual-design', 'wi-visual-design']);
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'executed');
+    assert.equal(projectResult.workItemId, 'wi-visual-design');
+    assert.equal(projectResult.selection.selectedWorkItemId, 'wi-visual-design');
+    assert.equal(projectResult.selection.source, 'fallback');
+    assert.match(projectResult.selection.reason, /design\/visual|美工/);
+    assert.match(projectResult.selection.warning, /invalid JSON/);
+    assert.match(result.stderr, /selection: selected wi-visual-design/);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /# Axis start-work task selection/);
+    assert.match(prompts, /美工/);
+    assert.match(prompts, /wi-deploy/);
+    assert.match(prompts, /Prepare production deployment runbook/);
+    assert.match(prompts, /DevOps work/);
+    assert.match(prompts, /doc-deploy/);
+    assert.match(prompts, /wi-visual-design/);
+    assert.match(prompts, /Polish checkout visual design/);
+    assert.match(prompts, /Visual design work/);
+    assert.match(prompts, /doc-design/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-deploy',
+        title: 'Prepare production deployment runbook',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'DevOps work: deployment checklist, release rollback, observability.',
+        sourceArtifactId: 'doc-deploy',
+      },
+      {
+        id: 'wi-visual-design',
+        title: 'Polish checkout visual design',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Visual design work: UI composition, color, typography, and interaction states.',
+        sourceArtifactId: 'doc-design',
+      },
+    ],
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\n美工 / visual design employee for Axis product interfaces.', markdown: '# Soul\n\n美工 / visual design employee for Axis product interfaces.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nUI visual design, color systems, typography, and high-fidelity product polish.', markdown: '# Skill\n\nUI visual design, color systems, typography, and high-fidelity product polish.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nChoose visual and design work over deployment operations.', markdown: '# Memory\n\nChoose visual and design work over deployment operations.' },
     },
   });
 });
@@ -2145,33 +2238,33 @@ await withTempDir(async (dir) => {
 
     const prompts = await readFile(promptLog, 'utf8');
     assert.match(prompts, /# Axis start-work task selection/);
-    assert.match(prompts, /Documentation and research specialist/);
+    assert.match(prompts, /Product manager/);
     assert.doesNotMatch(prompts, /# Axis start-work coding execution/);
   }, {
     workItems: [
       {
-        id: 'wi-backend-api',
+        id: 'wi-development-api',
         title: 'Create billing API endpoint',
         type: 'requirement',
         pool: 'requirement',
         status: 'WAIT_CODE',
-        notes: 'Backend-only task: REST API handlers, database schema, service validation.',
+        notes: 'Development-only task: REST API handlers, database schema, service validation.',
         sourceArtifactId: 'doc-api',
       },
       {
-        id: 'wi-backend-worker',
+        id: 'wi-devops-worker',
         title: 'Implement queue worker retry policy',
         type: 'requirement',
         pool: 'requirement',
         status: 'WAIT_CODE',
-        notes: 'Backend-only task: worker leases, retry state, server-side scheduling.',
+        notes: 'DevOps-only task: worker leases, retry state, server-side scheduling.',
         sourceArtifactId: 'doc-worker',
       },
     ],
     agentContextDocuments: {
-      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nDocumentation and research specialist for Axis knowledge work.', markdown: '# Soul\n\nDocumentation and research specialist for Axis knowledge work.' },
-      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nWrite product docs, research notes, and user-facing guides.', markdown: '# Skill\n\nWrite product docs, research notes, and user-facing guides.' },
-      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nSkip coding tasks that are purely backend implementation.', markdown: '# Memory\n\nSkip coding tasks that are purely backend implementation.' },
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nProduct manager responsible for product requirements and acceptance scope.', markdown: '# Soul\n\nProduct manager responsible for product requirements and acceptance scope.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nPRD writing, product planning, acceptance criteria, and roadmap tradeoffs.', markdown: '# Skill\n\nPRD writing, product planning, acceptance criteria, and roadmap tradeoffs.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nSkip implementation tasks when no product planning work is available.', markdown: '# Memory\n\nSkip implementation tasks when no product planning work is available.' },
     },
   });
 });

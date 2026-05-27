@@ -265,7 +265,7 @@ axis start-work --project-id <id> --product-line-id <id>
 `start-work` 的执行语义：
 
 - 只消费 coding execution queue：`WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新写入仍使用 canonical lifecycle status。
-- 领取前会先把候选 WorkItem 摘要交给 Agent 选择，选择 prompt 包含 `soul.md` / `skill.md` / `memory.md` 和候选的 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的职责挑任务，而不是固定拿第一条 `WAIT_CODE`。
+- 领取前会先把候选 WorkItem 摘要交给 Agent 选择，选择 prompt 包含 `soul.md` / `skill.md` / `memory.md` 和候选的 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的岗位职责挑任务，而不是固定拿第一条 `WAIT_CODE`；职责模型使用 broad categories：开发/development、测试/QA、运维/DevOps、架构/architecture、产品/product、美工/design/visual。
 - 如果 Agent 选择 `null`、输出不可用且 fallback 也找不到职责匹配，worker 会 idle/skip 并记录原因，不会静默领取无关任务。
 - 选择后才调用 Hub claim lease API；遇到 `409` 会跳过本轮所选 WorkItem，等待下一轮重新按职责选择，避免两个 worker 同时执行同一条。
 - 执行 Agent prompt 包含 Hub context docs、项目绑定摘要和完整 WorkItem JSON。
