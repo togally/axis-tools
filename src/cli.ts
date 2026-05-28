@@ -4243,6 +4243,13 @@ async function ensureEmployeeRuntimeFiles(employeeId: string, agent: CreateEmplo
   };
 }
 
+function localMachineTimeZone(): string {
+  const intlTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (typeof intlTimeZone === 'string' && intlTimeZone.trim()) return intlTimeZone.trim();
+  if (typeof process.env.TZ === 'string' && process.env.TZ.trim()) return process.env.TZ.trim();
+  return 'Asia/Shanghai';
+}
+
 async function registerEmployeeToHub(values: {
   backendUrl: string;
   employeeId: string;
@@ -4250,6 +4257,7 @@ async function registerEmployeeToHub(values: {
   language: CreateEmployeeLanguage;
   role: EmployeeRole | null;
   agent: CreateEmployeeAgentChoice;
+  timeZone: string;
   documents: { soul: string; skill: string; memory: string };
 }): Promise<{ ok: boolean; status: string; warning: string | null; response: unknown | null }> {
   const cached = await cachedLoginSession(values.backendUrl);
@@ -4259,6 +4267,7 @@ async function registerEmployeeToHub(values: {
       name: values.name,
       language: values.language,
       agentType: values.agent,
+      timeZone: values.timeZone,
       status: 'active',
       documents: values.documents,
     };
@@ -4302,6 +4311,7 @@ async function createEmployeeCommand(): Promise<void> {
 
   const runtime = await ensureEmployeeRuntimeFiles(employeeId, agent, language, soul);
   const name = extractEmployeeDisplayName(runtime.soul, employeeId, language);
+  const timeZone = localMachineTimeZone();
   const cloud = await registerEmployeeToHub({
     backendUrl,
     employeeId,
@@ -4309,6 +4319,7 @@ async function createEmployeeCommand(): Promise<void> {
     language,
     role,
     agent,
+    timeZone,
     documents: {
       soul: runtime.soul,
       skill: runtime.skill,
@@ -4322,6 +4333,7 @@ async function createEmployeeCommand(): Promise<void> {
     language,
     ...(role ? { role } : {}),
     agentType: agent,
+    timeZone,
     backendUrl,
     localPath: runtime.employeeDir,
     status: 'active',
@@ -4342,6 +4354,7 @@ async function createEmployeeCommand(): Promise<void> {
     language,
     ...(role ? { role } : {}),
     agent,
+    timeZone,
     localPath: runtime.employeeDir,
     cloud: {
       ok: cloud.ok,
@@ -5399,6 +5412,7 @@ async function sendStartWorkHeartbeat(values: {
     currentWorkItemId: heartbeatState.currentWorkItemId,
     startedAt,
     sentAt: new Date().toISOString(),
+    timeZone: localMachineTimeZone(),
     scope: heartbeatState.scope,
   };
   try {

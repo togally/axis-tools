@@ -281,6 +281,7 @@ async function withEmployeeRegisterServer(fn) {
           HOME: home,
           AXIS_HOME: path.join(home, '.axis'),
           PATH: `${binDir}:${process.env.PATH}`,
+          TZ: 'Asia/Shanghai',
           AXIS_TEST_AGENT_PROMPT: promptPath,
           AXIS_TEST_REQUIRE_CODEX_SKIP_GIT_CHECK: '1',
         },
@@ -303,6 +304,7 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(requests[0].body.name, 'Nova Vale');
       assert.equal(requests[0].body.language, 'en');
       assert.equal(requests[0].body.role, 'qa');
+      assert.equal(requests[0].body.timeZone, 'Asia/Shanghai');
       assert.match(requests[0].body.documents.soul, /Nova Vale/);
       assert.match(requests[0].body.documents.skill, /Axis employee skills/);
       assert.match(requests[0].body.documents.memory, /Axis employee memory/);
@@ -319,6 +321,7 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(config.language, 'en');
       assert.equal(config.role, 'qa');
       assert.equal(config.backendUrl, backendUrl);
+      assert.equal(config.timeZone, 'Asia/Shanghai');
 
       const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
       assert.equal(globalConfig.currentEmployee.employeeId, payload.employeeId);
@@ -2112,6 +2115,7 @@ await withTempDir(async (dir) => {
       env: {
         HOME: home,
         PATH: `${fakeBin}:${process.env.PATH}`,
+        TZ: 'Asia/Shanghai',
         AXIS_TEST_AGENT_PROMPT: promptLog,
       },
     });
@@ -2137,6 +2141,7 @@ await withTempDir(async (dir) => {
     assert.ok(state.heartbeats.length >= 1);
     assert.equal(state.heartbeats[0].sessionId, payload.sessionId);
     assert.equal(state.heartbeats[0].agentType, 'codex');
+    assert.equal(state.heartbeats[0].timeZone, 'Asia/Shanghai');
     assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url.startsWith('/api/agent-context?')));
     assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
     assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-start-work']);
