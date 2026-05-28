@@ -156,6 +156,10 @@ if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
     printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
   fi
 fi
+if [ -n "$AXIS_TEST_REQUIRE_CODEX_SKIP_GIT_CHECK" ] && ! printf '%s\\n' "$@" | grep -q -- "--skip-git-repo-check"; then
+  printf '%s\\n' "Not inside a trusted directory and --skip-git-repo-check was not specified." >&2
+  exit 1
+fi
 if printf '%s\\n' "$@" | grep -q "Axis start-work task selection"; then
   if [ -n "$AXIS_TEST_AGENT_INVALID_SELECTION" ]; then
     printf 'not json\\n'
@@ -2002,6 +2006,7 @@ await withTempDir(async (dir) => {
         AXIS_TEST_AGENT_PROMPT: promptLog,
         AXIS_TEST_AGENT_PROMPT_APPEND: '1',
         AXIS_TEST_AGENT_INVALID_SELECTION: '1',
+        AXIS_TEST_REQUIRE_CODEX_SKIP_GIT_CHECK: '1',
       },
     });
 
@@ -2021,6 +2026,7 @@ await withTempDir(async (dir) => {
     assert.match(projectResult.selection.warning, /invalid JSON/);
 
     const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /--skip-git-repo-check/);
     assert.match(prompts, /employee\.role: qa/);
     assert.match(prompts, /Employee structured role is the highest-priority responsibility signal/);
     assert.match(prompts, /General delivery/);
@@ -2670,8 +2676,10 @@ await withTempDir(async (dir) => {
     await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
     await writeWorkPrerequisites(home);
     await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
-printf '%s\\n---PROMPT---\\n' "$2" >> "$AXIS_FAKE_PROMPT"
-case "$2" in
+prompt=''
+for arg do prompt="$arg"; done
+printf '%s\\n---PROMPT---\\n' "$prompt" >> "$AXIS_FAKE_PROMPT"
+case "$prompt" in
   *"Pool kind: bug"*)
     cat <<'JSON'
 {"schemaVersion":"orbit.pool.artifact.v1","kind":"bug","title":"Pending bug WorkItem","summary":"Converted bug work item","status":"draft","markdown":"# Pending bug WorkItem\\n","sections":[],"workItems":[{"title":"Fix pending bug"}]}
@@ -2954,7 +2962,9 @@ fi
 exit 0
 `);
     await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
-printf '%s' "$2" > "$AXIS_FAKE_PROMPT"
+prompt=''
+for arg do prompt="$arg"; done
+printf '%s' "$prompt" > "$AXIS_FAKE_PROMPT"
 cat <<'JSON'
 {"schemaVersion":"orbit.pool.artifact.v1","kind":"idea","title":"Existing idea seed","summary":"Converted by fake Codex","status":"draft","markdown":"# Existing idea seed\\n","sections":[],"workItems":[{"title":"Review idea"}]}
 JSON
@@ -3054,8 +3064,10 @@ await withTempDir(async (dir) => {
     await writeFile(path.join(home, '.codex', 'skills', 'superpowers', 'systematic-debugging', 'SKILL.md'), '# Debug Method\n\nFind the root cause before fixes.\n', 'utf8');
 
     await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
-printf '%s\\n---PROMPT---\\n' "$2" >> "$AXIS_FAKE_PROMPT"
-case "$2" in
+prompt=''
+for arg do prompt="$arg"; done
+printf '%s\\n---PROMPT---\\n' "$prompt" >> "$AXIS_FAKE_PROMPT"
+case "$prompt" in
   *"Pool kind: bug"*)
     cat <<'JSON'
 {"schemaVersion":"orbit.pool.artifact.v1","kind":"bug","title":"Crash on save","summary":"Converted bug","status":"draft","markdown":"# Crash on save\\n","sections":[],"workItems":[{"title":"Fix crash"}]}
@@ -3123,7 +3135,9 @@ await withTempDir(async (dir) => {
     await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
     await writeWorkPrerequisites(home);
     await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
-printf '%s' "$2" > "$AXIS_FAKE_PROMPT"
+prompt=''
+for arg do prompt="$arg"; done
+printf '%s' "$prompt" > "$AXIS_FAKE_PROMPT"
 cat <<'JSON'
 {"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Loop converts seed","summary":"Converted by loop","status":"draft","markdown":"# Loop converts seed\\n","sections":[],"workItems":[{"title":"Build loop worker"}]}
 JSON

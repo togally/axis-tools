@@ -3733,7 +3733,7 @@ async function runPoolAgent(
   if (!await commandAvailable(command)) {
     throw new Error(`agent not found: ${command}`);
   }
-  const args = agent === 'codex' ? ['exec', prompt] : ['-p', prompt];
+  const args = agent === 'codex' ? ['exec', '--skip-git-repo-check', prompt] : ['-p', prompt];
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd: repoPath,
