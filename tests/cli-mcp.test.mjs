@@ -2660,6 +2660,154 @@ await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-local-ambiguous-remote-single-prompts.txt');
+    const employeeId = 'emp_remote_unique_after_local_ambiguous';
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    for (const localEmployeeId of ['emp_one_local', 'emp_two_local']) {
+      const employeeDir = path.join(axisHome, 'employees', localEmployeeId);
+      await mkdir(employeeDir, { recursive: true });
+      await writeFile(path.join(employeeDir, 'config.json'), JSON.stringify({ employeeId: localEmployeeId, backendUrl, agentType: 'codex' }, null, 2));
+    }
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 8000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, employeeId);
+    assert.ok(state.heartbeats.length >= 1);
+    assert.equal(state.heartbeats[0].employeeId, employeeId);
+    assert.equal(state.heartbeats[0].scope.employeeId, employeeId);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees'));
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
+    assert.ok(!payload.summary.warnings.some((warning) => /could not choose one automatically/i.test(warning)));
+    assert.doesNotMatch(result.stderr, /could not choose one automatically/i);
+
+    const currentEmployee = JSON.parse(await readFile(path.join(axisHome, 'current-employee.json'), 'utf8'));
+    assert.equal(currentEmployee.employeeId, employeeId);
+    assert.equal(currentEmployee.backendUrl, backendUrl);
+    const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(globalConfig.currentEmployee.employeeId, employeeId);
+    assert.equal(globalConfig.currentEmployeeId, employeeId);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Employee id: emp_remote_unique_after_local_ambiguous/);
+    assert.match(prompts, /Remote fallback engineer/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    employeeList: [
+      { id: 'emp_remote_unique_after_local_ambiguous', name: 'Remote Unique', status: 'active', role: 'development' },
+    ],
+    employees: {
+      emp_remote_unique_after_local_ambiguous: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nRemote fallback engineer.\n',
+          skill: '# Skill\n\nUse remote fallback employee for execution.\n',
+          memory: '# Memory\n\nLocal ambiguity should not block this identity.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-local-ambiguous-remote-multiple-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    for (const localEmployeeId of ['emp_one_local', 'emp_two_local']) {
+      const employeeDir = path.join(axisHome, 'employees', localEmployeeId);
+      await mkdir(employeeDir, { recursive: true });
+      await writeFile(path.join(employeeDir, 'config.json'), JSON.stringify({ employeeId: localEmployeeId, backendUrl, agentType: 'codex' }, null, 2));
+    }
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 8000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, null);
+    assert.ok(state.heartbeats.length >= 1);
+    assert.equal(state.heartbeats[0].employeeId, null);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees'));
+    assert.ok(!state.requests.some((entry) => entry.method === 'GET' && /^\/api\/employees\/[^/?]+$/.test(entry.url)));
+    assert.ok(payload.summary.warnings.some((warning) => /multiple local Axis employees/i.test(warning)));
+    assert.ok(payload.summary.warnings.some((warning) => /multiple remote Axis employees/i.test(warning)));
+    assert.match(payload.warning, /--employee-id/);
+    assert.match(result.stderr, /multiple local Axis employees/i);
+    assert.match(result.stderr, /multiple remote Axis employees/i);
+
+    const prompt = await readFile(promptLog, 'utf8');
+    assert.match(prompt, /Employee id: unassigned/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    employeeList: [
+      { id: 'emp_remote_one_after_local_ambiguous', name: 'One', status: 'active', role: 'development' },
+      { id: 'emp_remote_two_after_local_ambiguous', name: 'Two', status: 'active', role: 'qa' },
+    ],
+    employees: {
+      emp_remote_one_after_local_ambiguous: { documents: { soul: '# Soul\n\nOne.\n', skill: '# Skill\n\nOne.\n', memory: '# Memory\n\nOne.\n' } },
+      emp_remote_two_after_local_ambiguous: { documents: { soul: '# Soul\n\nTwo.\n', skill: '# Skill\n\nTwo.\n', memory: '# Memory\n\nTwo.\n' } },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
     const fakeBin = path.join(dir, 'fake-bin');
 
     await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex', token: 'old-token' });

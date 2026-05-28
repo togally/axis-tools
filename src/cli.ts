@@ -4154,14 +4154,17 @@ async function resolveStartWorkEmployeeId(backendUrl: string | null, tokenHint?:
 
   const localEmployees = await readLocalEmployees(backendUrl);
   if (localEmployees.length === 1) return localEmployees[0].employeeId;
+
+  const remoteEmployeeId = await resolveStartWorkRemoteEmployeeId(backendUrl, tokenHint, agentHint);
+  if (remoteEmployeeId) return remoteEmployeeId;
+
   if (localEmployees.length > 1) {
     pushStartWorkEmployeeResolutionWarning(
       `Found multiple local Axis employees for ${backendUrl ? normalizeBackendUrl(backendUrl) : 'the current backend'} and could not choose one automatically. Run axis create-employee to select the intended current employee, set a default employee, or pass --employee-id <id>.`,
     );
-    return null;
   }
 
-  return resolveStartWorkRemoteEmployeeId(backendUrl, tokenHint, agentHint);
+  return null;
 }
 
 async function startWorkBackendHint(repoPath: string | null): Promise<{ backendUrl: string | null; token: string | null }> {
