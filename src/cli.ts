@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, type Dirent } from 'node:fs';
-import { appendFile, chmod, copyFile, cp, readdir, readFile, stat, symlink, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, cp, readdir, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -120,6 +120,19 @@ type StartWorkAgentChoice = 'codex' | 'claude-code' | 'claude';
 type CreateEmployeeAgentChoice = 'codex' | 'claude-code';
 type CreateEmployeeLanguage = 'zh' | 'en';
 type EmployeeRole = 'development' | 'qa' | 'devops' | 'architecture' | 'product' | 'design';
+
+interface WorkerProcessStatus {
+  alive: boolean;
+  verified: boolean;
+  reason: string;
+  commandLine?: string | null;
+}
+
+interface StartWorkHeartbeatRetryState {
+  failures: number;
+  lastWarning: string | null;
+  lastSuccessAt: string | null;
+}
 
 const EMPLOYEE_ROLE_OPTIONS: { value: EmployeeRole; label: string }[] = [
   { value: 'development', label: '开发' },
@@ -477,7 +490,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 ];
 
 function printUsage(): void {
-  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
   console.log(`Employee role flag:\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>]\n`);
   console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
@@ -4465,10 +4478,107 @@ async function appendWorkerLog(sessionId: string, message: string): Promise<void
   await appendFile(axisWorkerLogPath(sessionId), `${new Date().toISOString()} ${message}\n`, 'utf8');
 }
 
+function currentProcessStartMillis(): number {
+  return Math.round(Date.now() - process.uptime() * 1000);
+}
+
+async function processCommandLine(pid: number): Promise<string | null> {
+  if (process.platform === 'linux') {
+    try {
+      const raw = await readFile(`/proc/${pid}/cmdline`);
+      const command = raw.toString('utf8').replace(/\0/g, ' ').trim();
+      if (command) return command;
+    } catch {
+      // Fall through to ps for non-proc environments.
+    }
+  }
+  try {
+    const { stdout } = await execFileAsync('ps', ['-p', String(pid), '-o', 'command='], { timeout: 1000 });
+    return stdout.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+let clockTicksPerSecond: number | null = null;
+
+async function linuxClockTicksPerSecond(): Promise<number> {
+  if (clockTicksPerSecond !== null) return clockTicksPerSecond;
+  try {
+    const { stdout } = await execFileAsync('getconf', ['CLK_TCK'], { timeout: 1000 });
+    const parsed = Number.parseInt(stdout.trim(), 10);
+    clockTicksPerSecond = Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+  } catch {
+    clockTicksPerSecond = 100;
+  }
+  return clockTicksPerSecond;
+}
+
+async function linuxBootTimeSeconds(): Promise<number | null> {
+  try {
+    const statText = await readFile('/proc/stat', 'utf8');
+    const match = statText.match(/^btime\s+(\d+)$/m);
+    return match ? Number.parseInt(match[1], 10) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function processStartMillis(pid: number): Promise<number | null> {
+  if (process.platform !== 'linux') return null;
+  try {
+    const statText = await readFile(`/proc/${pid}/stat`, 'utf8');
+    const closeParen = statText.lastIndexOf(')');
+    if (closeParen === -1) return null;
+    const fields = statText.slice(closeParen + 2).trim().split(/\s+/);
+    const startTicks = Number.parseInt(fields[19] ?? '', 10);
+    const bootSeconds = await linuxBootTimeSeconds();
+    if (!Number.isFinite(startTicks) || bootSeconds === null) return null;
+    const ticksPerSecond = await linuxClockTicksPerSecond();
+    return Math.round((bootSeconds + startTicks / ticksPerSecond) * 1000);
+  } catch {
+    return null;
+  }
+}
+
+function commandLineLooksLikeWorker(commandLine: string, sessionId: string): boolean {
+  return commandLine.includes('start-work') && commandLine.includes(sessionId);
+}
+
+async function workerProcessStatus(sessionId: string, pid: number | null, state: Json, config: Json): Promise<WorkerProcessStatus> {
+  if (pid === null || !Number.isInteger(pid) || pid <= 0) {
+    return { alive: false, verified: false, reason: 'missing-pid' };
+  }
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return { alive: false, verified: false, reason: 'pid-not-running' };
+  }
+
+  const commandLine = await processCommandLine(pid);
+  if (commandLine && commandLineLooksLikeWorker(commandLine, sessionId)) {
+    return { alive: true, verified: true, reason: 'command-line', commandLine };
+  }
+
+  const storedStart = typeof state.processStartMillis === 'number'
+    ? state.processStartMillis
+    : (typeof config.processStartMillis === 'number' ? config.processStartMillis : null);
+  if (storedStart !== null) {
+    const currentStart = await processStartMillis(pid);
+    if (currentStart !== null && Math.abs(currentStart - storedStart) <= 2000 && commandLine?.includes('start-work')) {
+      return { alive: true, verified: true, reason: 'process-start', commandLine };
+    }
+    return { alive: false, verified: false, reason: currentStart === null ? 'unverified-pid' : 'pid-reused', commandLine };
+  }
+
+  return { alive: false, verified: false, reason: commandLine ? 'command-line-mismatch' : 'unverified-pid', commandLine };
+}
+
 async function writeWorkerState(sessionId: string, state: Json): Promise<void> {
   await writeJsonFile(axisWorkerStatePath(sessionId), {
     sessionId,
     updatedAt: new Date().toISOString(),
+    processStartMillis: currentProcessStartMillis(),
     ...state,
   });
 }
@@ -5261,6 +5371,14 @@ async function patchStartWorkResult(target: StartWorkTarget, workItemID: string,
   }
 }
 
+async function refreshStartWorkTarget(target: StartWorkTarget): Promise<StartWorkTarget> {
+  const binding = await readProjectBinding(target.repoPath);
+  if (!binding) return target;
+  const refreshed = startWorkTargetFromBinding(target.repoPath, binding);
+  if (!refreshed) return { ...target, binding };
+  return refreshed;
+}
+
 async function processStartWorkTarget(values: {
   sessionId: string;
   agent: StartWorkAgentChoice;
@@ -5397,8 +5515,15 @@ async function sendStartWorkHeartbeat(values: {
   target: StartWorkTarget;
   heartbeatState: StartWorkHeartbeatState;
   startedAt: string;
-}): Promise<{ ok: boolean; warning: string | null }> {
-  const { sessionId, agent, target, heartbeatState, startedAt } = values;
+  retryState: StartWorkHeartbeatRetryState;
+}): Promise<{ ok: boolean; warning: string | null; target: StartWorkTarget }> {
+  const { sessionId, agent, heartbeatState, startedAt, retryState } = values;
+  let target = values.target;
+  try {
+    target = await refreshStartWorkTarget(values.target);
+  } catch {
+    target = values.target;
+  }
   const payload: Json = {
     sessionId,
     agentType: agent,
@@ -5417,21 +5542,46 @@ async function sendStartWorkHeartbeat(values: {
   };
   try {
     const response = await postOrbitJson(target.binding.backendUrl, '/api/agent-workers/heartbeat', payload, await tokenForBinding(target.binding));
+    retryState.failures = 0;
+    retryState.lastWarning = null;
+    retryState.lastSuccessAt = payload.sentAt as string;
     await writeJsonFile(path.join(axisWorkerSessionDir(sessionId), 'last-heartbeat.json'), {
       ok: true,
       sentAt: payload.sentAt,
+      backendUrl: normalizeBackendUrl(target.binding.backendUrl),
+      failureCount: 0,
+      lastSuccessAt: retryState.lastSuccessAt,
       response: isJson(response) ? response : {},
     });
-    return { ok: true, warning: null };
+    return { ok: true, warning: null, target };
   } catch (error) {
     const warning = error instanceof Error ? error.message : String(error);
+    retryState.failures++;
+    retryState.lastWarning = warning;
     await writeJsonFile(path.join(axisWorkerSessionDir(sessionId), 'last-heartbeat.json'), {
       ok: false,
       sentAt: payload.sentAt,
+      backendUrl: normalizeBackendUrl(target.binding.backendUrl),
       warning,
+      failureCount: retryState.failures,
+      lastSuccessAt: retryState.lastSuccessAt,
     });
-    return { ok: false, warning };
+    return { ok: false, warning, target };
   }
+}
+
+function heartbeatRetryDelayMs(intervalSeconds: number, failures: number): number {
+  const baseMs = Math.max(1, intervalSeconds) * 1000;
+  if (failures <= 0) return baseMs;
+  const backoffMs = Math.min(baseMs * 2 ** Math.min(failures - 1, 5), 60_000);
+  const jitterMs = Math.floor(Math.random() * Math.min(1000, Math.max(100, Math.floor(backoffMs * 0.2))));
+  return backoffMs + jitterMs;
+}
+
+function shouldLogHeartbeatFailure(retryState: StartWorkHeartbeatRetryState, warning: string): boolean {
+  if (retryState.failures === 1) return true;
+  if (retryState.failures % 5 === 0) return true;
+  return retryState.lastWarning !== warning;
 }
 
 function startStartWorkHeartbeatLoop(values: {
@@ -5449,21 +5599,32 @@ function startStartWorkHeartbeatLoop(values: {
   }
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
+  let currentTarget = target;
+  const retryState: StartWorkHeartbeatRetryState = { failures: 0, lastWarning: null, lastSuccessAt: null };
   const send = async (): Promise<void> => {
+    const previousWarning = retryState.lastWarning;
     const heartbeat = await sendStartWorkHeartbeat({
       sessionId: values.sessionId,
       agent: values.agent,
-      target,
+      target: currentTarget,
       heartbeatState: values.heartbeatState,
       startedAt: values.startedAt,
+      retryState,
     });
-    if (!heartbeat.ok && heartbeat.warning) values.progress(`heartbeat warning: ${heartbeat.warning}`);
+    currentTarget = heartbeat.target;
+    if (!heartbeat.ok && heartbeat.warning) {
+      retryState.lastWarning = previousWarning;
+      if (shouldLogHeartbeatFailure(retryState, heartbeat.warning)) {
+        values.progress(`heartbeat warning: ${heartbeat.warning} (will retry)`);
+      }
+      retryState.lastWarning = heartbeat.warning;
+    }
   };
   const schedule = (): void => {
     if (stopped) return;
     timer = setTimeout(() => {
       void send().finally(schedule);
-    }, Math.max(1, values.heartbeatIntervalSeconds) * 1000);
+    }, heartbeatRetryDelayMs(values.heartbeatIntervalSeconds, retryState.failures));
   };
   const first = send().finally(schedule);
   return {
@@ -5805,6 +5966,8 @@ async function startWorkCommand(): Promise<void> {
 
 async function workStatusCommand(): Promise<void> {
   const workersDir = axisWorkerRootDir();
+  const includeStale = hasFlag('--all') || hasFlag('--include-stale');
+  const prune = hasFlag('--prune');
   let entries: string[] = [];
   try {
     entries = await readdir(workersDir);
@@ -5812,25 +5975,32 @@ async function workStatusCommand(): Promise<void> {
     entries = [];
   }
   const workers: Json[] = [];
+  let staleCount = 0;
+  let prunedCount = 0;
   for (const entry of entries.sort()) {
     const sessionDir = path.join(workersDir, entry);
     const state = await readJsonFile<Json>(path.join(sessionDir, 'state.json'), {});
     const config = await readJsonFile<Json>(path.join(sessionDir, 'config.json'), {});
     const pid = typeof state.pid === 'number' ? state.pid : null;
-    let alive = false;
-    if (pid !== null) {
-      try {
-        process.kill(pid, 0);
-        alive = true;
-      } catch {
-        alive = false;
+    const processStatus = await workerProcessStatus(entry, pid, state, config);
+    const stale = !processStatus.alive;
+    if (stale) {
+      staleCount++;
+      if (prune) {
+        await rm(sessionDir, { recursive: true, force: true });
+        prunedCount++;
+        continue;
       }
+      if (!includeStale) continue;
     }
     workers.push({
       sessionId: entry,
       agent: safeString(state.agent) ?? safeString(config.agent),
       pid,
-      alive,
+      alive: processStatus.alive,
+      verified: processStatus.verified,
+      stale,
+      staleReason: processStatus.alive ? null : processStatus.reason,
       status: safeString(state.status) ?? 'unknown',
       background: state.background === true || config.background === true,
       updatedAt: safeString(state.updatedAt),
@@ -5838,18 +6008,23 @@ async function workStatusCommand(): Promise<void> {
       logPath: safeString(state.logPath) ?? axisWorkerLogPath(entry),
     });
   }
-  const payload = { ok: true, workers };
+  const payload = { ok: true, workers, staleCount, prunedCount };
   if (hasFlag('--json')) {
     console.log(JSON.stringify(payload, null, 2));
     return;
   }
   if (workers.length === 0) {
-    console.log(`No local Axis workers found under ${workersDir}`);
+    console.log(`No live local Axis workers found under ${workersDir}`);
+    if (prunedCount > 0) console.log(`${prunedCount} stale worker session${prunedCount === 1 ? '' : 's'} pruned.`);
+    else if (staleCount > 0 && !includeStale) console.log(`${staleCount} stale worker session${staleCount === 1 ? '' : 's'} hidden; pass --include-stale to show them.`);
     return;
   }
   for (const worker of workers) {
-    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'} log=${worker.logPath ?? '-'}`);
+    const staleText = worker.stale ? ` staleReason=${worker.staleReason ?? 'unknown'}` : '';
+    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'} log=${worker.logPath ?? '-'}${staleText}`);
   }
+  if (prunedCount > 0) console.log(`${prunedCount} stale worker session${prunedCount === 1 ? '' : 's'} pruned.`);
+  else if (staleCount > 0 && !includeStale) console.log(`${staleCount} stale worker session${staleCount === 1 ? '' : 's'} hidden; pass --include-stale to show them.`);
 }
 
 async function runPool(pool: PoolConfig, args: string[]): Promise<void> {

@@ -189,6 +189,14 @@ exit 0
 `);
 }
 
+async function writeSlowFakeCodex(binDir, sleepSeconds = 2) {
+  await writeExecutable(path.join(binDir, 'codex'), `#!/bin/sh
+sleep ${sleepSeconds}
+printf 'fake codex completed\\n'
+exit 0
+`);
+}
+
 async function writeFakeSoulCodex(binDir) {
   await writeExecutable(path.join(binDir, 'codex'), `#!/bin/sh
 if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
@@ -708,6 +716,33 @@ async function writeProjectBinding(repo, backendUrl, extra = {}) {
   }, null, 2));
 }
 
+async function writeWorkerFixture(axisHome, sessionId, state = {}, config = {}) {
+  const sessionDir = path.join(axisHome, 'workers', sessionId);
+  await mkdir(sessionDir, { recursive: true });
+  await writeFile(path.join(sessionDir, 'state.json'), JSON.stringify({
+    sessionId,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    agent: 'codex',
+    pid: null,
+    background: true,
+    status: 'running',
+    startedAt: '2026-01-01T00:00:00.000Z',
+    logPath: path.join(sessionDir, 'worker.log'),
+    ...state,
+  }, null, 2));
+  if (config) {
+    await writeFile(path.join(sessionDir, 'config.json'), JSON.stringify({
+      sessionId,
+      agent: 'codex',
+      background: true,
+      startedAt: '2026-01-01T00:00:00.000Z',
+      ...config,
+    }, null, 2));
+  }
+  await writeFile(path.join(sessionDir, 'worker.log'), '', 'utf8');
+  return sessionDir;
+}
+
 async function writeProductLineBinding(root, backendUrl, extra = {}) {
   await mkdir(path.join(root, '.orbit'), { recursive: true });
   await writeFile(path.join(root, '.orbit', 'product-line.json'), JSON.stringify({
@@ -760,6 +795,7 @@ async function withPoolServer(fn, options = {}) {
     workItemUpdates: [],
     documentUpdates: [],
     heartbeats: [],
+    heartbeatAttempts: 0,
     claims: [],
     lifecycleActions: [],
   };
@@ -804,7 +840,9 @@ async function withPoolServer(fn, options = {}) {
     res.setHeader('content-type', 'application/json');
     state.requests.push({ method: req.method, url: req.url, authorization: req.headers.authorization ?? null });
     const requireAuth = () => {
-      if (req.headers.authorization !== 'Bearer orbit-dev-token') {
+      const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+      const validTokens = options.validTokens ?? ['orbit-dev-token'];
+      if (!validTokens.includes(token)) {
         res.statusCode = 401;
         res.end(JSON.stringify({ error: 'auth required' }));
         return false;
@@ -974,8 +1012,20 @@ async function withPoolServer(fn, options = {}) {
       }
     }
     if (req.method === 'POST' && req.url === '/api/agent-workers/heartbeat') {
-      if (!requireAuth()) return;
       readJson().then((payload) => {
+        state.heartbeatAttempts++;
+        if (state.heartbeatAttempts <= (options.heartbeatFailures ?? 0)) {
+          res.statusCode = 503;
+          res.end(JSON.stringify({ error: 'temporarily unavailable' }));
+          return;
+        }
+        const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+        if (options.heartbeatRequiredToken && token !== options.heartbeatRequiredToken) {
+          res.statusCode = 401;
+          res.end(JSON.stringify({ error: 'heartbeat auth required' }));
+          return;
+        }
+        if (!options.heartbeatRequiredToken && !requireAuth()) return;
         state.heartbeats.push(payload);
         res.end(JSON.stringify({
           worker: {
@@ -2168,6 +2218,74 @@ await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl, state) => {
     const repo = path.join(dir, 'bound-repo');
     const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex', token: 'old-token' });
+    await writeSlowFakeCodex(fakeBin, 3);
+
+    const child = spawn(process.execPath, [cli,
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      env: {
+        ...process.env,
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        NO_COLOR: '1',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex', token: 'new-token' });
+
+    const code = await new Promise((resolve, reject) => {
+      child.on('error', reject);
+      child.on('close', resolve);
+    });
+    assert.equal(code, 0, stderr);
+    const payload = JSON.parse(stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(state.heartbeatAttempts >= 2, true);
+    assert.equal(state.heartbeats.length >= 1, true);
+    assert.equal(state.heartbeats[0].sessionId, payload.sessionId);
+    assert.ok(state.requests.some((entry) => entry.url === '/api/agent-workers/heartbeat' && entry.authorization === 'Bearer new-token'));
+
+    const lastHeartbeat = JSON.parse(await readFile(path.join(home, '.axis', 'workers', payload.sessionId, 'last-heartbeat.json'), 'utf8'));
+    assert.equal(lastHeartbeat.ok, true);
+  }, {
+    validTokens: ['old-token', 'new-token'],
+    heartbeatFailures: 1,
+    heartbeatRequiredToken: 'new-token',
+    workItems: [
+      { id: 'wi-heartbeat-retry', title: 'Heartbeat retry coverage', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Development task for heartbeat resiliency.' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
     const axisHome = path.join(home, '.axis');
     const employeeId = 'emp_current_qa';
     const fakeBin = path.join(dir, 'fake-bin');
@@ -2724,6 +2842,65 @@ await withTempDir(async (dir) => {
     assert.equal(state.pid, payload.pid);
     assert.equal(state.background, true);
   }, { workItems: [] });
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+  const axisHome = path.join(home, '.axis');
+  await mkdir(axisHome, { recursive: true });
+
+  const liveSession = 'axis-live-status-test';
+  const live = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)', 'start-work', '--worker-session', liveSession], {
+    stdio: 'ignore',
+  });
+
+  try {
+    await writeWorkerFixture(axisHome, liveSession, { pid: live.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', liveSession],
+    });
+    await writeWorkerFixture(axisHome, 'axis-dead-status-test', { pid: 99999999, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', 'axis-dead-status-test'],
+    });
+    await writeWorkerFixture(axisHome, 'axis-reused-pid-status-test', { pid: process.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', 'axis-reused-pid-status-test'],
+    });
+
+    const jsonDefault = await run(['work-status', '--json'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    const payload = JSON.parse(jsonDefault.stdout);
+    assert.deepEqual(payload.workers.map((worker) => worker.sessionId), [liveSession]);
+    assert.equal(payload.workers[0].alive, true);
+    assert.equal(payload.staleCount, 2);
+
+    const humanDefault = await run(['work-status'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    assert.match(humanDefault.stdout, new RegExp(liveSession));
+    assert.doesNotMatch(humanDefault.stdout, /axis-dead-status-test/);
+    assert.doesNotMatch(humanDefault.stdout, /axis-reused-pid-status-test/);
+    assert.match(humanDefault.stdout, /2 stale worker sessions hidden/);
+
+    const jsonAll = await run(['work-status', '--include-stale', '--json'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    const allPayload = JSON.parse(jsonAll.stdout);
+    assert.deepEqual(allPayload.workers.map((worker) => worker.sessionId), [
+      'axis-dead-status-test',
+      liveSession,
+      'axis-reused-pid-status-test',
+    ]);
+    assert.equal(allPayload.workers.find((worker) => worker.sessionId === 'axis-reused-pid-status-test').alive, false);
+
+    await run(['work-status', '--prune', '--json'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    await assert.rejects(readFile(path.join(axisHome, 'workers', 'axis-dead-status-test', 'state.json'), 'utf8'), /ENOENT/);
+    await assert.rejects(readFile(path.join(axisHome, 'workers', 'axis-reused-pid-status-test', 'state.json'), 'utf8'), /ENOENT/);
+    assert.match(await readFile(path.join(axisHome, 'workers', liveSession, 'state.json'), 'utf8'), /axis-live-status-test/);
+  } finally {
+    live.kill('SIGKILL');
+  }
 });
 
 await withTempDir(async (dir) => {
