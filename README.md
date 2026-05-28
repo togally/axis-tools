@@ -43,8 +43,8 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
 - `axis project show`
   - 查看当前 repo 的 AxisNode 绑定
 - `axis start-work`
-  - 新的开发执行 worker；默认后台启动，立即返回 session id、pid 和日志路径
-  - 读取 Hub 上的 `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，让员工根据自己的职责挑对应 `WAIT_CODE` WorkItem，再只领取所选任务执行
+  - 新的员工执行 worker；默认后台启动，立即返回 session id、pid 和日志路径
+  - 读取 Hub 上的 `employee.role` + `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，并按员工职责选择对应队列：产品扫 `NEW`/`WAIT_REVIEW`，架构/美工扫 review+coding，开发/测试/运维扫 `WAIT_CODE`，再只领取所选任务执行
   - 支持 `--agent codex` 和 `--agent claude-code`，也可用 `--foreground` 在当前终端调试
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
@@ -209,7 +209,7 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis start-work` 是新的开发执行 worker。它默认从后台启动一个本地 worker session，立即返回 `sessionId`、`pid` 和日志路径；worker 会持续向 Axis Hub 发送 heartbeat。默认情况下，`axis start-work` 会使用 `axis create-employee` 创建并记录的当前本地员工；也可以用 `--employee-id` 显式覆盖。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `soul.md` / `skill.md` / `memory.md` 作为 Employee Context，然后让员工根据自己的职责从 `WAIT_CODE` 候选中挑对应 WorkItem，再只领取所选任务执行。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
+`axis start-work` 是新的员工执行 worker。它默认从后台启动一个本地 worker session，立即返回 `sessionId`、`pid` 和日志路径；worker 会持续向 Axis Hub 发送 heartbeat。默认情况下，`axis start-work` 会使用 `axis create-employee` 创建并记录的当前本地员工；也可以用 `--employee-id` 显式覆盖。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 作为 Employee Context，再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
 
 新电脑或新环境的最短路径：
 
@@ -265,8 +265,8 @@ axis start-work --project-id <id> --product-line-id <id>
 
 `start-work` 的执行语义：
 
-- 只消费 coding execution queue：`WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新写入仍使用 canonical lifecycle status。
-- 领取前会先把候选 WorkItem 摘要交给 Agent 选择。解析到 employee id 时，选择 prompt 的 Employee Context 来自 Hub `/api/employees/{employeeId}` 返回的远程 `documents.soul` / `documents.skill` / `documents.memory`，Project Context 单独标注为补充；候选摘要包含 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的岗位职责挑任务，而不是固定拿第一条 `WAIT_CODE`；职责模型使用 broad categories：开发/development、测试/QA、运维/DevOps、架构/architecture、产品/product、美工/design/visual。
+- 根据员工结构化角色选择候选池：产品员工消费需求/想法等 review 阶段 WorkItems（`NEW` / `WAIT_REVIEW`，兼容 `pending-confirmation`）；架构/美工员工可同时看到 review + coding；开发/测试/运维员工消费 coding execution queue（`WAIT_CODE`，兼容 `ready`）。新写入仍使用 canonical lifecycle status。
+- 领取前会先把角色匹配后的候选 WorkItem 摘要交给 Agent 选择。解析到 employee id 时，选择 prompt 的 Employee Context 来自 Hub `/api/employees/{employeeId}` 返回的结构化 `employee.role` 和远程 `documents.soul` / `documents.skill` / `documents.memory`，Project Context 单独标注为补充；候选摘要包含 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的岗位职责挑任务，而不是固定拿第一条；职责模型使用 broad categories：开发/development、测试/QA、运维/DevOps、架构/architecture、产品/product、美工/design/visual。
 - 如果远程 Employee Context 不可用，或 Agent 选择 `null`、输出不可用且 fallback 也找不到职责匹配，worker 会 idle/skip 并记录原因，不会静默领取无关任务，也不会把本地员工文件当作权威替代。
 - 选择后才调用 Hub claim lease API；遇到 `409` 会跳过本轮所选 WorkItem，等待下一轮重新按职责选择，避免两个 worker 同时执行同一条。
 - 执行 Agent prompt 包含远程 Hub Employee Context、可用的 Project Context、项目绑定摘要和完整 WorkItem JSON。

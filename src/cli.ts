@@ -486,6 +486,7 @@ const LIFECYCLE_WAIT_USER_CONFIRM = 'WAIT_USER_CONFIRM';
 const LIFECYCLE_WAIT_CODE = 'WAIT_CODE';
 const REVIEW_INPUT_STATUSES = [LIFECYCLE_NEW, LIFECYCLE_WAIT_REVIEW, 'pending-confirmation'] as const;
 const CODING_INPUT_STATUSES = [LIFECYCLE_WAIT_CODE, 'ready'] as const;
+const START_WORK_REVIEW_AND_CODING_STATUSES = [...REVIEW_INPUT_STATUSES, ...CODING_INPUT_STATUSES] as const;
 const SAFE_BINDING_KEYS = [
   'productLineId',
   'productLineUuid',
@@ -522,7 +523,7 @@ function printUsage(): void {
 }
 
 function printStartWorkUsage(): void {
-  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. By default, the worker uses the current local employee created by axis create-employee. With a resolved or explicit employee id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Override the current local employee id for worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. By default, the worker uses the current local employee created by axis create-employee. With a resolved or explicit employee id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md plus structured employee.role, probes role-appropriate WorkItem queues (product uses NEW/WAIT_REVIEW; architecture/design use review+coding; development/qa/devops use WAIT_CODE), asks the agent to choose the best matching WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Override the current local employee id for worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between role-aware queue polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
   console.log(`Responsibility categories:\n  开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual\n`);
 }
 
@@ -5417,6 +5418,18 @@ function startWorkStructuredEmployeeRole(documents: StartWorkContextDocument[]):
   return null;
 }
 
+function startWorkCandidateStatusesForEmployeeRole(role: EmployeeRole | null): readonly string[] {
+  if (role === 'product') return REVIEW_INPUT_STATUSES;
+  if (role === 'architecture' || role === 'design') return START_WORK_REVIEW_AND_CODING_STATUSES;
+  return CODING_INPUT_STATUSES;
+}
+
+function startWorkCandidateQueueLabel(statuses: readonly string[]): string {
+  const canonical = Array.from(new Set(statuses.map((status) => canonicalLifecycleStatus(status))));
+  if (canonical.length === 1) return canonical[0] ?? 'unknown';
+  return canonical.join('|');
+}
+
 function fallbackStartWorkSelection(
   contextDocuments: StartWorkContextDocument[],
   workItems: Json[],
@@ -5621,16 +5634,27 @@ async function processStartWorkTarget(values: {
   progress: (message: string) => void;
 }): Promise<Json> {
   const { sessionId, agent, target, contextDocuments, heartbeatState, summary, progress } = values;
-  const execute = await probeHubQueueStatuses(target.binding, target.projectId, 'work-items', CODING_INPUT_STATUSES, 10);
+  const structuredRole = startWorkStructuredEmployeeRole(contextDocuments);
+  const candidateStatuses = startWorkCandidateStatusesForEmployeeRole(structuredRole);
+  const queueLabel = startWorkCandidateQueueLabel(candidateStatuses);
+  const execute = structuredRole === 'product'
+    ? await (async () => {
+      const discovery = await discoverReviewCandidates(target.binding, target.projectId, { includeDocuments: true });
+      return {
+        items: discovery.candidates,
+        warning: discovery.warnings.length > 0 ? discovery.warnings.join(' ') : null,
+      };
+    })()
+    : await probeHubQueueStatuses(target.binding, target.projectId, 'work-items', candidateStatuses, 10);
   if (execute.warning) {
     pushUniqueWarning(summary.warnings, execute.warning);
   }
   const workItems = execute.items;
   summary.ready += workItems.length;
-  progress(`queue: ${target.projectId} WAIT_CODE ${workItems.length}`);
+  progress(`queue: ${target.projectId} ${queueLabel} ${workItems.length}`);
   if (workItems.length === 0) {
     summary.idle++;
-    return { status: 'idle', target: startWorkTargetScope(target), ready: 0, warning: execute.warning };
+    return { status: 'idle', target: startWorkTargetScope(target), ready: 0, warning: execute.warning, employeeRole: structuredRole, statuses: candidateStatuses };
   }
 
   const selection = await selectStartWorkItem({
@@ -5671,8 +5695,44 @@ async function processStartWorkTarget(values: {
     };
   }
 
-  const claimPayload = startWorkClaimPayload({ sessionId, agent, leaseSeconds: Math.max(60, secondsArgAny(['--lease-seconds'], 600, 86400)) });
   const id = selection.selectedWorkItemId;
+  const isProductReviewCandidate = structuredRole === 'product'
+    && isReviewInputStatus(safeString(item.status))
+    && ['pool-seed', 'work-item', 'document'].includes(safeString(item.candidateSource) ?? '');
+  if (isProductReviewCandidate) {
+    summary.claimed++;
+    heartbeatState.status = 'reviewing';
+    heartbeatState.currentWorkItemId = id;
+    progress(`review: launching ${agent} for ${id} ${workItemTitle(item)}`);
+    const result = await convertPoolSeedWithAgent(startWorkRunnerAgent(agent), target.repoPath, item, { progress });
+    heartbeatState.status = 'idle';
+    heartbeatState.currentWorkItemId = null;
+    if (result.ok === true) {
+      summary.executed++;
+      return {
+        status: 'executed',
+        target: startWorkTargetScope(target),
+        workItemId: id,
+        title: workItemTitle(item),
+        selection: startWorkSelectionJson(selection),
+        review: result,
+      };
+    }
+    summary.failed++;
+    const warning = safeString(result.error) ?? safeString(result.warning) ?? 'Review candidate conversion failed.';
+    pushUniqueWarning(summary.warnings, warning);
+    return {
+      status: 'failed',
+      target: startWorkTargetScope(target),
+      workItemId: id,
+      title: workItemTitle(item),
+      selection: startWorkSelectionJson(selection),
+      review: result,
+      warning,
+    };
+  }
+
+  const claimPayload = startWorkClaimPayload({ sessionId, agent, leaseSeconds: Math.max(60, secondsArgAny(['--lease-seconds'], 600, 86400)) });
   progress(`claim: ${id} ${workItemTitle(item)}`);
   const claim = await claimStartWorkItem(target, item, claimPayload);
   if (claim.conflict) {
@@ -6909,7 +6969,7 @@ async function probeHubQueue(binding: ProjectBinding, routePath: string): Promis
 async function probeHubQueueStatuses(
   binding: ProjectBinding,
   projectId: string,
-  endpoint: 'pool-seeds' | 'work-items',
+  endpoint: 'pool-seeds' | 'work-items' | 'documents',
   statuses: readonly string[],
   pageSize: number,
 ): Promise<{ items: Json[]; warning: string | null }> {
@@ -7450,7 +7510,7 @@ interface WorkIterationOptions extends WorkProbeOptions {
   mode?: string;
 }
 
-type ReviewCandidateSource = 'pool-seed' | 'work-item';
+type ReviewCandidateSource = 'pool-seed' | 'work-item' | 'document';
 
 interface ReviewCandidate extends Record<string, unknown> {
   id: string;
@@ -7474,6 +7534,7 @@ interface ReviewCandidate extends Record<string, unknown> {
 interface ReviewSourceCounts extends Record<string, number> {
   poolSeed: number;
   workItem: number;
+  document: number;
   candidates: number;
   duplicates: number;
 }
@@ -7482,6 +7543,10 @@ interface ReviewCandidateDiscovery {
   candidates: ReviewCandidate[];
   sourceCounts: ReviewSourceCounts;
   warnings: string[];
+}
+
+interface ReviewCandidateDiscoveryOptions {
+  includeDocuments?: boolean;
 }
 
 function poolSeedDisplayTitle(seed: Json): string {
@@ -7580,6 +7645,49 @@ function normalizeWorkItemReviewCandidate(item: Json): ReviewCandidate | null {
   };
 }
 
+function poolKindFromDocument(document: Json): PoolConfig['kind'] | null {
+  const source = isJson(document.source) ? document.source : {};
+  const rawPool = (safeString(document.pool) ?? safeString(document.category) ?? '').toLowerCase();
+  if (rawPool === 'requirement' || rawPool === 'req') return 'requirement';
+  if (rawPool === 'idea' || rawPool === 'ide') return 'idea';
+  if (rawPool === 'bug') return 'bug';
+  if (rawPool === 'suggestion' || rawPool === 'sug' || rawPool === 'improvement' || rawPool === 'optimization') return 'suggestion';
+  const rawKind = (safeString(source.kind) ?? safeString(source.type) ?? safeString(document.kind) ?? safeString(document.type) ?? safeString(document.sourceType) ?? '').toLowerCase();
+  if (rawKind === 'requirement' || rawKind === 'req') return 'requirement';
+  if (rawKind === 'idea' || rawKind === 'ide') return 'idea';
+  if (rawKind === 'bug') return 'bug';
+  if (rawKind === 'suggestion' || rawKind === 'sug' || rawKind === 'improvement' || rawKind === 'optimization') return 'suggestion';
+  return null;
+}
+
+function normalizeDocumentReviewCandidate(document: Json): ReviewCandidate | null {
+  if (!isReviewInputStatus(safeString(document.status))) return null;
+  const kind = poolKindFromDocument(document);
+  if (!kind) return null;
+  const id = safeString(document.id) ?? safeString(document.uuid) ?? safeString(document.documentId);
+  if (!id) return null;
+  const title = safeString(document.title) ?? safeString(document.name) ?? safeString(document.summary) ?? id;
+  const markdown = safeString(document.markdown) ?? safeString(document.content) ?? '';
+  const notes = safeString(document.summary) ?? (markdown || title);
+  return {
+    id,
+    kind,
+    title,
+    seed: markdown || notes,
+    notes,
+    status: canonicalLifecycleStatus(safeString(document.status)) ?? LIFECYCLE_NEW,
+    source: 'document',
+    sourceType: 'document',
+    sourceId: id,
+    candidateSource: 'document',
+    candidateType: kind,
+    pool: reviewPoolForKind(kind),
+    documentId: id,
+    sourceArtifactId: id,
+    document: compactDocument(document),
+  };
+}
+
 function reviewCandidateDedupeKeys(candidate: ReviewCandidate): string[] {
   const keys: string[] = [];
   if (candidate.documentId) keys.push(`document:${candidate.documentId}`);
@@ -7620,17 +7728,18 @@ function dedupeReviewCandidates(candidates: ReviewCandidate[]): { candidates: Re
   return { candidates: deduped, duplicates };
 }
 
-function reviewCandidateSourceCounts(seeds: Json[], workItems: Json[], candidates: ReviewCandidate[], duplicates: number): ReviewSourceCounts {
+function reviewCandidateSourceCounts(seeds: Json[], workItems: Json[], documents: Json[], candidates: ReviewCandidate[], duplicates: number): ReviewSourceCounts {
   return {
     poolSeed: seeds.length,
     workItem: workItems.length,
+    document: documents.length,
     candidates: candidates.length,
     duplicates,
   };
 }
 
 function emptyReviewSourceCounts(): ReviewSourceCounts {
-  return { poolSeed: 0, workItem: 0, candidates: 0, duplicates: 0 };
+  return { poolSeed: 0, workItem: 0, document: 0, candidates: 0, duplicates: 0 };
 }
 
 function countCandidatesBy(candidates: Json[], field: string): Record<string, number> {
@@ -7645,7 +7754,9 @@ function countCandidatesBy(candidates: Json[], field: string): Record<string, nu
 
 function candidateSourceFromSeed(seed: Json): ReviewCandidateSource {
   const raw = safeString(seed.candidateSource) ?? safeString(seed.source);
-  return raw === 'work-item' ? 'work-item' : 'pool-seed';
+  if (raw === 'work-item') return 'work-item';
+  if (raw === 'document') return 'document';
+  return 'pool-seed';
 }
 
 const REVIEW_DOCUMENT_INPUT_POLICY: Json = {
@@ -7659,20 +7770,26 @@ function optionalPoolSeedProbeWarning(warning: string | null): string | null {
   return warning;
 }
 
-async function discoverReviewCandidates(binding: ProjectBinding, projectId: string): Promise<ReviewCandidateDiscovery> {
+async function discoverReviewCandidates(binding: ProjectBinding, projectId: string, options: ReviewCandidateDiscoveryOptions = {}): Promise<ReviewCandidateDiscovery> {
   const seedProbe = await probeHubQueueStatuses(binding, projectId, 'pool-seeds', REVIEW_INPUT_STATUSES, 100);
   const workItemProbe = await probeHubQueueStatuses(binding, projectId, 'work-items', REVIEW_INPUT_STATUSES, 100);
+  const documentProbe = options.includeDocuments
+    ? await probeHubQueueStatuses(binding, projectId, 'documents', REVIEW_INPUT_STATUSES, 100)
+    : { items: [], warning: null };
   const seedCandidates = seedProbe.items
     .map(normalizePoolSeedCandidate)
     .filter((candidate): candidate is ReviewCandidate => Boolean(candidate));
   const workItemCandidates = workItemProbe.items
     .map(normalizeWorkItemReviewCandidate)
     .filter((candidate): candidate is ReviewCandidate => Boolean(candidate));
-  const deduped = dedupeReviewCandidates([...seedCandidates, ...workItemCandidates]);
+  const documentCandidates = documentProbe.items
+    .map(normalizeDocumentReviewCandidate)
+    .filter((candidate): candidate is ReviewCandidate => Boolean(candidate));
+  const deduped = dedupeReviewCandidates([...seedCandidates, ...workItemCandidates, ...documentCandidates]);
   return {
     candidates: deduped.candidates,
-    sourceCounts: reviewCandidateSourceCounts(seedCandidates, workItemCandidates, deduped.candidates, deduped.duplicates),
-    warnings: [optionalPoolSeedProbeWarning(seedProbe.warning), workItemProbe.warning].filter((warning): warning is string => Boolean(warning)),
+    sourceCounts: reviewCandidateSourceCounts(seedCandidates, workItemCandidates, documentCandidates, deduped.candidates, deduped.duplicates),
+    warnings: [optionalPoolSeedProbeWarning(seedProbe.warning), workItemProbe.warning, documentProbe.warning].filter((warning): warning is string => Boolean(warning)),
   };
 }
 

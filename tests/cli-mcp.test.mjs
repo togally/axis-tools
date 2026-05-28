@@ -989,10 +989,13 @@ async function withPoolServer(fn, options = {}) {
     }
     if (req.method === 'GET' && req.url.startsWith('/api/projects/proj_1/documents')) {
       if (!requireAuth()) return;
+      const url = new URL(req.url, 'http://127.0.0.1');
+      const status = url.searchParams.get('status');
+      const documents = options.documents ?? [
+        { id: 'doc-old', title: 'Existing requirement', source: { type: 'requirement' }, status: 'draft' },
+      ];
       res.end(JSON.stringify({
-        documents: [
-          { id: 'doc-old', title: 'Existing requirement', source: { type: 'requirement' }, status: 'draft' },
-        ],
+        documents: documents.filter((document) => !status || statusMatches(document.status, status)),
         runtime: { store: 'mock' },
       }));
       return;
@@ -2208,6 +2211,111 @@ await withTempDir(async (dir) => {
           soul: '# Soul\n\nGeneral delivery employee with no explicit task family.\n',
           skill: '# Skill\n\nKeeps implementation, verification, and release notes clear.\n',
           memory: '# Memory\n\nNo durable role-specific preference yet.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_product_review';
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-product-review-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--employee-id',
+      employeeId,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+        AXIS_TEST_AGENT_INVALID_SELECTION: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.ready, 1);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 1);
+    assert.equal(state.claims.length, 0);
+    assert.equal(state.poolDocuments, 1);
+    assert.ok(state.documentUpdates.some((entry) => entry.id === 'doc-product-review' && entry.payload.status === 'WAIT_USER_CONFIRM'));
+
+    const employeeIndex = state.requests.findIndex((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`);
+    const newIndex = state.requests.findIndex((entry) => entry.url.includes('/documents?status=NEW'));
+    assert.notEqual(employeeIndex, -1);
+    assert.notEqual(newIndex, -1);
+    assert.ok(employeeIndex < newIndex, `employee role should load before role-aware queue probing: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_REVIEW')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/documents?status=WAIT_REVIEW')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=pending-confirmation')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/documents?status=pending-confirmation')));
+    assert.ok(!state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
+    assert.ok(!state.requests.some((entry) => entry.url.includes('/work-items?status=ready')));
+    assert.ok(state.requests.some((entry) => entry.url.includes('/pool-seeds')));
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'executed');
+    assert.match(projectResult.selection.reason, /product\/产品/);
+    assert.match(projectResult.selection.warning, /invalid JSON/);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /employee\.role: product/);
+    assert.match(prompts, /doc-product-review/);
+    assert.match(prompts, /Review checkout requirement changes/);
+  }, {
+    poolSeeds: [],
+    workItems: [
+      {
+        id: 'wi-dev-implementation',
+        title: 'Implement checkout service endpoint',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Development work: implement API handlers and persistence.',
+        sourceArtifactId: 'doc-dev-implementation',
+      },
+    ],
+    documents: [
+      {
+        id: 'doc-product-review',
+        title: 'Review checkout requirement changes',
+        source: { type: 'requirement' },
+        status: 'WAIT_REVIEW',
+        summary: 'Product manager review: clarify user story tradeoffs and acceptance criteria.',
+        markdown: '# Review checkout requirement changes\n\nProduct intake: define PRD, acceptance criteria, and scope before user confirmation.',
+      },
+    ],
+    employees: {
+      emp_product_review: {
+        role: 'product',
+        documents: {
+          soul: '# Soul\n\nProduct manager responsible for requirement intake and review.\n',
+          skill: '# Skill\n\nPRD writing, scope decisions, user stories, and acceptance criteria.\n',
+          memory: '# Memory\n\nOwns demand clarification before user confirmation.\n',
         },
       },
     },
