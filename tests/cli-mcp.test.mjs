@@ -749,6 +749,32 @@ async function writeWorkerFixture(axisHome, sessionId, state = {}, config = {}) 
   return sessionDir;
 }
 
+function spawnFakeLiveWorker(sessionId) {
+  return spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', 'start-work', '--worker-session', sessionId], {
+    stdio: 'ignore',
+  });
+}
+
+async function waitForChildExit(child, label, timeoutMs = 3000) {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`${label} did not exit within ${timeoutMs}ms`)), timeoutMs);
+    child.once('exit', () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function writeProductLineBinding(root, backendUrl, extra = {}) {
   await mkdir(path.join(root, '.orbit'), { recursive: true });
   await writeFile(path.join(root, '.orbit', 'product-line.json'), JSON.stringify({
@@ -1256,6 +1282,7 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /axis start-work \[--agent <codex\|claude-code\|claude>\]/);
   assert.match(usage.stdout, /axis work-review \[--repo <path>\]/);
   assert.match(usage.stdout, /axis work-coding \[--repo <path>\]/);
+  assert.match(usage.stdout, /axis stop-work \[--session <sessionId>\|--all\] \[--json\]/);
   assert.match(usage.stdout, /Deprecated worker commands:/);
   assert.match(usage.stdout, /work-review and work-coding are deprecated; use axis start-work/);
   assert.equal(longHelp.stdout, usage.stdout);
@@ -1303,6 +1330,15 @@ await withTempDir(async (dir) => {
   assert.match(result.stdout, /--foreground/);
   assert.match(result.stdout, /--heartbeat-interval <seconds>/);
   assert.doesNotMatch(result.stdout, /\bstarting\b/);
+  assert.equal(result.stderr, '');
+}
+
+{
+  const result = await run(['stop-work', '--help'], { timeout: 2000 });
+  assert.match(result.stdout, /axis stop-work/);
+  assert.match(result.stdout, /--session <sessionId>/);
+  assert.match(result.stdout, /--all/);
+  assert.doesNotMatch(result.stdout, /\bstopped 0\b/);
   assert.equal(result.stderr, '');
 }
 
@@ -3036,6 +3072,165 @@ await withTempDir(async (dir) => {
   } finally {
     live.kill('SIGKILL');
   }
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+  const axisHome = path.join(home, '.axis');
+  await mkdir(axisHome, { recursive: true });
+
+  const result = await run(['stop-work', '--json'], {
+    env: { HOME: home, AXIS_HOME: axisHome },
+  });
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.mode, 'stop-work');
+  assert.equal(payload.stoppedCount, 0);
+  assert.deepEqual(payload.workers, []);
+  assert.match(payload.message, /No live local Axis workers found/);
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+  const axisHome = path.join(home, '.axis');
+  await mkdir(axisHome, { recursive: true });
+
+  const sessionId = 'axis-stop-single-test';
+  const live = spawnFakeLiveWorker(sessionId);
+
+  try {
+    await writeWorkerFixture(axisHome, sessionId, { pid: live.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', sessionId],
+    });
+
+    const result = await run(['stop-work', '--json'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'stop-work');
+    assert.equal(payload.stoppedCount, 1);
+    assert.deepEqual(payload.workers.map((worker) => worker.sessionId), [sessionId]);
+    assert.equal(payload.workers[0].pid, live.pid);
+
+    await waitForChildExit(live, sessionId);
+    assert.equal(isProcessAlive(live.pid), false);
+
+    const state = JSON.parse(await readFile(path.join(axisHome, 'workers', sessionId, 'state.json'), 'utf8'));
+    assert.equal(state.status, 'stopped');
+    assert.equal(state.stopReason, 'user-stop');
+    assert.equal(state.alive, false);
+    assert.match(state.finishedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.match(await readFile(path.join(axisHome, 'workers', sessionId, 'worker.log'), 'utf8'), /stopped by user/);
+  } finally {
+    if (live.exitCode === null && live.signalCode === null) live.kill('SIGKILL');
+  }
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+  const axisHome = path.join(home, '.axis');
+  await mkdir(axisHome, { recursive: true });
+
+  const firstSession = 'axis-stop-multiple-a-test';
+  const secondSession = 'axis-stop-multiple-b-test';
+  const first = spawnFakeLiveWorker(firstSession);
+  const second = spawnFakeLiveWorker(secondSession);
+
+  try {
+    await writeWorkerFixture(axisHome, firstSession, { pid: first.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', firstSession],
+    });
+    await writeWorkerFixture(axisHome, secondSession, { pid: second.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', secondSession],
+    });
+
+    await assert.rejects(
+      run(['stop-work'], { env: { HOME: home, AXIS_HOME: axisHome } }),
+      (error) => {
+        assert.equal(error.code, 1);
+        assert.match(error.stderr, /Multiple live local Axis workers found/);
+        assert.match(error.stderr, /--session <sessionId>/);
+        assert.match(error.stderr, /--all/);
+        return true;
+      },
+    );
+    assert.equal(isProcessAlive(first.pid), true);
+    assert.equal(isProcessAlive(second.pid), true);
+
+    const result = await run(['stop-work', '--session', secondSession, '--json'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.stoppedCount, 1);
+    assert.deepEqual(payload.workers.map((worker) => worker.sessionId), [secondSession]);
+
+    await waitForChildExit(second, secondSession);
+    assert.equal(isProcessAlive(second.pid), false);
+    assert.equal(isProcessAlive(first.pid), true);
+  } finally {
+    if (first.exitCode === null && first.signalCode === null) first.kill('SIGKILL');
+    if (second.exitCode === null && second.signalCode === null) second.kill('SIGKILL');
+  }
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+  const axisHome = path.join(home, '.axis');
+  await mkdir(axisHome, { recursive: true });
+
+  const firstSession = 'axis-stop-all-a-test';
+  const secondSession = 'axis-stop-all-b-test';
+  const first = spawnFakeLiveWorker(firstSession);
+  const second = spawnFakeLiveWorker(secondSession);
+
+  try {
+    await writeWorkerFixture(axisHome, firstSession, { pid: first.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', firstSession],
+    });
+    await writeWorkerFixture(axisHome, secondSession, { pid: second.pid, status: 'running' }, {
+      argv: ['start-work', '--foreground', '--worker-session', secondSession],
+    });
+
+    const result = await run(['stop-work', '--all', '--json'], {
+      env: { HOME: home, AXIS_HOME: axisHome },
+    });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.stoppedCount, 2);
+    assert.deepEqual(payload.workers.map((worker) => worker.sessionId), [firstSession, secondSession]);
+
+    await waitForChildExit(first, firstSession);
+    await waitForChildExit(second, secondSession);
+    assert.equal(isProcessAlive(first.pid), false);
+    assert.equal(isProcessAlive(second.pid), false);
+  } finally {
+    if (first.exitCode === null && first.signalCode === null) first.kill('SIGKILL');
+    if (second.exitCode === null && second.signalCode === null) second.kill('SIGKILL');
+  }
+});
+
+await withTempDir(async (dir) => {
+  const home = path.join(dir, 'home');
+  const axisHome = path.join(home, '.axis');
+  await mkdir(axisHome, { recursive: true });
+
+  await writeWorkerFixture(axisHome, 'axis-stop-stale-pid-test', { pid: process.pid, status: 'running' }, {
+    argv: ['start-work', '--foreground', '--worker-session', 'axis-stop-stale-pid-test'],
+  });
+
+  const result = await run(['stop-work', '--all', '--json'], {
+    env: { HOME: home, AXIS_HOME: axisHome },
+  });
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.stoppedCount, 0);
+  assert.deepEqual(payload.workers, []);
+
+  const state = JSON.parse(await readFile(path.join(axisHome, 'workers', 'axis-stop-stale-pid-test', 'state.json'), 'utf8'));
+  assert.equal(state.status, 'running');
+  assert.equal(isProcessAlive(process.pid), true);
 });
 
 await withTempDir(async (dir) => {

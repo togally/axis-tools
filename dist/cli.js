@@ -104,13 +104,16 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Employee role flag:\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function printStartWorkUsage() {
     console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. By default, the worker uses the current local employee created by axis create-employee. With a resolved or explicit employee id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Override the current local employee id for worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
     console.log(`Responsibility categories:\n  开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual\n`);
+}
+function printStopWorkUsage() {
+    console.log(`axis stop-work\n\nUsage:\n  axis stop-work [--session <sessionId>|--all] [--json]\n\nDefault behavior:\n  Stops the single live local Axis start-work worker. If no live worker exists, exits successfully with stopped count 0. If multiple live workers exist, pass --session <sessionId> or --all.\n\nFlags:\n  --session <sessionId>            Stop one verified live worker session\n  --all                            Stop all verified live worker sessions\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n`);
 }
 function printCreateEmployeeUsage() {
     console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --language <zh|en>               Document/profile language. Aliases: chinese, english. Interactive default is 中文.\n  --role <role>                    Optional structured role: development, qa, devops, architecture, product, or design.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
@@ -5392,6 +5395,201 @@ async function workStatusCommand() {
     else if (staleCount > 0 && !includeStale)
         console.log(`${staleCount} stale worker session${staleCount === 1 ? '' : 's'} hidden; pass --include-stale to show them.`);
 }
+function validateWorkerSessionSelector(sessionId) {
+    if (!/^[A-Za-z0-9._-]+$/.test(sessionId) || sessionId === '.' || sessionId === '..') {
+        throw new OrbitCliError(`Invalid worker session id: ${sessionId}`);
+    }
+}
+async function readLocalWorkerProcess(sessionId) {
+    validateWorkerSessionSelector(sessionId);
+    const sessionDir = axisWorkerSessionDir(sessionId);
+    const state = await readJsonFile(path.join(sessionDir, 'state.json'), {});
+    if (Object.keys(state).length === 0)
+        return null;
+    const config = await readJsonFile(path.join(sessionDir, 'config.json'), {});
+    const pid = typeof state.pid === 'number' ? state.pid : null;
+    const processStatus = await workerProcessStatus(sessionId, pid, state, config);
+    return { sessionId, sessionDir, state, config, pid, processStatus };
+}
+async function listLiveLocalWorkerProcesses() {
+    let entries = [];
+    try {
+        entries = await readdir(axisWorkerRootDir());
+    }
+    catch {
+        return [];
+    }
+    const workers = [];
+    for (const entry of entries.sort()) {
+        const worker = await readLocalWorkerProcess(entry).catch(() => null);
+        if (!worker)
+            continue;
+        if (worker.processStatus.alive && worker.processStatus.verified)
+            workers.push(worker);
+    }
+    return workers;
+}
+function summarizeStopWorker(worker) {
+    return {
+        sessionId: worker.sessionId,
+        pid: worker.pid,
+        agent: safeString(worker.state.agent) ?? safeString(worker.config.agent),
+        status: safeString(worker.state.status) ?? 'unknown',
+        logPath: safeString(worker.state.logPath) ?? axisWorkerLogPath(worker.sessionId),
+    };
+}
+async function waitForWorkerNotAlive(worker, timeoutMs) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() <= deadline) {
+        const status = await workerProcessStatus(worker.sessionId, worker.pid, worker.state, worker.config);
+        if (!status.alive || !status.verified)
+            return true;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    return false;
+}
+async function appendWorkerLogBestEffort(sessionId, message) {
+    try {
+        await appendWorkerLog(sessionId, message);
+    }
+    catch {
+        // Log append is diagnostic only; stopping the process and state update are authoritative.
+    }
+}
+async function markWorkerStoppedByUser(worker, signal) {
+    const now = new Date().toISOString();
+    await writeJsonFile(axisWorkerStatePath(worker.sessionId), {
+        ...worker.state,
+        sessionId: worker.sessionId,
+        pid: worker.pid,
+        updatedAt: now,
+        status: 'stopped',
+        stopReason: 'user-stop',
+        finishedAt: now,
+        stoppedAt: now,
+        alive: false,
+        stopSignal: signal,
+    });
+    await appendWorkerLogBestEffort(worker.sessionId, 'stopped by user');
+}
+async function stopLiveLocalWorker(worker) {
+    if (!worker.pid || !worker.processStatus.alive || !worker.processStatus.verified) {
+        return { ...summarizeStopWorker(worker), stopped: false, reason: worker.processStatus.reason };
+    }
+    let signal = 'SIGTERM';
+    try {
+        process.kill(worker.pid, 'SIGTERM');
+    }
+    catch (error) {
+        const code = isJson(error) ? safeString(error.code) : null;
+        if (code !== 'ESRCH')
+            throw error;
+        signal = 'none';
+    }
+    let exited = signal === 'none' ? true : await waitForWorkerNotAlive(worker, 5000);
+    if (!exited) {
+        const recheck = await workerProcessStatus(worker.sessionId, worker.pid, worker.state, worker.config);
+        if (recheck.alive && recheck.verified) {
+            try {
+                process.kill(worker.pid, 'SIGKILL');
+                signal = 'SIGKILL';
+            }
+            catch (error) {
+                const code = isJson(error) ? safeString(error.code) : null;
+                if (code !== 'ESRCH')
+                    throw error;
+            }
+            exited = await waitForWorkerNotAlive(worker, 1000);
+        }
+        else {
+            exited = true;
+        }
+    }
+    await markWorkerStoppedByUser(worker, signal);
+    return {
+        ...summarizeStopWorker(worker),
+        stopped: true,
+        signal,
+        exited,
+    };
+}
+function printStopWorkResult(payload) {
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+    }
+    if (payload.ok === false) {
+        console.error(safeString(payload.error) ?? 'axis stop-work failed');
+        return;
+    }
+    const stoppedCount = typeof payload.stoppedCount === 'number' ? payload.stoppedCount : 0;
+    if (stoppedCount === 0) {
+        console.log(safeString(payload.message) ?? `No live local Axis workers found under ${axisWorkerRootDir()}; stopped 0.`);
+        return;
+    }
+    const workers = Array.isArray(payload.workers) ? payload.workers : [];
+    for (const rawWorker of workers) {
+        if (!isJson(rawWorker))
+            continue;
+        console.log(`Stopped Axis worker ${safeString(rawWorker.sessionId) ?? '-'} pid=${rawWorker.pid ?? '-'} signal=${safeString(rawWorker.signal) ?? '-'}`);
+    }
+    console.log(`Stopped ${stoppedCount} live Axis worker${stoppedCount === 1 ? '' : 's'}.`);
+}
+function failStopWork(message, workers = []) {
+    const payload = {
+        ok: false,
+        mode: 'stop-work',
+        error: message,
+        stoppedCount: 0,
+        workers: workers.map(summarizeStopWorker),
+    };
+    if (hasFlag('--json')) {
+        printStopWorkResult(payload);
+        process.exitCode = 1;
+        return;
+    }
+    throw new OrbitCliError(message);
+}
+async function stopWorkCommand() {
+    const sessionId = safeString(getArg('--session'));
+    const stopAll = hasFlag('--all');
+    if (sessionId && stopAll) {
+        failStopWork('Pass either --session <sessionId> or --all, not both.');
+        return;
+    }
+    if (sessionId)
+        validateWorkerSessionSelector(sessionId);
+    const liveWorkers = sessionId
+        ? (await readLocalWorkerProcess(sessionId).then((worker) => (worker?.processStatus.alive && worker.processStatus.verified ? [worker] : [])))
+        : await listLiveLocalWorkerProcesses();
+    if (!sessionId && !stopAll && liveWorkers.length > 1) {
+        failStopWork(`Multiple live local Axis workers found (${liveWorkers.length}); pass --session <sessionId> or --all.`, liveWorkers);
+        return;
+    }
+    if (liveWorkers.length === 0) {
+        const message = sessionId
+            ? `No live local Axis worker found for session ${sessionId}; stopped 0.`
+            : `No live local Axis workers found under ${axisWorkerRootDir()}; stopped 0.`;
+        printStopWorkResult({
+            ok: true,
+            mode: 'stop-work',
+            stoppedCount: 0,
+            workers: [],
+            message,
+        });
+        return;
+    }
+    const stoppedWorkers = [];
+    for (const worker of liveWorkers) {
+        stoppedWorkers.push(await stopLiveLocalWorker(worker));
+    }
+    printStopWorkResult({
+        ok: true,
+        mode: 'stop-work',
+        stoppedCount: stoppedWorkers.filter((worker) => isJson(worker) && worker.stopped === true).length,
+        workers: stoppedWorkers,
+    });
+}
 async function runPool(pool, args) {
     const repoPath = resolveRepoArg();
     const input = await readPoolInput(args);
@@ -7537,6 +7735,14 @@ async function main() {
     }
     if (group === 'work-status') {
         await workStatusCommand();
+        return;
+    }
+    if (group === 'stop-work') {
+        if (isHelpFlag(command)) {
+            printStopWorkUsage();
+            return;
+        }
+        await stopWorkCommand();
         return;
     }
     if (group === 'work-once') {
