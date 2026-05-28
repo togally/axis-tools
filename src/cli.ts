@@ -402,6 +402,17 @@ interface AxisCurrentEmployee {
   updatedAt: string;
 }
 
+interface StartWorkRemoteEmployee {
+  id: string;
+  status?: string | null;
+  role?: string | null;
+  active?: boolean;
+  archived?: boolean;
+  deleted?: boolean;
+  archivedAt?: string | null;
+  deletedAt?: string | null;
+}
+
 interface AxisWorkspaceResolution {
   workspaceRoot: string;
   backendUrl: string;
@@ -4007,7 +4018,98 @@ async function readSingleLocalEmployee(): Promise<AxisCurrentEmployee | null> {
   return employees.length === 1 ? employees[0] : null;
 }
 
-async function resolveStartWorkEmployeeId(backendUrl: string | null): Promise<string | null> {
+let startWorkEmployeeResolutionWarnings: string[] = [];
+const emittedStartWorkEmployeeResolutionWarnings = new Set<string>();
+
+function pushStartWorkEmployeeResolutionWarning(warning: string): void {
+  pushUniqueWarning(startWorkEmployeeResolutionWarnings, warning);
+}
+
+function reportStartWorkEmployeeResolutionWarnings(summary: StartWorkSummary, progress?: (message: string) => void): void {
+  for (const warning of startWorkEmployeeResolutionWarnings) {
+    pushUniqueWarning(summary.warnings, warning);
+    if (progress && !emittedStartWorkEmployeeResolutionWarnings.has(warning)) {
+      progress(`employee warning: ${warning}`);
+      emittedStartWorkEmployeeResolutionWarnings.add(warning);
+    }
+  }
+}
+
+function remoteEmployeesRoot(payload: unknown): unknown[] {
+  if (!isJson(payload)) return [];
+  if (Array.isArray(payload.employees)) return payload.employees;
+  if (Array.isArray(payload.items)) return payload.items;
+  if (Array.isArray(payload.data)) return payload.data;
+  if (isJson(payload.data)) return remoteEmployeesRoot(payload.data);
+  return [];
+}
+
+function asStartWorkRemoteEmployee(value: unknown): StartWorkRemoteEmployee | null {
+  if (!isJson(value)) return null;
+  const id = safeString(value.employeeId) ?? safeString(value.id) ?? safeString(value.uuid);
+  if (!id) return null;
+  return {
+    id,
+    status: safeString(value.status),
+    role: safeString(value.role),
+    active: value.active === true || value.isActive === true || value.enabled === true,
+    archived: value.archived === true || value.isArchived === true,
+    deleted: value.deleted === true || value.isDeleted === true,
+    archivedAt: safeString(value.archivedAt),
+    deletedAt: safeString(value.deletedAt),
+  };
+}
+
+function startWorkRemoteEmployeeSelectable(employee: StartWorkRemoteEmployee): boolean {
+  const status = employee.status?.trim().toLowerCase();
+  if (employee.archived || employee.deleted || employee.archivedAt || employee.deletedAt) return false;
+  return status !== 'archived' && status !== 'deleted';
+}
+
+function startWorkRemoteEmployeeActive(employee: StartWorkRemoteEmployee): boolean {
+  const status = employee.status?.trim().toLowerCase();
+  return employee.active === true || status === 'active';
+}
+
+function chooseStartWorkRemoteEmployee(employees: StartWorkRemoteEmployee[], backendUrl: string): string | null {
+  const selectable = employees.filter(startWorkRemoteEmployeeSelectable);
+  if (selectable.length === 0) return null;
+  if (selectable.length === 1) return selectable[0].id;
+
+  const active = selectable.filter(startWorkRemoteEmployeeActive);
+  if (active.length === 1) return active[0].id;
+
+  pushStartWorkEmployeeResolutionWarning(
+    `Found multiple remote Axis employees at ${normalizeBackendUrl(backendUrl)} and could not choose one automatically. Pass --employee-id <id>, or run axis create-employee and select the intended current employee before start-work.`,
+  );
+  return null;
+}
+
+async function tokenForStartWorkBackend(backendUrl: string, tokenHint?: string | null): Promise<string | null> {
+  const direct = safeString(tokenHint);
+  if (direct) return direct;
+  const cached = await cachedLoginSession(backendUrl);
+  if (cached?.token) return cached.token;
+  const config = await readGlobalOrbitConfig();
+  return safeString(config.token);
+}
+
+async function resolveStartWorkRemoteEmployeeId(backendUrl: string | null, tokenHint?: string | null): Promise<string | null> {
+  if (!backendUrl) return null;
+  try {
+    const token = await tokenForStartWorkBackend(backendUrl, tokenHint);
+    const payload = await fetchOrbitJson(backendUrl, '/api/employees', token);
+    const employees = remoteEmployeesRoot(payload)
+      .map(asStartWorkRemoteEmployee)
+      .filter((employee): employee is StartWorkRemoteEmployee => Boolean(employee));
+    return chooseStartWorkRemoteEmployee(employees, backendUrl);
+  } catch (error) {
+    if (error instanceof OrbitCliError) return null;
+    return null;
+  }
+}
+
+async function resolveStartWorkEmployeeId(backendUrl: string | null, tokenHint?: string | null): Promise<string | null> {
   const explicit = safeString(getArg('--employee-id'));
   if (explicit) return explicit;
 
@@ -4025,16 +4127,24 @@ async function resolveStartWorkEmployeeId(backendUrl: string | null): Promise<st
     return axisHomeEmployee.employeeId;
   }
 
-  return (await readSingleLocalEmployee())?.employeeId ?? null;
+  const singleLocalEmployee = await readSingleLocalEmployee();
+  if (singleLocalEmployee) return singleLocalEmployee.employeeId;
+
+  return resolveStartWorkRemoteEmployeeId(backendUrl, tokenHint);
 }
 
-async function startWorkBackendHint(repoPath: string | null): Promise<string | null> {
+async function startWorkBackendHint(repoPath: string | null): Promise<{ backendUrl: string | null; token: string | null }> {
   if (repoPath) {
     const binding = await readProjectBinding(repoPath);
-    if (binding?.backendUrl) return normalizeBackendUrl(binding.backendUrl);
+    if (binding?.backendUrl) return { backendUrl: normalizeBackendUrl(binding.backendUrl), token: safeString(binding.token) };
   }
+  const explicitBackendUrl = getArg('--backend-url');
+  if (explicitBackendUrl) return { backendUrl: normalizeBackendUrl(explicitBackendUrl), token: null };
   const config = await readGlobalOrbitConfig();
-  return safeString(config.backendUrl) ? normalizeBackendUrl(safeString(config.backendUrl) as string) : null;
+  return {
+    backendUrl: safeString(config.backendUrl) ? normalizeBackendUrl(safeString(config.backendUrl) as string) : null,
+    token: safeString(config.token),
+  };
 }
 
 function startWorkBackendUrlFromTargets(targets: StartWorkTarget[]): string | null {
@@ -5812,6 +5922,7 @@ async function runStartWorkForeground(options: {
     idle: 0,
     warnings: [],
   };
+  reportStartWorkEmployeeResolutionWarnings(summary);
   const initialHeartbeatTarget = await inferStartWorkHeartbeatTarget(repoPath);
   const heartbeatState: StartWorkHeartbeatState = { status: 'starting', currentWorkItemId: null, scope: requestedScope };
 
@@ -5838,6 +5949,7 @@ async function runStartWorkForeground(options: {
   progress(`agent: ${agent}`);
   progress(`loop: ${bounded ? `bounded (${maxIterations} iteration${maxIterations === 1 ? '' : 's'})` : 'infinite'}`);
   progress(`heartbeat seconds: ${heartbeatIntervalSeconds}`);
+  reportStartWorkEmployeeResolutionWarnings(summary, progress);
 
   try {
     const resolution = await resolveStartWorkTargetsWithRetry({
@@ -5851,7 +5963,12 @@ async function runStartWorkForeground(options: {
     });
     targets = resolution.targets;
     for (const warning of resolution.warnings) pushUniqueWarning(summary.warnings, warning);
-    resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(startWorkBackendUrlFromTargets(targets));
+    if (!resolvedStartWorkEmployeeId) {
+      const targetBackendUrl = startWorkBackendUrlFromTargets(targets);
+      const targetTokenHint = targets.length === 1 && targetBackendUrl ? safeString(targets[0].binding.token) : null;
+      resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(targetBackendUrl, targetTokenHint);
+      reportStartWorkEmployeeResolutionWarnings(summary, progress);
+    }
     scope = startWorkTargetsScope(targets);
     heartbeatState.scope = scope;
     heartbeatState.status = 'starting';
@@ -6070,6 +6187,7 @@ async function spawnStartWorkBackground(options: {
     logPath: axisWorkerLogPath(sessionId),
   });
 
+  const warning = startWorkEmployeeResolutionWarnings.length > 0 ? startWorkEmployeeResolutionWarnings.join(' ') : null;
   return {
     ok: true,
     mode: 'start-work',
@@ -6088,6 +6206,7 @@ async function spawnStartWorkBackground(options: {
     configPath: axisWorkerConfigPath(sessionId),
     statePath: axisWorkerStatePath(sessionId),
     startedAt,
+    warning,
   };
 }
 
@@ -6110,11 +6229,15 @@ function printStartWorkResult(payload: Json): void {
 }
 
 async function startWorkCommand(): Promise<void> {
+  startWorkEmployeeResolutionWarnings = [];
+  emittedStartWorkEmployeeResolutionWarnings.clear();
+  resolvedStartWorkEmployeeId = undefined;
   const foreground = hasFlag('--foreground') || Boolean(getArg('--worker-session'));
   const repoArg = getArg('--repo');
   const repoPath = repoArg ? path.resolve(repoArg) : null;
   const agent = await resolveStartWorkAgent(repoPath);
-  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(await startWorkBackendHint(repoPath));
+  const backendHint = await startWorkBackendHint(repoPath);
+  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(backendHint.backendUrl, backendHint.token);
   const sessionId = getArg('--worker-session') ?? createStartWorkSessionId(agent);
   const intervalSeconds = secondsArgAny(['--interval', '--sleep'], 10, 3600);
   const heartbeatIntervalSeconds = Math.max(1, secondsArgAny(['--heartbeat-interval'], 30, 3600));

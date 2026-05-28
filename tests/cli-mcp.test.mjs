@@ -1050,6 +1050,15 @@ async function withPoolServer(fn, options = {}) {
       }));
       return;
     }
+    if (req.method === 'GET' && req.url === '/api/employees') {
+      if (!requireAuth()) return;
+      const employees = options.employeeList ?? Object.entries(options.employees ?? {}).map(([id, employee]) => ({ id, ...employee }));
+      res.end(JSON.stringify({
+        employees,
+        runtime: { store: 'mock' },
+      }));
+      return;
+    }
     {
       const employeeMatch = req.url.match(/^\/api\/employees\/([^/?]+)$/);
       if (req.method === 'GET' && employeeMatch) {
@@ -2328,6 +2337,157 @@ await withTempDir(async (dir) => {
     workItems: [
       { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
     ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-remote-single-employee-prompts.txt');
+    const employeeId = 'emp_remote_single';
+
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'orbit-user',
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          user: { account: 'orbit-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--agent',
+      'codex',
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 8000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, employeeId);
+    assert.ok(state.heartbeats.length >= 1);
+    assert.ok(state.heartbeats.every((heartbeat) => heartbeat.employeeId === employeeId));
+    assert.ok(state.heartbeats.some((heartbeat) => heartbeat.scope?.targets?.some((target) => target.employeeId === employeeId)));
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees'));
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Employee id: emp_remote_single/);
+    assert.match(prompts, /# Employee Context/);
+    assert.match(prompts, /Remote QA engineer/);
+    assert.match(prompts, /Use remote employee docs for selection/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    employeeList: [
+      { id: 'emp_remote_single', name: 'Lin Zhiyuan', status: 'active', role: 'qa' },
+    ],
+    employees: {
+      emp_remote_single: {
+        role: 'qa',
+        documents: {
+          soul: '# Soul\n\nRemote QA engineer.\n',
+          skill: '# Skill\n\nUse remote employee docs for selection.\n',
+          memory: '# Memory\n\nPrefer work that matches this remote employee.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-remote-multiple-employees-prompts.txt');
+
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'orbit-user',
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          user: { account: 'orbit-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--agent',
+      'codex',
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 8000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, null);
+    assert.ok(state.heartbeats.length >= 1);
+    assert.equal(state.heartbeats[0].employeeId, null);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees'));
+    assert.ok(!state.requests.some((entry) => entry.method === 'GET' && /^\/api\/employees\/[^/?]+$/.test(entry.url)));
+    assert.ok(payload.summary.warnings.some((warning) => /multiple remote Axis employees/i.test(warning)));
+    assert.match(payload.warning, /--employee-id/);
+    assert.match(payload.warning, /create-employee/);
+    assert.match(result.stderr, /--employee-id/);
+
+    const prompt = await readFile(promptLog, 'utf8');
+    assert.match(prompt, /Employee id: unassigned/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    employeeList: [
+      { id: 'emp_remote_one', name: 'One', status: 'active', role: 'development' },
+      { id: 'emp_remote_two', name: 'Two', status: 'active', role: 'qa' },
+    ],
+    employees: {
+      emp_remote_one: { documents: { soul: '# Soul\n\nOne.\n', skill: '# Skill\n\nOne.\n', memory: '# Memory\n\nOne.\n' } },
+      emp_remote_two: { documents: { soul: '# Soul\n\nTwo.\n', skill: '# Skill\n\nTwo.\n', memory: '# Memory\n\nTwo.\n' } },
+    },
   });
 });
 
