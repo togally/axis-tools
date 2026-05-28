@@ -4050,7 +4050,7 @@ async function runEmployeeSoulAgent(agent: CreateEmployeeAgentChoice, employeeDi
   if (!await commandAvailable(command)) {
     throw new Error(`agent not found: ${command}`);
   }
-  const args = agent === 'codex' ? ['exec', prompt] : ['-p', prompt];
+  const args = agent === 'codex' ? ['exec', '--skip-git-repo-check', prompt] : ['-p', prompt];
   const timeoutMs = Math.max(5_000, Number.parseInt(process.env.AXIS_EMPLOYEE_AGENT_TIMEOUT_MS ?? '120000', 10) || 120_000);
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {

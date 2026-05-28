@@ -194,6 +194,10 @@ async function writeFakeSoulCodex(binDir) {
 if [ -n "$AXIS_TEST_AGENT_PROMPT" ]; then
   printf '%s\\n' "$@" > "$AXIS_TEST_AGENT_PROMPT"
 fi
+if [ -n "$AXIS_TEST_REQUIRE_CODEX_SKIP_GIT_CHECK" ] && ! printf '%s\\n' "$@" | grep -q -- "--skip-git-repo-check"; then
+  printf '%s\\n' "Not inside a trusted directory and --skip-git-repo-check was not specified." >&2
+  exit 1
+fi
 cat <<'EOF'
 # Nova Vale
 
@@ -272,12 +276,13 @@ async function withEmployeeRegisterServer(fn) {
     await writeFakeSoulCodex(binDir);
 
     await withEmployeeRegisterServer(async (backendUrl, requests) => {
-      const { stdout } = await run(['create-employee', '--agent', 'codex', '--language', 'en', '--role', 'qa', '--backend-url', backendUrl, '--json'], {
+      const { stdout, stderr } = await run(['create-employee', '--agent', 'codex', '--language', 'en', '--role', 'qa', '--backend-url', backendUrl, '--json'], {
         env: {
           HOME: home,
           AXIS_HOME: path.join(home, '.axis'),
           PATH: `${binDir}:${process.env.PATH}`,
           AXIS_TEST_AGENT_PROMPT: promptPath,
+          AXIS_TEST_REQUIRE_CODEX_SKIP_GIT_CHECK: '1',
         },
       });
 
@@ -290,6 +295,8 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(payload.role, 'qa');
       assert.equal(payload.agent, 'codex');
       assert.equal(payload.cloud.ok, true);
+      assert.deepEqual(payload.warnings, []);
+      assert.doesNotMatch(stderr, /Agent soul generation failed|fallback soul\.md/);
       assert.equal(requests.length, 1);
       assert.equal(requests[0].body.employeeId, payload.employeeId);
       assert.equal(requests[0].body.agentType, 'codex');
@@ -314,6 +321,7 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(config.backendUrl, backendUrl);
 
       const prompt = await readFile(promptPath, 'utf8');
+      assert.match(prompt, /^exec\n--skip-git-repo-check\n/);
       assert.match(prompt, new RegExp(payload.employeeId));
       assert.match(prompt, /English/);
       assert.match(prompt, /natural human-like name|person-like/);
