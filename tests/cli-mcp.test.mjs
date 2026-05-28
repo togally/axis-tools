@@ -2394,6 +2394,13 @@ await withTempDir(async (dir) => {
     assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees'));
     assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
 
+    const currentEmployee = JSON.parse(await readFile(path.join(home, '.axis', 'current-employee.json'), 'utf8'));
+    assert.equal(currentEmployee.employeeId, employeeId);
+    assert.equal(currentEmployee.backendUrl, backendUrl);
+    const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(globalConfig.currentEmployee.employeeId, employeeId);
+    assert.equal(globalConfig.currentEmployeeId, employeeId);
+
     const prompts = await readFile(promptLog, 'utf8');
     assert.match(prompts, /Employee id: emp_remote_single/);
     assert.match(prompts, /# Employee Context/);
@@ -2413,6 +2420,164 @@ await withTempDir(async (dir) => {
           soul: '# Soul\n\nRemote QA engineer.\n',
           skill: '# Skill\n\nUse remote employee docs for selection.\n',
           memory: '# Memory\n\nPrefer work that matches this remote employee.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_matching_backend';
+    const otherEmployeeId = 'emp_other_backend';
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-single-local-same-backend-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    for (const [id, employeeBackendUrl] of [
+      [employeeId, backendUrl],
+      [otherEmployeeId, 'http://127.0.0.1:9'],
+    ]) {
+      const employeeDir = path.join(axisHome, 'employees', id);
+      await mkdir(employeeDir, { recursive: true });
+      await writeFile(path.join(employeeDir, 'config.json'), JSON.stringify({ employeeId: id, backendUrl: employeeBackendUrl, agentType: 'codex' }, null, 2));
+    }
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, employeeId);
+    assert.equal(state.heartbeats[0].employeeId, employeeId);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Employee id: emp_matching_backend/);
+    assert.doesNotMatch(prompts, /emp_other_backend/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    employees: {
+      emp_matching_backend: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nDevelopment engineer.\n',
+          skill: '# Skill\n\nImplementation work.\n',
+          memory: '# Memory\n\nUse matching backend employee.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_workspace_current';
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-workspace-current-employee-prompts.txt');
+
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await mkdir(axisHome, { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'orbit-user',
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          user: { account: 'orbit-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+    await writeFile(path.join(axisHome, 'current-employee.json'), JSON.stringify({
+      employeeId,
+      backendUrl,
+      agent: 'codex',
+      name: 'Workspace Current',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    }, null, 2));
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--agent',
+      'codex',
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 8000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, employeeId);
+    assert.ok(state.heartbeats.length >= 1);
+    assert.equal(state.heartbeats[0].employeeId, employeeId);
+    assert.equal(state.heartbeats[0].scope.employeeId, employeeId);
+    const firstHeartbeatIndex = state.requests.findIndex((entry) => entry.url === '/api/agent-workers/heartbeat');
+    const productsIndex = state.requests.findIndex((entry) => entry.url === '/api/products');
+    const contextIndex = state.requests.findIndex((entry) => entry.url.startsWith('/api/agent-context?'));
+    assert.notEqual(firstHeartbeatIndex, -1);
+    assert.notEqual(productsIndex, -1);
+    assert.notEqual(contextIndex, -1);
+    assert.ok(firstHeartbeatIndex < productsIndex, `heartbeat should precede products: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
+    assert.ok(firstHeartbeatIndex < contextIndex, `heartbeat should precede context preload: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Employee id: emp_workspace_current/);
+    assert.match(prompts, /Workspace QA context/);
+  }, {
+    workItems: [
+      { id: 'wi-workspace-current', title: 'Add workspace current employee regression coverage', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Testing work for workspace start-work identity.' },
+    ],
+    employees: {
+      emp_workspace_current: {
+        role: 'qa',
+        documents: {
+          soul: '# Soul\n\nWorkspace QA context.\n',
+          skill: '# Skill\n\nTesting and verification.\n',
+          memory: '# Memory\n\nUse current employee in workspace mode.\n',
         },
       },
     },
@@ -3176,6 +3341,7 @@ await withTempDir(async (dir) => {
   try {
     await writeWorkerFixture(axisHome, liveSession, { pid: live.pid, status: 'running' }, {
       argv: ['start-work', '--foreground', '--worker-session', liveSession],
+      scope: { employeeId: 'emp_status_current' },
     });
     await writeFile(path.join(axisHome, 'workers', liveSession, 'last-heartbeat.json'), JSON.stringify({
       ok: false,
@@ -3183,6 +3349,8 @@ await withTempDir(async (dir) => {
       warning: 'AxisNode backend returned HTTP 503 for heartbeat',
       failureCount: 2,
       lastSuccessAt: null,
+      employeeId: 'emp_status_current',
+      backendUrl: 'http://127.0.0.1:1',
     }, null, 2));
     await writeWorkerFixture(axisHome, 'axis-dead-status-test', { pid: 99999999, status: 'running' }, {
       argv: ['start-work', '--foreground', '--worker-session', 'axis-dead-status-test'],
@@ -3199,6 +3367,8 @@ await withTempDir(async (dir) => {
     assert.equal(payload.workers[0].alive, true);
     assert.equal(payload.workers[0].lastHeartbeat.ok, false);
     assert.equal(payload.workers[0].lastHeartbeat.status, 'warning');
+    assert.equal(payload.workers[0].employeeId, 'emp_status_current');
+    assert.equal(payload.workers[0].lastHeartbeat.employeeId, 'emp_status_current');
     assert.match(payload.workers[0].lastHeartbeat.warning, /HTTP 503/);
     assert.equal(payload.staleCount, 2);
 
@@ -3206,6 +3376,7 @@ await withTempDir(async (dir) => {
       env: { HOME: home, AXIS_HOME: axisHome },
     });
     assert.match(humanDefault.stdout, new RegExp(liveSession));
+    assert.match(humanDefault.stdout, /employee=emp_status_current/);
     assert.match(humanDefault.stdout, /heartbeat=warning/);
     assert.match(humanDefault.stdout, /heartbeatWarning=/);
     assert.doesNotMatch(humanDefault.stdout, /axis-dead-status-test/);

@@ -404,6 +404,7 @@ interface AxisCurrentEmployee {
 
 interface StartWorkRemoteEmployee {
   id: string;
+  name?: string | null;
   status?: string | null;
   role?: string | null;
   active?: boolean;
@@ -3993,11 +3994,22 @@ async function persistCurrentEmployee(values: {
 }
 
 async function readSingleLocalEmployee(): Promise<AxisCurrentEmployee | null> {
+  const employees = await readLocalEmployees(null);
+  return employees.length === 1 ? employees[0] : null;
+}
+
+function localEmployeeConfigMatchesBackend(employee: AxisCurrentEmployee, backendUrl: string | null): boolean {
+  if (!backendUrl) return true;
+  if (!employee.backendUrl) return false;
+  return normalizeBackendUrl(employee.backendUrl) === normalizeBackendUrl(backendUrl);
+}
+
+async function readLocalEmployees(backendUrl: string | null): Promise<AxisCurrentEmployee[]> {
   let entries: string[] = [];
   try {
     entries = await readdir(axisEmployeesRootDir());
   } catch {
-    return null;
+    return [];
   }
 
   const employees: AxisCurrentEmployee[] = [];
@@ -4012,10 +4024,10 @@ async function readSingleLocalEmployee(): Promise<AxisCurrentEmployee | null> {
       name: safeString(config.name),
       updatedAt: safeString(config.updatedAt) ?? safeString(config.createdAt),
     });
-    if (employee) employees.push(employee);
+    if (employee && localEmployeeConfigMatchesBackend(employee, backendUrl)) employees.push(employee);
   }
 
-  return employees.length === 1 ? employees[0] : null;
+  return employees;
 }
 
 let startWorkEmployeeResolutionWarnings: string[] = [];
@@ -4050,6 +4062,7 @@ function asStartWorkRemoteEmployee(value: unknown): StartWorkRemoteEmployee | nu
   if (!id) return null;
   return {
     id,
+    name: safeString(value.name) ?? safeString(value.displayName),
     status: safeString(value.status),
     role: safeString(value.role),
     active: value.active === true || value.isActive === true || value.enabled === true,
@@ -4073,14 +4086,13 @@ function startWorkRemoteEmployeeActive(employee: StartWorkRemoteEmployee): boole
 
 function chooseStartWorkRemoteEmployee(employees: StartWorkRemoteEmployee[], backendUrl: string): string | null {
   const selectable = employees.filter(startWorkRemoteEmployeeSelectable);
-  if (selectable.length === 0) return null;
-  if (selectable.length === 1) return selectable[0].id;
-
   const active = selectable.filter(startWorkRemoteEmployeeActive);
   if (active.length === 1) return active[0].id;
 
+  if (active.length === 0) return null;
+
   pushStartWorkEmployeeResolutionWarning(
-    `Found multiple remote Axis employees at ${normalizeBackendUrl(backendUrl)} and could not choose one automatically. Pass --employee-id <id>, or run axis create-employee and select the intended current employee before start-work.`,
+    `Found multiple remote Axis employees active at ${normalizeBackendUrl(backendUrl)} and could not choose one automatically. Run axis create-employee to select the intended current employee, set a default employee, or pass --employee-id <id>.`,
   );
   return null;
 }
@@ -4094,7 +4106,16 @@ async function tokenForStartWorkBackend(backendUrl: string, tokenHint?: string |
   return safeString(config.token);
 }
 
-async function resolveStartWorkRemoteEmployeeId(backendUrl: string | null, tokenHint?: string | null): Promise<string | null> {
+async function persistResolvedStartWorkEmployee(employee: StartWorkRemoteEmployee, backendUrl: string, agentHint: string | null): Promise<void> {
+  await persistCurrentEmployee({
+    employeeId: employee.id,
+    backendUrl,
+    agent: agentHint ?? 'codex',
+    name: employee.name ?? employee.id,
+  });
+}
+
+async function resolveStartWorkRemoteEmployeeId(backendUrl: string | null, tokenHint?: string | null, agentHint?: string | null): Promise<string | null> {
   if (!backendUrl) return null;
   try {
     const token = await tokenForStartWorkBackend(backendUrl, tokenHint);
@@ -4102,14 +4123,18 @@ async function resolveStartWorkRemoteEmployeeId(backendUrl: string | null, token
     const employees = remoteEmployeesRoot(payload)
       .map(asStartWorkRemoteEmployee)
       .filter((employee): employee is StartWorkRemoteEmployee => Boolean(employee));
-    return chooseStartWorkRemoteEmployee(employees, backendUrl);
+    const employeeId = chooseStartWorkRemoteEmployee(employees, backendUrl);
+    if (!employeeId) return null;
+    const employee = employees.find((entry) => entry.id === employeeId);
+    if (employee) await persistResolvedStartWorkEmployee(employee, backendUrl, safeString(agentHint));
+    return employeeId;
   } catch (error) {
     if (error instanceof OrbitCliError) return null;
     return null;
   }
 }
 
-async function resolveStartWorkEmployeeId(backendUrl: string | null, tokenHint?: string | null): Promise<string | null> {
+async function resolveStartWorkEmployeeId(backendUrl: string | null, tokenHint?: string | null, agentHint?: string | null): Promise<string | null> {
   const explicit = safeString(getArg('--employee-id'));
   if (explicit) return explicit;
 
@@ -4127,10 +4152,16 @@ async function resolveStartWorkEmployeeId(backendUrl: string | null, tokenHint?:
     return axisHomeEmployee.employeeId;
   }
 
-  const singleLocalEmployee = await readSingleLocalEmployee();
-  if (singleLocalEmployee) return singleLocalEmployee.employeeId;
+  const localEmployees = await readLocalEmployees(backendUrl);
+  if (localEmployees.length === 1) return localEmployees[0].employeeId;
+  if (localEmployees.length > 1) {
+    pushStartWorkEmployeeResolutionWarning(
+      `Found multiple local Axis employees for ${backendUrl ? normalizeBackendUrl(backendUrl) : 'the current backend'} and could not choose one automatically. Run axis create-employee to select the intended current employee, set a default employee, or pass --employee-id <id>.`,
+    );
+    return null;
+  }
 
-  return resolveStartWorkRemoteEmployeeId(backendUrl, tokenHint);
+  return resolveStartWorkRemoteEmployeeId(backendUrl, tokenHint, agentHint);
 }
 
 async function startWorkBackendHint(repoPath: string | null): Promise<{ backendUrl: string | null; token: string | null }> {
@@ -4716,17 +4747,25 @@ function compactLastHeartbeat(value: Json): Json | null {
   const warning = safeString(value.warning);
   const lastSuccessAt = safeString(value.lastSuccessAt);
   const backendUrl = safeString(value.backendUrl);
+  const employeeId = safeString(value.employeeId);
   const hasEvidence = value.ok === true || value.ok === false || sentAt || warning || lastSuccessAt;
   if (!hasEvidence) return null;
   return {
     ok: value.ok === true,
     status: value.ok === true ? 'ok' : 'warning',
     sentAt,
+    employeeId,
     warning,
     failureCount: typeof value.failureCount === 'number' ? value.failureCount : null,
     lastSuccessAt,
     backendUrl,
   };
+}
+
+function workerEmployeeId(state: Json, config: Json, lastHeartbeat: Json | null): string | null {
+  return safeString(lastHeartbeat?.employeeId)
+    ?? (isJson(state.scope) ? safeString(state.scope.employeeId) : null)
+    ?? (isJson(config.scope) ? safeString(config.scope.employeeId) : null);
 }
 
 function compactWarning(value: string | null | undefined, maxChars = 120): string | null {
@@ -5739,6 +5778,9 @@ async function sendStartWorkHeartbeat(values: {
       ok: true,
       sentAt: payload.sentAt,
       backendUrl: normalizeBackendUrl(target.binding.backendUrl),
+      employeeId: payload.employeeId,
+      status: payload.status,
+      scope: payload.scope,
       failureCount: 0,
       lastSuccessAt: retryState.lastSuccessAt,
       response: isJson(response) ? response : {},
@@ -5752,6 +5794,9 @@ async function sendStartWorkHeartbeat(values: {
       ok: false,
       sentAt: payload.sentAt,
       backendUrl: normalizeBackendUrl(target.binding.backendUrl),
+      employeeId: payload.employeeId,
+      status: payload.status,
+      scope: payload.scope,
       warning,
       failureCount: retryState.failures,
       lastSuccessAt: retryState.lastSuccessAt,
@@ -5966,7 +6011,7 @@ async function runStartWorkForeground(options: {
     if (!resolvedStartWorkEmployeeId) {
       const targetBackendUrl = startWorkBackendUrlFromTargets(targets);
       const targetTokenHint = targets.length === 1 && targetBackendUrl ? safeString(targets[0].binding.token) : null;
-      resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(targetBackendUrl, targetTokenHint);
+      resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(targetBackendUrl, targetTokenHint, agent);
       reportStartWorkEmployeeResolutionWarnings(summary, progress);
     }
     scope = startWorkTargetsScope(targets);
@@ -6237,7 +6282,7 @@ async function startWorkCommand(): Promise<void> {
   const repoPath = repoArg ? path.resolve(repoArg) : null;
   const agent = await resolveStartWorkAgent(repoPath);
   const backendHint = await startWorkBackendHint(repoPath);
-  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(backendHint.backendUrl, backendHint.token);
+  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(backendHint.backendUrl, backendHint.token, agent);
   const sessionId = getArg('--worker-session') ?? createStartWorkSessionId(agent);
   const intervalSeconds = secondsArgAny(['--interval', '--sleep'], 10, 3600);
   const heartbeatIntervalSeconds = Math.max(1, secondsArgAny(['--heartbeat-interval'], 30, 3600));
@@ -6269,6 +6314,7 @@ async function workStatusCommand(): Promise<void> {
     const state = await readJsonFile<Json>(path.join(sessionDir, 'state.json'), {});
     const config = await readJsonFile<Json>(path.join(sessionDir, 'config.json'), {});
     const lastHeartbeat = compactLastHeartbeat(await readJsonFile<Json>(path.join(sessionDir, 'last-heartbeat.json'), {}));
+    const employeeId = workerEmployeeId(state, config, lastHeartbeat);
     const pid = typeof state.pid === 'number' ? state.pid : null;
     const processStatus = await workerProcessStatus(entry, pid, state, config);
     const stale = !processStatus.alive;
@@ -6290,6 +6336,7 @@ async function workStatusCommand(): Promise<void> {
       stale,
       staleReason: processStatus.alive ? null : processStatus.reason,
       status: safeString(state.status) ?? 'unknown',
+      employeeId,
       background: state.background === true || config.background === true,
       updatedAt: safeString(state.updatedAt),
       startedAt: safeString(state.startedAt) ?? safeString(config.startedAt),
@@ -6310,6 +6357,7 @@ async function workStatusCommand(): Promise<void> {
   }
   for (const worker of workers) {
     const staleText = worker.stale ? ` staleReason=${worker.staleReason ?? 'unknown'}` : '';
+    const employeeText = safeString(worker.employeeId) ? ` employee=${worker.employeeId}` : '';
     const lastHeartbeat = isJson(worker.lastHeartbeat) ? worker.lastHeartbeat : null;
     const heartbeatStatus = safeString(lastHeartbeat?.status);
     const heartbeatText = heartbeatStatus
@@ -6317,7 +6365,7 @@ async function workStatusCommand(): Promise<void> {
       : '';
     const heartbeatWarning = compactWarning(safeString(lastHeartbeat?.warning));
     const warningText = heartbeatWarning ? ` heartbeatWarning=${JSON.stringify(heartbeatWarning)}` : '';
-    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'}${heartbeatText}${warningText} log=${worker.logPath ?? '-'}${staleText}`);
+    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'}${employeeText}${heartbeatText}${warningText} log=${worker.logPath ?? '-'}${staleText}`);
   }
   if (prunedCount > 0) console.log(`${prunedCount} stale worker session${prunedCount === 1 ? '' : 's'} pruned.`);
   else if (staleCount > 0 && !includeStale) console.log(`${staleCount} stale worker session${staleCount === 1 ? '' : 's'} hidden; pass --include-stale to show them.`);
