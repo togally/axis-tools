@@ -612,6 +612,12 @@ async function withProductServer(fn, options = {}) {
     };
     if (req.method === 'GET' && req.url === '/api/products') {
       if (!requireAuth()) return;
+      state.productAttempts = (state.productAttempts ?? 0) + 1;
+      if (state.productAttempts <= (options.productFailures ?? 0)) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'products temporarily unavailable' }));
+        return;
+      }
       if (options.emptyProducts) {
         res.end(JSON.stringify({ products: [], runtime: catalog.runtime }));
         return;
@@ -919,6 +925,12 @@ async function withPoolServer(fn, options = {}) {
     }
     if (req.method === 'GET' && req.url === '/api/products') {
       if (!requireAuth()) return;
+      state.productAttempts = (state.productAttempts ?? 0) + 1;
+      if (state.productAttempts <= (options.productFailures ?? 0)) {
+        res.statusCode = 503;
+        res.end(JSON.stringify({ error: 'products temporarily unavailable' }));
+        return;
+      }
       if (options.emptyProducts) {
         res.end(JSON.stringify({ products: [], runtime: catalog.runtime }));
         return;
@@ -975,6 +987,25 @@ async function withPoolServer(fn, options = {}) {
       if (projectId !== 'proj_1') {
         res.statusCode = 404;
         res.end(JSON.stringify({ error: 'project not found' }));
+        return;
+      }
+      if (options.agentContextDelayMs) {
+        setTimeout(() => {
+          const documents = options.agentContextDocuments ?? {
+            'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nBuild useful software.', markdown: '# Soul\n\nBuild useful software.' },
+            'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nUse TDD.', markdown: '# Skill\n\nUse TDD.' },
+            'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nNo recent notes.', markdown: '# Memory\n\nNo recent notes.' },
+          };
+          const warnings = Object.values(documents)
+            .map((document) => document.warning)
+            .filter(Boolean);
+          res.end(JSON.stringify({
+            projectId,
+            documents,
+            warning: warnings.join(' '),
+            runtime: { store: 'mock' },
+          }));
+        }, options.agentContextDelayMs);
         return;
       }
       const documents = options.agentContextDocuments ?? {
@@ -2220,6 +2251,56 @@ await withTempDir(async (dir) => {
     const home = path.join(dir, 'home');
     const fakeBin = path.join(dir, 'fake-bin');
 
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.ok(state.heartbeats.length >= 1);
+    const firstHeartbeatIndex = state.requests.findIndex((entry) => entry.url === '/api/agent-workers/heartbeat');
+    const contextIndex = state.requests.findIndex((entry) => entry.url.startsWith('/api/agent-context?'));
+    const workItemsIndex = state.requests.findIndex((entry) => entry.url.includes('/work-items?status=WAIT_CODE'));
+    assert.notEqual(firstHeartbeatIndex, -1);
+    assert.notEqual(contextIndex, -1);
+    assert.notEqual(workItemsIndex, -1);
+    assert.ok(firstHeartbeatIndex < contextIndex, `heartbeat should precede context preload: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
+    assert.ok(firstHeartbeatIndex < workItemsIndex, `heartbeat should precede work selection: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
+    assert.equal(state.heartbeats[0].status, 'starting');
+    assert.equal(state.heartbeats[0].scope.repoPath, repo);
+  }, {
+    agentContextDelayMs: 50,
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
     await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex', token: 'old-token' });
     await writeSlowFakeCodex(fakeBin, 3);
 
@@ -2279,6 +2360,48 @@ await withTempDir(async (dir) => {
     workItems: [
       { id: 'wi-heartbeat-retry', title: 'Heartbeat retry coverage', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Development task for heartbeat resiliency.' },
     ],
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeFakeCodex(fakeBin);
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-account\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+
+    const result = await run([
+      'start-work',
+      '--agent',
+      'codex',
+      '--backend-url',
+      backendUrl,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 8000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(state.productAttempts >= 2, true);
+    assert.ok(state.heartbeats.length >= 1);
+    assert.ok(state.requests.findIndex((entry) => entry.url === '/api/agent-workers/heartbeat') < state.requests.findIndex((entry) => entry.url === '/api/products'));
+    assert.ok(payload.summary.warnings.some((warning) => /HTTP 503/.test(warning)));
+  }, {
+    productFailures: 1,
+    workItems: [],
   });
 });
 
@@ -2858,6 +2981,13 @@ await withTempDir(async (dir) => {
     await writeWorkerFixture(axisHome, liveSession, { pid: live.pid, status: 'running' }, {
       argv: ['start-work', '--foreground', '--worker-session', liveSession],
     });
+    await writeFile(path.join(axisHome, 'workers', liveSession, 'last-heartbeat.json'), JSON.stringify({
+      ok: false,
+      sentAt: '2026-01-01T00:00:05.000Z',
+      warning: 'AxisNode backend returned HTTP 503 for heartbeat',
+      failureCount: 2,
+      lastSuccessAt: null,
+    }, null, 2));
     await writeWorkerFixture(axisHome, 'axis-dead-status-test', { pid: 99999999, status: 'running' }, {
       argv: ['start-work', '--foreground', '--worker-session', 'axis-dead-status-test'],
     });
@@ -2871,12 +3001,17 @@ await withTempDir(async (dir) => {
     const payload = JSON.parse(jsonDefault.stdout);
     assert.deepEqual(payload.workers.map((worker) => worker.sessionId), [liveSession]);
     assert.equal(payload.workers[0].alive, true);
+    assert.equal(payload.workers[0].lastHeartbeat.ok, false);
+    assert.equal(payload.workers[0].lastHeartbeat.status, 'warning');
+    assert.match(payload.workers[0].lastHeartbeat.warning, /HTTP 503/);
     assert.equal(payload.staleCount, 2);
 
     const humanDefault = await run(['work-status'], {
       env: { HOME: home, AXIS_HOME: axisHome },
     });
     assert.match(humanDefault.stdout, new RegExp(liveSession));
+    assert.match(humanDefault.stdout, /heartbeat=warning/);
+    assert.match(humanDefault.stdout, /heartbeatWarning=/);
     assert.doesNotMatch(humanDefault.stdout, /axis-dead-status-test/);
     assert.doesNotMatch(humanDefault.stdout, /axis-reused-pid-status-test/);
     assert.match(humanDefault.stdout, /2 stale worker sessions hidden/);

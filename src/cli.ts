@@ -336,13 +336,18 @@ interface AxisWorkspaceProject {
   warning: string | null;
 }
 
-interface StartWorkTarget {
-  repoPath: string;
+interface StartWorkHeartbeatTarget {
+  repoPath: string | null;
   binding: ProjectBinding;
   productLineId: string | null;
   productLineName: string | null;
-  projectId: string;
+  projectId: string | null;
   projectName: string | null;
+}
+
+interface StartWorkTarget extends StartWorkHeartbeatTarget {
+  repoPath: string;
+  projectId: string;
 }
 
 interface StartWorkContextDocument {
@@ -4583,6 +4588,30 @@ async function writeWorkerState(sessionId: string, state: Json): Promise<void> {
   });
 }
 
+function compactLastHeartbeat(value: Json): Json | null {
+  const sentAt = safeString(value.sentAt);
+  const warning = safeString(value.warning);
+  const lastSuccessAt = safeString(value.lastSuccessAt);
+  const backendUrl = safeString(value.backendUrl);
+  const hasEvidence = value.ok === true || value.ok === false || sentAt || warning || lastSuccessAt;
+  if (!hasEvidence) return null;
+  return {
+    ok: value.ok === true,
+    status: value.ok === true ? 'ok' : 'warning',
+    sentAt,
+    warning,
+    failureCount: typeof value.failureCount === 'number' ? value.failureCount : null,
+    lastSuccessAt,
+    backendUrl,
+  };
+}
+
+function compactWarning(value: string | null | undefined, maxChars = 120): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  return normalized.length <= maxChars ? normalized : `${normalized.slice(0, maxChars - 3)}...`;
+}
+
 function emitStartWorkProgress(message: string): void {
   const line = `[axis start-work] ${message}`;
   if (hasFlag('--json')) {
@@ -4599,7 +4628,7 @@ function startWorkEmployeeId(): string | null {
   return safeString(getArg('--employee-id'));
 }
 
-function startWorkTargetScope(target: StartWorkTarget): Json {
+function startWorkTargetScope(target: StartWorkHeartbeatTarget): Json {
   return {
     repoPath: target.repoPath,
     backendUrl: normalizeBackendUrl(target.binding.backendUrl),
@@ -4610,6 +4639,43 @@ function startWorkTargetScope(target: StartWorkTarget): Json {
     projectId: target.projectId,
     projectName: target.projectName,
   };
+}
+
+function startWorkHeartbeatTargetFromBinding(repoPath: string | null, binding: ProjectBinding): StartWorkHeartbeatTarget {
+  return {
+    repoPath,
+    binding,
+    productLineId: binding.productLineId ?? binding.productLineUuid ?? null,
+    productLineName: binding.productLineName ?? null,
+    projectId: projectApiId(binding),
+    projectName: binding.projectName ?? null,
+  };
+}
+
+async function inferStartWorkHeartbeatTarget(repoPath: string | null): Promise<StartWorkHeartbeatTarget | null> {
+  if (repoPath) {
+    const binding = await readProjectBinding(repoPath);
+    return binding ? startWorkHeartbeatTargetFromBinding(repoPath, binding) : null;
+  }
+
+  const config = await readGlobalOrbitConfig();
+  const backendUrl = normalizeBackendUrl(getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl());
+  const cached = await cachedLoginSession(backendUrl);
+  const token = cached?.token ?? safeString(config.token);
+  if (!token && !safeString(config.backendUrl) && !getArg('--backend-url')) return null;
+
+  return startWorkHeartbeatTargetFromBinding(null, {
+    backendUrl,
+    mcpUrl: resolveMcpUrl(getArg('--mcp-url'), safeString(config.mcpUrl)),
+    token,
+    key: cached?.key ?? safeString(config.key),
+    session: cached?.session ?? safeString(config.session),
+    account: cached?.account ?? safeString(config.account),
+    user: cached?.user ?? null,
+    owner: cached?.account ?? safeString(config.account) ?? cached?.user.account ?? null,
+    repo: process.cwd(),
+    updatedAt: safeString(config.updatedAt) ?? new Date(0).toISOString(),
+  });
 }
 
 function startWorkTargetsScope(targets: StartWorkTarget[]): Json {
@@ -5371,11 +5437,12 @@ async function patchStartWorkResult(target: StartWorkTarget, workItemID: string,
   }
 }
 
-async function refreshStartWorkTarget(target: StartWorkTarget): Promise<StartWorkTarget> {
+async function refreshStartWorkTarget(target: StartWorkHeartbeatTarget): Promise<StartWorkHeartbeatTarget> {
+  if (!target.repoPath) return target;
   const binding = await readProjectBinding(target.repoPath);
   if (!binding) return target;
   const refreshed = startWorkTargetFromBinding(target.repoPath, binding);
-  if (!refreshed) return { ...target, binding };
+  if (!refreshed) return startWorkHeartbeatTargetFromBinding(target.repoPath, binding);
   return refreshed;
 }
 
@@ -5512,11 +5579,11 @@ async function processStartWorkTarget(values: {
 async function sendStartWorkHeartbeat(values: {
   sessionId: string;
   agent: StartWorkAgentChoice;
-  target: StartWorkTarget;
+  target: StartWorkHeartbeatTarget;
   heartbeatState: StartWorkHeartbeatState;
   startedAt: string;
   retryState: StartWorkHeartbeatRetryState;
-}): Promise<{ ok: boolean; warning: string | null; target: StartWorkTarget }> {
+}): Promise<{ ok: boolean; warning: string | null; target: StartWorkHeartbeatTarget }> {
   const { sessionId, agent, heartbeatState, startedAt, retryState } = values;
   let target = values.target;
   try {
@@ -5587,21 +5654,19 @@ function shouldLogHeartbeatFailure(retryState: StartWorkHeartbeatRetryState, war
 function startStartWorkHeartbeatLoop(values: {
   sessionId: string;
   agent: StartWorkAgentChoice;
-  target: StartWorkTarget | null;
+  target: StartWorkHeartbeatTarget | null;
   heartbeatState: StartWorkHeartbeatState;
   heartbeatIntervalSeconds: number;
   startedAt: string;
   progress: (message: string) => void;
-}): { stop: () => void; first: Promise<void> } {
-  const { target } = values;
-  if (!target) {
-    return { stop: () => {}, first: Promise.resolve() };
-  }
+}): { stop: () => void; first: Promise<void>; setTarget: (target: StartWorkHeartbeatTarget | null) => void; sendNow: () => Promise<void> } {
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
-  let currentTarget = target;
+  let currentTarget = values.target;
+  let inFlight: Promise<void> | null = null;
   const retryState: StartWorkHeartbeatRetryState = { failures: 0, lastWarning: null, lastSuccessAt: null };
   const send = async (): Promise<void> => {
+    if (!currentTarget) return;
     const previousWarning = retryState.lastWarning;
     const heartbeat = await sendStartWorkHeartbeat({
       sessionId: values.sessionId,
@@ -5620,20 +5685,84 @@ function startStartWorkHeartbeatLoop(values: {
       retryState.lastWarning = heartbeat.warning;
     }
   };
+  const sendOnce = (): Promise<void> => {
+    if (inFlight) return inFlight;
+    inFlight = send().finally(() => {
+      inFlight = null;
+    });
+    return inFlight;
+  };
   const schedule = (): void => {
     if (stopped) return;
     timer = setTimeout(() => {
-      void send().finally(schedule);
+      void sendOnce().finally(schedule);
     }, heartbeatRetryDelayMs(values.heartbeatIntervalSeconds, retryState.failures));
   };
-  const first = send().finally(schedule);
+  const first = sendOnce().finally(schedule);
   return {
+    setTarget(target: StartWorkHeartbeatTarget | null): void {
+      currentTarget = target;
+    },
+    sendNow: sendOnce,
     stop(): void {
       stopped = true;
       if (timer) clearTimeout(timer);
     },
     first,
   };
+}
+
+function startWorkErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function resolveStartWorkTargetsWithRetry(values: {
+  sessionId: string;
+  agent: StartWorkAgentChoice;
+  startedAt: string;
+  intervalSeconds: number;
+  heartbeatState: StartWorkHeartbeatState;
+  warnings: string[];
+  progress: (message: string) => void;
+}): Promise<{ targets: StartWorkTarget[]; warnings: string[]; workspace?: AxisWorkspaceResolution }> {
+  let failures = 0;
+  while (true) {
+    if (workLoopInterrupted) {
+      return { targets: [], warnings: ['Worker interrupted before target resolution completed.'] };
+    }
+    try {
+      const resolution = await resolveStartWorkTargets();
+      values.heartbeatState.status = 'starting';
+      return resolution;
+    } catch (error) {
+      failures++;
+      values.heartbeatState.status = failures === 1 ? 'starting' : 'reconnecting';
+      const warning = `Target resolution failed: ${startWorkErrorMessage(error)}`;
+      pushUniqueWarning(values.warnings, warning);
+      if (failures === 1 || failures % 5 === 0) {
+        values.progress(`target resolution warning: ${warning} (will retry)`);
+      }
+      await writeWorkerState(values.sessionId, {
+        agent: values.agent,
+        pid: process.pid,
+        background: false,
+        status: values.heartbeatState.status,
+        startedAt: values.startedAt,
+        scope: values.heartbeatState.scope,
+        targetResolution: {
+          ok: false,
+          failureCount: failures,
+          warning,
+          updatedAt: new Date().toISOString(),
+        },
+      });
+      const delayMs = heartbeatRetryDelayMs(values.intervalSeconds, failures);
+      const sleep = await sleepWorkLoop(Math.max(1, Math.ceil(delayMs / 1000)));
+      if (sleep.interrupted) {
+        return { targets: [], warnings: ['Worker interrupted while retrying target resolution.'] };
+      }
+    }
+  }
 }
 
 async function runStartWorkForeground(options: {
@@ -5644,25 +5773,23 @@ async function runStartWorkForeground(options: {
   maxIterations: number | null;
 }): Promise<Json> {
   const { sessionId, agent, intervalSeconds, heartbeatIntervalSeconds, maxIterations } = options;
+  const repoArg = getArg('--repo');
+  const repoPath = repoArg ? path.resolve(repoArg) : null;
   const startedAt = new Date().toISOString();
   const bounded = maxIterations !== null;
   const progress = emitStartWorkProgress;
   ensureDir(axisWorkerSessionDir(sessionId));
+  const requestedScope = requestedStartWorkScope();
   await writeWorkerState(sessionId, {
     agent,
     pid: process.pid,
     background: false,
     status: 'starting',
     startedAt,
+    scope: requestedScope,
     logPath: axisWorkerLogPath(sessionId),
   });
 
-  const resolution = await resolveStartWorkTargets();
-  const targets = resolution.targets;
-  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(startWorkBackendUrlFromTargets(targets));
-  const scope = startWorkTargetsScope(targets);
-  const heartbeatState: StartWorkHeartbeatState = { status: 'starting', currentWorkItemId: null, scope };
-  const context = await preloadStartWorkContexts(targets, progress);
   const summary: StartWorkSummary = {
     ready: 0,
     claimed: 0,
@@ -5670,14 +5797,15 @@ async function runStartWorkForeground(options: {
     failed: 0,
     conflicts: 0,
     idle: 0,
-    warnings: [...resolution.warnings],
+    warnings: [],
   };
-  for (const warning of context.warnings) pushUniqueWarning(summary.warnings, warning);
+  const initialHeartbeatTarget = await inferStartWorkHeartbeatTarget(repoPath);
+  const heartbeatState: StartWorkHeartbeatState = { status: 'starting', currentWorkItemId: null, scope: requestedScope };
 
   const heartbeat = startStartWorkHeartbeatLoop({
     sessionId,
     agent,
-    target: targets[0] ?? null,
+    target: initialHeartbeatTarget,
     heartbeatState,
     heartbeatIntervalSeconds,
     startedAt,
@@ -5689,14 +5817,37 @@ async function runStartWorkForeground(options: {
   const sleeps: Json[] = [];
   let stopReason = 'max-iterations';
   const cleanup = installWorkLoopInterruptHandlers(progress);
+  let targets: StartWorkTarget[] = [];
+  let scope = requestedScope;
+  let context: { contexts: Map<string, StartWorkContextDocument[]>; warnings: string[] } = { contexts: new Map(), warnings: [] };
 
   progress(`session: ${sessionId}`);
   progress(`agent: ${agent}`);
-  progress(`targets: ${targets.length}`);
   progress(`loop: ${bounded ? `bounded (${maxIterations} iteration${maxIterations === 1 ? '' : 's'})` : 'infinite'}`);
   progress(`heartbeat seconds: ${heartbeatIntervalSeconds}`);
 
   try {
+    const resolution = await resolveStartWorkTargetsWithRetry({
+      sessionId,
+      agent,
+      startedAt,
+      intervalSeconds,
+      heartbeatState,
+      warnings: summary.warnings,
+      progress,
+    });
+    targets = resolution.targets;
+    for (const warning of resolution.warnings) pushUniqueWarning(summary.warnings, warning);
+    resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(startWorkBackendUrlFromTargets(targets));
+    scope = startWorkTargetsScope(targets);
+    heartbeatState.scope = scope;
+    heartbeatState.status = 'starting';
+    heartbeat.setTarget(targets[0] ?? initialHeartbeatTarget);
+    await heartbeat.sendNow();
+    context = await preloadStartWorkContexts(targets, progress);
+    for (const warning of context.warnings) pushUniqueWarning(summary.warnings, warning);
+    progress(`targets: ${targets.length}`);
+
     if (targets.length === 0) {
       stopReason = 'no-work-scope';
       heartbeatState.status = 'idle';
@@ -5981,6 +6132,7 @@ async function workStatusCommand(): Promise<void> {
     const sessionDir = path.join(workersDir, entry);
     const state = await readJsonFile<Json>(path.join(sessionDir, 'state.json'), {});
     const config = await readJsonFile<Json>(path.join(sessionDir, 'config.json'), {});
+    const lastHeartbeat = compactLastHeartbeat(await readJsonFile<Json>(path.join(sessionDir, 'last-heartbeat.json'), {}));
     const pid = typeof state.pid === 'number' ? state.pid : null;
     const processStatus = await workerProcessStatus(entry, pid, state, config);
     const stale = !processStatus.alive;
@@ -6006,6 +6158,7 @@ async function workStatusCommand(): Promise<void> {
       updatedAt: safeString(state.updatedAt),
       startedAt: safeString(state.startedAt) ?? safeString(config.startedAt),
       logPath: safeString(state.logPath) ?? axisWorkerLogPath(entry),
+      lastHeartbeat,
     });
   }
   const payload = { ok: true, workers, staleCount, prunedCount };
@@ -6021,7 +6174,14 @@ async function workStatusCommand(): Promise<void> {
   }
   for (const worker of workers) {
     const staleText = worker.stale ? ` staleReason=${worker.staleReason ?? 'unknown'}` : '';
-    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'} log=${worker.logPath ?? '-'}${staleText}`);
+    const lastHeartbeat = isJson(worker.lastHeartbeat) ? worker.lastHeartbeat : null;
+    const heartbeatStatus = safeString(lastHeartbeat?.status);
+    const heartbeatText = heartbeatStatus
+      ? ` heartbeat=${heartbeatStatus}${safeString(lastHeartbeat?.sentAt) ? `@${safeString(lastHeartbeat?.sentAt)}` : ''}`
+      : '';
+    const heartbeatWarning = compactWarning(safeString(lastHeartbeat?.warning));
+    const warningText = heartbeatWarning ? ` heartbeatWarning=${JSON.stringify(heartbeatWarning)}` : '';
+    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'}${heartbeatText}${warningText} log=${worker.logPath ?? '-'}${staleText}`);
   }
   if (prunedCount > 0) console.log(`${prunedCount} stale worker session${prunedCount === 1 ? '' : 's'} pruned.`);
   else if (staleCount > 0 && !includeStale) console.log(`${staleCount} stale worker session${staleCount === 1 ? '' : 's'} hidden; pass --include-stale to show them.`);
