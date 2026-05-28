@@ -109,7 +109,7 @@ function printUsage() {
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
 function printStartWorkUsage() {
-    console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. With --employee-id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Attach an Axis employee id to worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+    console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. By default, the worker uses the current local employee created by axis create-employee. With a resolved or explicit employee id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md, asks the agent to choose the best matching WAIT_CODE WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Override the current local employee id for worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between WAIT_CODE polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
     console.log(`Responsibility categories:\n  开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual\n`);
 }
 function printCreateEmployeeUsage() {
@@ -201,6 +201,9 @@ function globalOrbitConfigPath() {
 }
 function axisHomeDir() {
     return path.resolve(process.env.AXIS_HOME ?? path.join(homeDir(), '.axis'));
+}
+function axisCurrentEmployeePath() {
+    return path.join(axisHomeDir(), 'current-employee.json');
 }
 function axisWorkspaceCatalogPath(workspaceRoot = axisHomeDir()) {
     return path.join(workspaceRoot, 'catalog.json');
@@ -3267,6 +3270,116 @@ function axisEmployeesRootDir() {
 function axisEmployeeDir(employeeId) {
     return path.join(axisEmployeesRootDir(), employeeId);
 }
+function asCurrentEmployee(value) {
+    if (!isJson(value))
+        return null;
+    const employeeId = safeString(value.employeeId) ?? safeString(value.id);
+    if (!employeeId)
+        return null;
+    return {
+        employeeId,
+        ...(safeString(value.backendUrl) ? { backendUrl: normalizeBackendUrl(safeString(value.backendUrl)) } : {}),
+        ...(safeString(value.agent) ?? safeString(value.agentType) ? { agent: (safeString(value.agent) ?? safeString(value.agentType)) } : {}),
+        ...(safeString(value.name) ? { name: safeString(value.name) } : {}),
+        updatedAt: safeString(value.updatedAt) ?? new Date(0).toISOString(),
+    };
+}
+function currentEmployeeMatchesBackend(employee, backendUrl) {
+    if (!backendUrl)
+        return true;
+    if (!employee.backendUrl)
+        return true;
+    return normalizeBackendUrl(employee.backendUrl) === normalizeBackendUrl(backendUrl);
+}
+async function readCurrentEmployeeFromGlobalConfig(config) {
+    const globalConfig = config ?? await readGlobalOrbitConfig();
+    const direct = asCurrentEmployee(globalConfig.currentEmployee) ?? asCurrentEmployee(globalConfig.defaultEmployee);
+    if (direct)
+        return direct;
+    const employeeId = safeString(globalConfig.currentEmployeeId) ?? safeString(globalConfig.defaultEmployeeId);
+    if (!employeeId)
+        return null;
+    return {
+        employeeId,
+        ...(safeString(globalConfig.backendUrl) ? { backendUrl: normalizeBackendUrl(safeString(globalConfig.backendUrl)) } : {}),
+        updatedAt: safeString(globalConfig.updatedAt) ?? new Date(0).toISOString(),
+    };
+}
+async function readCurrentEmployeeFromAxisHome() {
+    return asCurrentEmployee(await readJsonFile(axisCurrentEmployeePath(), {}));
+}
+async function persistCurrentEmployee(values) {
+    const current = {
+        employeeId: values.employeeId,
+        backendUrl: normalizeBackendUrl(values.backendUrl),
+        agent: values.agent,
+        name: values.name,
+        updatedAt: new Date().toISOString(),
+    };
+    await writeJsonFile(axisCurrentEmployeePath(), { ...current });
+    await writeGlobalOrbitConfig({
+        currentEmployee: current,
+        currentEmployeeId: current.employeeId,
+    });
+    return current;
+}
+async function readSingleLocalEmployee() {
+    let entries = [];
+    try {
+        entries = await readdir(axisEmployeesRootDir());
+    }
+    catch {
+        return null;
+    }
+    const employees = [];
+    for (const entry of entries.sort()) {
+        const configPath = path.join(axisEmployeesRootDir(), entry, 'config.json');
+        if (!existsSync(configPath))
+            continue;
+        const config = await readJsonFile(configPath, {});
+        const employee = asCurrentEmployee({
+            employeeId: safeString(config.employeeId) ?? entry,
+            backendUrl: safeString(config.backendUrl),
+            agent: safeString(config.agent) ?? safeString(config.agentType),
+            name: safeString(config.name),
+            updatedAt: safeString(config.updatedAt) ?? safeString(config.createdAt),
+        });
+        if (employee)
+            employees.push(employee);
+    }
+    return employees.length === 1 ? employees[0] : null;
+}
+async function resolveStartWorkEmployeeId(backendUrl) {
+    const explicit = safeString(getArg('--employee-id'));
+    if (explicit)
+        return explicit;
+    const envEmployeeId = safeString(process.env.AXIS_EMPLOYEE_ID);
+    if (envEmployeeId)
+        return envEmployeeId;
+    const config = await readGlobalOrbitConfig();
+    const globalEmployee = await readCurrentEmployeeFromGlobalConfig(config);
+    if (globalEmployee && currentEmployeeMatchesBackend(globalEmployee, backendUrl)) {
+        return globalEmployee.employeeId;
+    }
+    const axisHomeEmployee = await readCurrentEmployeeFromAxisHome();
+    if (axisHomeEmployee && currentEmployeeMatchesBackend(axisHomeEmployee, backendUrl)) {
+        return axisHomeEmployee.employeeId;
+    }
+    return (await readSingleLocalEmployee())?.employeeId ?? null;
+}
+async function startWorkBackendHint(repoPath) {
+    if (repoPath) {
+        const binding = await readProjectBinding(repoPath);
+        if (binding?.backendUrl)
+            return normalizeBackendUrl(binding.backendUrl);
+    }
+    const config = await readGlobalOrbitConfig();
+    return safeString(config.backendUrl) ? normalizeBackendUrl(safeString(config.backendUrl)) : null;
+}
+function startWorkBackendUrlFromTargets(targets) {
+    const backendUrls = [...new Set(targets.map((target) => normalizeBackendUrl(target.binding.backendUrl)).filter(Boolean))];
+    return backendUrls.length === 1 ? backendUrls[0] : null;
+}
 function employeeFallbackName(language) {
     return language === 'zh' ? '林知远' : 'Evelyn Hart';
 }
@@ -3574,6 +3687,7 @@ async function createEmployeeCommand() {
         },
         createdAt: new Date().toISOString(),
     });
+    await persistCurrentEmployee({ employeeId, backendUrl, agent, name });
     const payload = {
         ok: true,
         mode: 'create-employee',
@@ -3700,12 +3814,18 @@ function emitStartWorkProgress(message) {
     }
     console.log(line);
 }
+let resolvedStartWorkEmployeeId;
+function startWorkEmployeeId() {
+    if (resolvedStartWorkEmployeeId !== undefined)
+        return resolvedStartWorkEmployeeId;
+    return safeString(getArg('--employee-id'));
+}
 function startWorkTargetScope(target) {
     return {
         repoPath: target.repoPath,
         backendUrl: normalizeBackendUrl(target.binding.backendUrl),
         account: target.binding.account ?? target.binding.user?.account ?? null,
-        employeeId: getArg('--employee-id'),
+        employeeId: startWorkEmployeeId(),
         productLineId: target.productLineId,
         productLineName: target.productLineName,
         projectId: target.projectId,
@@ -3725,7 +3845,7 @@ function requestedStartWorkScope() {
     const projectUuid = getArg('--project-uuid');
     const productLineId = getArg('--product-line-id');
     const productLineUuid = getArg('--product-line-uuid');
-    const employeeId = getArg('--employee-id');
+    const employeeId = startWorkEmployeeId();
     return {
         type: repo ? 'project' : 'workspace',
         repoPath: repo ? path.resolve(repo) : null,
@@ -3971,7 +4091,7 @@ function mergeStartWorkContextDocuments(values) {
 async function preloadStartWorkContexts(targets, progress) {
     const contexts = new Map();
     const warnings = [];
-    const employeeId = getArg('--employee-id');
+    const employeeId = startWorkEmployeeId();
     for (const target of targets) {
         progress(`context: fetching project agent-context for ${target.projectId}`);
         const employeeContext = employeeId ? await fetchStartWorkEmployeeContext(target, employeeId) : null;
@@ -4039,7 +4159,7 @@ function buildStartWorkAgentPrompt(values) {
         '',
         `Worker session: ${values.sessionId}`,
         `Agent runtime: ${values.agent}`,
-        `Employee id: ${getArg('--employee-id') ?? 'unassigned'}`,
+        `Employee id: ${startWorkEmployeeId() ?? 'unassigned'}`,
         `Repository: ${values.target.repoPath}`,
         '',
         ...contextSections,
@@ -4080,7 +4200,7 @@ function buildStartWorkSelectionPrompt(values) {
         '',
         `Worker session: ${values.sessionId}`,
         `Agent runtime: ${values.agent}`,
-        `Employee id: ${getArg('--employee-id') ?? 'unassigned'}`,
+        `Employee id: ${startWorkEmployeeId() ?? 'unassigned'}`,
         `Repository: ${values.target.repoPath}`,
         '',
         ...contextSections,
@@ -4354,7 +4474,7 @@ function startWorkClaimPayload(values) {
         agentId: values.sessionId,
         agentName: startWorkAgentName(values.agent),
         agentType: values.agent,
-        employeeId: getArg('--employee-id'),
+        employeeId: startWorkEmployeeId(),
         host: os.hostname(),
         sessionId: values.sessionId,
         client: 'axis-tools',
@@ -4524,7 +4644,7 @@ async function sendStartWorkHeartbeat(values) {
         sessionId,
         agentType: agent,
         agentName: startWorkAgentName(agent),
-        employeeId: getArg('--employee-id'),
+        employeeId: startWorkEmployeeId(),
         host: os.hostname(),
         pid: process.pid,
         cliVersion: cliVersion(),
@@ -4605,6 +4725,7 @@ async function runStartWorkForeground(options) {
     });
     const resolution = await resolveStartWorkTargets();
     const targets = resolution.targets;
+    resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(startWorkBackendUrlFromTargets(targets));
     const scope = startWorkTargetsScope(targets);
     const heartbeatState = { status: 'starting', currentWorkItemId: null, scope };
     const context = await preloadStartWorkContexts(targets, progress);
@@ -4773,7 +4894,7 @@ function backgroundStartWorkArgs(values) {
     const projectUuid = getArg('--project-uuid');
     const productLineId = getArg('--product-line-id');
     const productLineUuid = getArg('--product-line-uuid');
-    const employeeId = getArg('--employee-id');
+    const employeeId = startWorkEmployeeId();
     if (repo)
         args.push('--repo', repo);
     if (employeeId)
@@ -4883,6 +5004,7 @@ async function startWorkCommand() {
     const repoArg = getArg('--repo');
     const repoPath = repoArg ? path.resolve(repoArg) : null;
     const agent = await resolveStartWorkAgent(repoPath);
+    resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(await startWorkBackendHint(repoPath));
     const sessionId = getArg('--worker-session') ?? createStartWorkSessionId(agent);
     const intervalSeconds = secondsArgAny(['--interval', '--sleep'], 10, 3600);
     const heartbeatIntervalSeconds = Math.max(1, secondsArgAny(['--heartbeat-interval'], 30, 3600));

@@ -320,6 +320,13 @@ async function withEmployeeRegisterServer(fn) {
       assert.equal(config.role, 'qa');
       assert.equal(config.backendUrl, backendUrl);
 
+      const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+      assert.equal(globalConfig.currentEmployee.employeeId, payload.employeeId);
+      assert.equal(globalConfig.currentEmployee.backendUrl, backendUrl);
+      assert.equal(globalConfig.currentEmployee.agent, 'codex');
+      assert.equal(globalConfig.currentEmployee.name, 'Nova Vale');
+      assert.match(globalConfig.currentEmployee.updatedAt, /^\d{4}-\d{2}-\d{2}T/);
+
       const prompt = await readFile(promptPath, 'utf8');
       assert.match(prompt, /^exec\n--skip-git-repo-check\n/);
       assert.match(prompt, new RegExp(payload.employeeId));
@@ -2149,6 +2156,152 @@ await withTempDir(async (dir) => {
       'skill.md': { key: 'skill.md', found: false, content: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', markdown: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', warning: 'Agent context document skill.md was not found; using empty fallback.' },
       'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrevious queue was idle.', markdown: '# Memory\n\nPrevious queue was idle.' },
     },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_current_qa';
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-current-employee-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      currentEmployee: {
+        employeeId,
+        backendUrl,
+        agent: 'codex',
+        name: 'Current QA',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    }, null, 2));
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+        AXIS_TEST_AGENT_INVALID_SELECTION: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, employeeId);
+    assert.equal(state.heartbeats[0].employeeId, employeeId);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === `/api/employees/${employeeId}`));
+    assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-regression']);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Employee id: emp_current_qa/);
+    assert.match(prompts, /# Employee Context/);
+    assert.match(prompts, /QA testing engineer/);
+    assert.match(prompts, /Prefer testing tasks over general development work/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-development',
+        title: 'Implement billing calculation module',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Development work: implement service logic and persistence.',
+        sourceArtifactId: 'doc-development',
+      },
+      {
+        id: 'wi-regression',
+        title: 'Add checkout regression coverage',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Testing work: add QA regression tests for checkout failure paths.',
+        sourceArtifactId: 'doc-testing',
+      },
+    ],
+    employees: {
+      emp_current_qa: {
+        role: 'qa',
+        documents: {
+          soul: '# Soul\n\nQA testing engineer.\n',
+          skill: '# Skill\n\nRegression testing, test automation, and release verification.\n',
+          memory: '# Memory\n\nPrefer testing tasks over general development work.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-ambiguous-employees-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    for (const employeeId of ['emp_one_local', 'emp_two_local']) {
+      const employeeDir = path.join(axisHome, 'employees', employeeId);
+      await mkdir(employeeDir, { recursive: true });
+      await writeFile(path.join(employeeDir, 'config.json'), JSON.stringify({ employeeId, backendUrl, agentType: 'codex' }, null, 2));
+    }
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.scope.targets[0].employeeId, null);
+    assert.equal(state.heartbeats[0].employeeId, null);
+    assert.ok(!state.requests.some((entry) => entry.method === 'GET' && /^\/api\/employees\//.test(entry.url)));
+
+    const prompt = await readFile(promptLog, 'utf8');
+    assert.match(prompt, /Employee id: unassigned/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
   });
 });
 
