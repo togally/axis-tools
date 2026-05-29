@@ -209,7 +209,7 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis start-work` 是新的员工执行 worker。它默认从后台为当前 backend 上所有 active 员工启动本地 worker session，已在本机运行的员工会跳过；返回结果会列出 started / skipped 的员工、session id、pid 和日志路径。每个 worker 会持续向 Axis Hub 发送 heartbeat。用 `--employee-id <id>` 可以显式只启动一个员工；用 `--foreground` 可以在当前终端跑单员工 debug。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 作为 Employee Context，再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
+`axis start-work` 是新的员工执行 worker。它默认从后台为当前 backend 上所有 active 员工启动本地 worker session；如果某员工已经有覆盖当前请求 scope 的本地 worker，会跳过该员工，单项目 worker 不会阻止同员工再启动产品线/工作区 worker。返回结果会列出 started / skipped 的员工、session id、pid 和日志路径。每个 worker 会持续向 Axis Hub 发送 heartbeat。用 `--employee-id <id>` 可以显式只启动一个员工；用 `--foreground` 可以在当前终端跑单员工 debug。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 作为 Employee Context，再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
 
 新电脑或新环境的最短路径：
 

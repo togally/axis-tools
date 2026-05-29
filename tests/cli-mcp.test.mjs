@@ -822,6 +822,8 @@ async function withPoolServer(fn, options = {}) {
     poolDocuments: 0,
     requirements: 0,
     poolSeeds: 0,
+    poolSeedPayloads: [],
+    poolDocumentPayloads: [],
     loginCount: 0,
     accountByToken: {},
     workItemUpdates: [],
@@ -1174,6 +1176,7 @@ async function withPoolServer(fn, options = {}) {
       readJson().then((payload) => {
         state.poolSeeds++;
         state.lastPoolSeed = payload;
+        state.poolSeedPayloads.push(payload);
         res.statusCode = 201;
         res.end(JSON.stringify({
           id: 'seed-1',
@@ -1196,6 +1199,7 @@ async function withPoolServer(fn, options = {}) {
       readJson().then((payload) => {
         state.poolDocuments++;
         state.lastPoolDocument = payload;
+        state.poolDocumentPayloads.push(payload);
         const document = { id: 'doc-pool-1', title: payload.title, source: { type: payload.kind }, status: payload.status };
         state.documents.push(document);
         res.statusCode = 201;
@@ -1429,6 +1433,106 @@ await withTempDir(async (dir) => {
         documents: {
           soul: '# Soul\n\nProduct manager.\n',
           skill: '# Skill\n\nReview intake.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const liveSession = 'axis-live-start-work-project-only';
+    const live = spawnFakeLiveWorker(liveSession);
+
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await mkdir(axisHome, { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'orbit-user',
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          user: { account: 'orbit-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkerFixture(axisHome, liveSession, {
+      pid: live.pid,
+      status: 'polling',
+      scope: {
+        type: 'project',
+        count: 1,
+        targets: [{
+          repoPath: repo,
+          backendUrl,
+          employeeId: 'emp_scope_product',
+          productLineId: 'pl_2',
+          projectId: 'proj_1',
+          projectName: 'Hermes Console',
+        }],
+      },
+    }, {
+      argv: ['start-work', '--foreground', '--repo', repo, '--worker-session', liveSession],
+      scope: {
+        type: 'project',
+        repoPath: repo,
+        employeeId: 'emp_scope_product',
+      },
+    });
+
+    try {
+      const result = await run([
+        'start-work',
+        '--interval',
+        '0',
+        '--iterations',
+        '1',
+        '--json',
+      ], {
+        timeout: 5000,
+        env: {
+          HOME: home,
+          AXIS_HOME: axisHome,
+        },
+      });
+
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.ok, true);
+      assert.equal(payload.mode, 'start-work-all');
+      assert.equal(payload.employeeCount, 1);
+      assert.equal(payload.workerCount, 1);
+      assert.equal(payload.skippedCount, 0);
+      assert.equal(payload.workers[0].employeeId, 'emp_scope_product');
+      assert.equal(payload.workers[0].scope.type, 'workspace');
+
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && payload.workers.some((worker) => isProcessAlive(worker.pid))) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(payload.workers.some((worker) => isProcessAlive(worker.pid)), false);
+    } finally {
+      live.kill('SIGTERM');
+      await waitForChildExit(live, liveSession);
+    }
+  }, {
+    workItems: [],
+    employeeList: [
+      { id: 'emp_scope_product', name: 'Product', status: 'active', role: 'product' },
+    ],
+    employees: {
+      emp_scope_product: {
+        role: 'product',
+        documents: {
+          soul: '# Soul\n\nProduct reviewer.\n',
+          skill: '# Skill\n\nReview requirements before development.\n',
           memory: '# Memory\n\nNo recent work.\n',
         },
       },
@@ -4010,7 +4114,7 @@ await withTempDir(async (dir) => {
     assert.match(created.savedPath, /docs\/bugs\/\d{8}-bug-orbit-item\.md$/);
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'bug');
-    assert.equal(state.lastPoolDocument.sourceId, 'orbit-bug');
+    assert.match(state.lastPoolDocument.sourceId, /^orbit-bug:/);
     const saved = await readFile(created.savedPath, 'utf8');
     assert.match(saved, /source: hub-cache/);
   });
@@ -4036,8 +4140,12 @@ await withTempDir(async (dir) => {
     assert.equal(state.lastPoolSeed.seed, '测试想法');
     assert.equal(state.lastPoolSeed.status, 'NEW');
     assert.equal(state.lastPoolSeed.source, 'CLI');
-    assert.equal(state.lastPoolSeed.sourceId, 'axis-ide');
+    assert.match(state.lastPoolSeed.sourceId, /^axis-ide:/);
     assert.equal(state.lastPoolSeed.repo, repo);
+
+    await runViaLinkedAxisPool('axis-ide', ['另一个想法', '--repo', repo, '--agent', 'codex', '--json']);
+    assert.equal(state.poolSeedPayloads.length, 2);
+    assert.notEqual(state.poolSeedPayloads[0].sourceId, state.poolSeedPayloads[1].sourceId);
   });
 });
 
@@ -4440,7 +4548,9 @@ JSON
     assert.equal(payload.refine.results[0].submit.mode, 'hub');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'idea');
-    assert.equal(state.lastPoolDocument.sourceId, 'axis-ide');
+    assert.equal(state.lastPoolDocument.sourceId, 'doc-edited');
+    assert.equal(state.lastPoolDocument.sourceArtifactId, 'doc-edited');
+    assert.equal(state.lastPoolDocument.parentDocumentId, 'doc-edited');
 
     const prompt = await readFile(promptLog, 'utf8');
     assert.match(prompt, /methodologySkill: gstack-plan-ceo-review/);

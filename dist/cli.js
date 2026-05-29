@@ -2584,6 +2584,9 @@ function poolArtifactFromMarkdown(pool, markdown) {
         workItems: [],
     };
 }
+function newPoolSourceId(command) {
+    return `${command}:${localDateStamp()}-${randomBytes(6).toString('base64url')}`;
+}
 function poolArtifactFromText(pool, text) {
     const title = text.trim().split(/\r?\n/)[0]?.trim() || `${pool.displayName} ${localDateStamp()}`;
     const markdown = [
@@ -2622,6 +2625,10 @@ function normalizePoolArtifact(pool, input) {
         }
         const markdown = safeString(raw.markdown) ?? `# ${safeString(raw.title) ?? `${pool.displayName} ${localDateStamp()}`}\n`;
         const title = safeString(raw.title) ?? firstMarkdownTitle(markdown) ?? `${pool.displayName} ${localDateStamp()}`;
+        const sourceId = safeString(raw.sourceId);
+        const sourceArtifactId = safeString(raw.sourceArtifactId);
+        const parentDocumentId = safeString(raw.parentDocumentId);
+        const derivedFromDocumentId = safeString(raw.derivedFromDocumentId);
         return {
             schemaVersion: 'orbit.pool.artifact.v1',
             kind: pool.kind,
@@ -2631,6 +2638,10 @@ function normalizePoolArtifact(pool, input) {
             markdown,
             sections: Array.isArray(raw.sections) ? raw.sections : [],
             workItems: Array.isArray(raw.workItems) ? raw.workItems : [],
+            ...(sourceId ? { sourceId } : {}),
+            ...(sourceArtifactId ? { sourceArtifactId } : {}),
+            ...(parentDocumentId ? { parentDocumentId } : {}),
+            ...(derivedFromDocumentId ? { derivedFromDocumentId } : {}),
         };
     }
     if (/^#\s+/m.test(trimmed))
@@ -2703,6 +2714,10 @@ function shouldSkipHubCache() {
     return hasFlag('--no-doc');
 }
 function buildPoolPayload(pool, artifact, repoPath) {
+    const sourceId = safeString(artifact.sourceId) ?? newPoolSourceId(pool.command);
+    const sourceArtifactId = safeString(artifact.sourceArtifactId);
+    const parentDocumentId = safeString(artifact.parentDocumentId);
+    const derivedFromDocumentId = safeString(artifact.derivedFromDocumentId);
     return {
         kind: artifact.kind,
         title: artifact.title,
@@ -2711,8 +2726,11 @@ function buildPoolPayload(pool, artifact, repoPath) {
         markdown: artifact.markdown,
         sections: artifact.sections,
         workItems: artifact.workItems,
-        sourceId: pool.command,
+        sourceId,
         source: 'CLI',
+        ...(sourceArtifactId ? { sourceArtifactId } : {}),
+        ...(parentDocumentId ? { parentDocumentId } : {}),
+        ...(derivedFromDocumentId ? { derivedFromDocumentId } : {}),
         artifact,
         repo: repoPath,
     };
@@ -2730,7 +2748,7 @@ function buildPoolSeedPayload(pool, seed, repoPath) {
         summary: trimmed,
         status: LIFECYCLE_NEW,
         source: 'CLI',
-        sourceId: pool.command,
+        sourceId: newPoolSourceId(pool.command),
         repo: repoPath,
     };
 }
@@ -5572,15 +5590,18 @@ async function spawnStartWorkBackgroundForEmployee(options) {
 async function spawnStartWorkAllBackground(options) {
     const startedAt = new Date().toISOString();
     const employeeResolution = await resolveStartWorkAllEmployees(options.backendUrl, options.token);
-    const liveEmployeeIds = await liveLocalWorkerEmployeeIds();
+    const liveWorkers = await liveLocalWorkerEmployeeScopes();
+    const requestedScope = requestedStartWorkScope();
     const workers = [];
     const skipped = [];
     for (const employee of employeeResolution.employees) {
-        if (liveEmployeeIds.has(employee.id)) {
+        const coveringWorker = liveWorkers.find((worker) => worker.employeeId === employee.id && startWorkScopeCoversRequest(worker.scope, requestedScope));
+        if (coveringWorker) {
             skipped.push({
                 employeeId: employee.id,
                 employeeName: employee.name ?? null,
                 employeeRole: employee.role ?? null,
+                sessionId: coveringWorker.sessionId,
                 reason: 'already-running',
             });
             continue;
@@ -5593,7 +5614,11 @@ async function spawnStartWorkAllBackground(options) {
             maxIterations: options.maxIterations,
         });
         workers.push(worker);
-        liveEmployeeIds.add(employee.id);
+        liveWorkers.push({
+            sessionId: safeString(worker.sessionId) ?? '',
+            employeeId: employee.id,
+            scope: isJson(worker.scope) ? worker.scope : requestedScope,
+        });
     }
     const warning = employeeResolution.warnings.length > 0 ? employeeResolution.warnings.join(' ') : null;
     return {
@@ -5805,16 +5830,88 @@ async function listLiveLocalWorkerProcesses() {
     }
     return workers;
 }
-async function liveLocalWorkerEmployeeIds() {
-    const employeeIds = new Set();
+function workerScope(state, config, lastHeartbeat) {
+    if (isJson(state.scope))
+        return state.scope;
+    if (isJson(config.scope))
+        return config.scope;
+    if (isJson(lastHeartbeat?.scope))
+        return lastHeartbeat.scope;
+    return {};
+}
+function scopeTargets(scope) {
+    return Array.isArray(scope.targets) ? scope.targets.filter((target) => isJson(target)) : [];
+}
+function scopeProjectMatches(target, requested) {
+    const requestedRepo = safeString(requested.repoPath);
+    const requestedProjectId = safeString(requested.projectId);
+    const requestedProjectUuid = safeString(requested.projectUuid);
+    const requestedProductLineId = safeString(requested.productLineId);
+    const requestedProductLineUuid = safeString(requested.productLineUuid);
+    const targetRepo = safeString(target.repoPath);
+    const targetProjectId = safeString(target.projectId);
+    const targetProjectUuid = safeString(target.projectUuid);
+    const targetProductLineId = safeString(target.productLineId);
+    const targetProductLineUuid = safeString(target.productLineUuid);
+    if (requestedRepo && targetRepo && path.resolve(targetRepo) === path.resolve(requestedRepo))
+        return true;
+    if (requestedProjectId && (requestedProjectId === targetProjectId || requestedProjectId === targetProjectUuid))
+        return true;
+    if (requestedProjectUuid && requestedProjectUuid === targetProjectUuid)
+        return true;
+    if (requestedProductLineId && requestedProductLineId !== targetProductLineId && requestedProductLineId !== targetProductLineUuid)
+        return false;
+    if (requestedProductLineUuid && requestedProductLineUuid !== targetProductLineUuid)
+        return false;
+    return !requestedRepo && !requestedProjectId && !requestedProjectUuid;
+}
+function workspaceScopeCoversRequest(existing, requested) {
+    const requestedProductLineId = safeString(requested.productLineId);
+    const requestedProductLineUuid = safeString(requested.productLineUuid);
+    const existingProductLineId = safeString(existing.productLineId);
+    const existingProductLineUuid = safeString(existing.productLineUuid);
+    if (!requestedProductLineId && !requestedProductLineUuid) {
+        return !existingProductLineId && !existingProductLineUuid;
+    }
+    if (!existingProductLineId && !existingProductLineUuid)
+        return true;
+    if (requestedProductLineId && (requestedProductLineId === existingProductLineId || requestedProductLineId === existingProductLineUuid))
+        return true;
+    if (requestedProductLineUuid && requestedProductLineUuid === existingProductLineUuid)
+        return true;
+    const targets = scopeTargets(existing);
+    return targets.some((target) => scopeProjectMatches(target, requested));
+}
+function startWorkScopeCoversRequest(existing, requested) {
+    const existingType = safeString(existing.type);
+    const requestedType = safeString(requested.type);
+    const hasExistingScopeDetail = Boolean(existingType || safeString(existing.repoPath) || safeString(existing.projectId) || safeString(existing.projectUuid) || safeString(existing.productLineId) || safeString(existing.productLineUuid) || scopeTargets(existing).length > 0);
+    if (!hasExistingScopeDetail)
+        return true;
+    if (requestedType === 'workspace') {
+        return existingType === 'workspace' && workspaceScopeCoversRequest(existing, requested);
+    }
+    if (requestedType === 'project') {
+        if (existingType === 'workspace')
+            return workspaceScopeCoversRequest(existing, requested);
+        if (existingType === 'project') {
+            if (scopeProjectMatches(existing, requested))
+                return true;
+            return scopeTargets(existing).some((target) => scopeProjectMatches(target, requested));
+        }
+    }
+    return false;
+}
+async function liveLocalWorkerEmployeeScopes() {
+    const employeeWorkers = [];
     const workers = await listLiveLocalWorkerProcesses();
     for (const worker of workers) {
         const lastHeartbeat = await readJsonFile(path.join(worker.sessionDir, 'last-heartbeat.json'), {});
         const employeeId = workerEmployeeId(worker.state, worker.config, lastHeartbeat);
         if (employeeId)
-            employeeIds.add(employeeId);
+            employeeWorkers.push({ sessionId: worker.sessionId, employeeId, scope: workerScope(worker.state, worker.config, lastHeartbeat) });
     }
-    return employeeIds;
+    return employeeWorkers;
 }
 function summarizeStopWorker(worker) {
     return {
@@ -6659,6 +6756,24 @@ function poolSeedReviewContext(seed) {
     }
     return Object.keys(context).length > 0 ? context : null;
 }
+function reviewArtifactForCandidate(artifact, candidate) {
+    const documentId = safeString(candidate.documentId)
+        ?? safeString(candidate.sourceArtifactId)
+        ?? poolSeedDocumentId(candidate);
+    const sourceId = documentId
+        ?? safeString(candidate.sourceId)
+        ?? safeString(candidate.id)
+        ?? safeString(candidate.workItemId);
+    return {
+        ...artifact,
+        ...(sourceId ? { sourceId } : {}),
+        ...(documentId ? {
+            sourceArtifactId: documentId,
+            parentDocumentId: documentId,
+            derivedFromDocumentId: documentId,
+        } : {}),
+    };
+}
 function methodologyPromptBlock(methodology) {
     if (!methodology.injected) {
         return [
@@ -6784,7 +6899,8 @@ async function convertPoolSeedWithAgent(agent, repoPath, seed, options = {}) {
     try {
         const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodology), options);
         const artifact = normalizePoolArtifact(pool, output);
-        const submit = await submitPoolArtifact(pool, repoPath, artifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
+        const submitArtifact = reviewArtifactForCandidate(artifact, seed);
+        const submit = await submitPoolArtifact(pool, repoPath, submitArtifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
         const handled = await markReviewWorkItemHandled(repoPath, seed, submit);
         const handledWarning = isJson(handled) ? safeString(handled.warning) : null;
         return {
