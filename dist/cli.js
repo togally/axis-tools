@@ -363,6 +363,9 @@ async function readProductLineBindingWithPath(rootPath) {
     }
     return null;
 }
+async function readCurrentProductLineBinding() {
+    return readProductLineBindingWithPath(process.cwd());
+}
 function inferPhase(eventName, toolName) {
     if (eventName === 'SessionStart')
         return 'starting';
@@ -3550,11 +3553,157 @@ async function resolveStartWorkEmployeeId(backendUrl, tokenHint, agentHint) {
     }
     return null;
 }
+function productLineBindingToProjectBinding(rootPath, binding) {
+    const owner = binding.owner ?? binding.account ?? binding.user?.account ?? null;
+    const projectBinding = {
+        backendUrl: binding.backendUrl,
+        mcpUrl: binding.mcpUrl,
+        token: binding.token,
+        key: binding.key,
+        session: binding.session,
+        account: binding.account,
+        user: binding.user,
+        productLineUuid: binding.productLineUuid,
+        projectUuid: null,
+        productLineId: binding.productLineId,
+        projectId: null,
+        productLineName: binding.productLineName,
+        projectName: null,
+        owner,
+        repo: rootPath,
+        selectedAgent: binding.selectedAgent,
+        skillPath: binding.skillPath,
+        agentSkillPath: binding.agentSkillPath,
+        updatedAt: binding.updatedAt,
+    };
+    return projectBinding;
+}
+function productLineLoginSession(binding) {
+    return {
+        token: binding.token,
+        key: binding.key,
+        session: binding.session,
+        user: binding.user ?? { account: binding.account },
+    };
+}
+function projectBindingWithProductLineFallback(binding, productLine) {
+    return {
+        ...binding,
+        backendUrl: binding.backendUrl || productLine.backendUrl,
+        mcpUrl: binding.mcpUrl ?? productLine.mcpUrl,
+        token: safeString(binding.token) ?? productLine.token,
+        key: safeString(binding.key) ?? productLine.key,
+        session: safeString(binding.session) ?? productLine.session,
+        account: safeString(binding.account) ?? productLine.account,
+        user: binding.user ?? productLine.user,
+        owner: binding.owner ?? productLine.owner ?? productLine.account ?? productLine.user?.account ?? null,
+        productLineUuid: binding.productLineUuid ?? productLine.productLineUuid,
+        productLineId: binding.productLineId ?? productLine.productLineId,
+        productLineName: binding.productLineName ?? productLine.productLineName,
+    };
+}
+function projectBindingBelongsToProductLine(binding, productLine) {
+    if (normalizeBackendUrl(binding.backendUrl) !== normalizeBackendUrl(productLine.backendUrl))
+        return false;
+    const projectProductLineId = safeString(binding.productLineId);
+    const projectProductLineUuid = safeString(binding.productLineUuid);
+    const rootProductLineId = safeString(productLine.productLineId);
+    const rootProductLineUuid = safeString(productLine.productLineUuid);
+    if (projectProductLineId && rootProductLineId && projectProductLineId === rootProductLineId)
+        return true;
+    if (projectProductLineId && rootProductLineUuid && projectProductLineId === rootProductLineUuid)
+        return true;
+    if (projectProductLineUuid && rootProductLineUuid && projectProductLineUuid === rootProductLineUuid)
+        return true;
+    if (projectProductLineUuid && rootProductLineId && projectProductLineUuid === rootProductLineId)
+        return true;
+    return !projectProductLineId && !projectProductLineUuid;
+}
+function productLineFromBinding(binding) {
+    return {
+        id: binding.productLineId,
+        uuid: binding.productLineUuid,
+        name: binding.productLineName,
+        status: 'active',
+    };
+}
+function projectModuleFromBinding(repoPath, binding) {
+    const projectId = projectApiId(binding) ?? path.basename(repoPath);
+    return {
+        id: projectId,
+        uuid: binding.projectUuid ?? null,
+        productId: binding.productLineId ?? binding.productLineUuid ?? null,
+        projectId,
+        name: binding.projectName ?? path.basename(repoPath),
+        status: 'active',
+        repoPath,
+        githubRepo: binding.githubRepo,
+        sourceRepo: binding.sourceRepo,
+        repositoryUrl: binding.repositoryUrl,
+        gitUrl: binding.gitUrl,
+        remoteUrl: binding.remoteUrl,
+    };
+}
+async function resolveProductLineWorkspaceForWorker(productLine) {
+    const binding = productLine.binding;
+    const backendUrl = normalizeBackendUrl(binding.backendUrl);
+    const account = binding.account ?? binding.user?.account ?? 'unknown';
+    const login = productLineLoginSession(binding);
+    const warnings = [];
+    const discovery = await discoverPoolSeedBindings(productLine.rootPath);
+    if (discovery.capped) {
+        warnings.push(`Product-line binding discovery was capped after scanning ${discovery.scannedDirs} directories.`);
+    }
+    const product = productLineFromBinding(binding);
+    const projects = [];
+    for (const candidate of discovery.projects) {
+        if (!projectBindingBelongsToProductLine(candidate.binding, binding))
+            continue;
+        const projectBinding = projectBindingWithProductLineFallback(candidate.binding, binding);
+        if (!projectBindingMatchesStartWorkFilters(projectBinding))
+            continue;
+        if (!projectApiId(projectBinding)) {
+            warnings.push(`Project binding at ${candidate.repoPath} has no projectId/projectUuid; worker cannot claim WAIT_CODE work.`);
+            continue;
+        }
+        const project = projectModuleFromBinding(candidate.repoPath, projectBinding);
+        projects.push({
+            workspaceRoot: productLine.rootPath,
+            product,
+            project,
+            repoPath: candidate.repoPath,
+            binding: projectBinding,
+            materialized: true,
+            repoUrl: explicitCloneAddress(project),
+            syncStatus: 'local-binding',
+            warning: null,
+        });
+    }
+    if (projects.length === 0) {
+        warnings.push(`No AxisNode project bindings under product line ${productLine.rootPath} matched the requested start-work scope.`);
+    }
+    return {
+        workspaceRoot: productLine.rootPath,
+        backendUrl,
+        account,
+        login,
+        projects,
+        warnings,
+        catalogPath: axisWorkspaceCatalogPath(axisHomeDir()),
+    };
+}
 async function startWorkBackendHint(repoPath) {
     if (repoPath) {
         const binding = await readProjectBinding(repoPath);
         if (binding?.backendUrl)
             return { backendUrl: normalizeBackendUrl(binding.backendUrl), token: safeString(binding.token) };
+    }
+    const productLine = await readCurrentProductLineBinding();
+    if (productLine?.binding.backendUrl) {
+        return {
+            backendUrl: normalizeBackendUrl(productLine.binding.backendUrl),
+            token: safeString(productLine.binding.token),
+        };
     }
     const explicitBackendUrl = getArg('--backend-url');
     if (explicitBackendUrl)
@@ -3954,6 +4103,10 @@ async function resolveStartWorkAgent(repoPath) {
         if (boundAgent)
             return boundAgent;
     }
+    const productLine = await readCurrentProductLineBinding();
+    const productLineAgent = normalizeConfiguredStartWorkAgent(productLine?.binding.selectedAgent);
+    if (productLineAgent)
+        return productLineAgent;
     const config = await readGlobalOrbitConfig();
     const configuredAgent = normalizeConfiguredStartWorkAgent(config.selectedAgent);
     if (configuredAgent)
@@ -4177,6 +4330,10 @@ async function inferStartWorkHeartbeatTarget(repoPath) {
         const binding = await readProjectBinding(repoPath);
         return binding ? startWorkHeartbeatTargetFromBinding(repoPath, binding) : null;
     }
+    const productLine = await readCurrentProductLineBinding();
+    if (productLine) {
+        return startWorkHeartbeatTargetFromBinding(productLine.rootPath, productLineBindingToProjectBinding(productLine.rootPath, productLine.binding));
+    }
     const config = await readGlobalOrbitConfig();
     const backendUrl = normalizeBackendUrl(getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl());
     const cached = await cachedLoginSession(backendUrl);
@@ -4264,6 +4421,14 @@ async function resolveStartWorkTargets() {
             return { targets: [], warnings: ['Project binding has no projectId/projectUuid; worker cannot claim WAIT_CODE work.'] };
         }
         return { targets: [target], warnings: [] };
+    }
+    const productLine = await readCurrentProductLineBinding();
+    if (productLine) {
+        const workspace = await resolveProductLineWorkspaceForWorker(productLine);
+        const targets = workspace.projects
+            .map((project) => startWorkTargetFromBinding(project.repoPath, project.binding))
+            .filter((target) => Boolean(target));
+        return { targets, warnings: workspace.warnings, workspace };
     }
     const workspace = await resolveAxisWorkspaceForWorker();
     const targets = workspace.projects

@@ -1559,6 +1559,77 @@ await withTempDir(async (dir) => {
   });
 });
 
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const binDir = path.join(dir, 'bin');
+    const productRoot = path.join(dir, 'hermes');
+    const project = path.join(productRoot, 'hermes-console');
+
+    await writeFakeCodex(binDir);
+    await writeProductLineBinding(productRoot, backendUrl, { selectedAgent: 'codex' });
+    await writeProjectBinding(project, backendUrl, { selectedAgent: 'codex' });
+
+    const result = await run([
+      'start-work',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      cwd: productRoot,
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'start-work-all');
+    assert.equal(payload.employeeCount, 1);
+    assert.equal(payload.workerCount, 1);
+    assert.equal(payload.skippedCount, 0);
+    assert.equal(payload.workers[0].employeeId, 'emp_product_root');
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees' && entry.authorization === 'Bearer orbit-dev-token'));
+
+    const worker = payload.workers[0];
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && isProcessAlive(worker.pid)) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(isProcessAlive(worker.pid), false);
+
+    const sessionDir = path.join(axisHome, 'workers', worker.sessionId);
+    const workerState = JSON.parse(await readFile(path.join(sessionDir, 'state.json'), 'utf8'));
+    const workerLog = await readFile(path.join(sessionDir, 'worker.log'), 'utf8');
+    assert.notEqual(workerState.status, 'reconnecting');
+    assert.equal(workerState.stopReason, 'max-iterations');
+    assert.equal(workerState.scope.targets[0].repoPath, project);
+    assert.equal(workerState.scope.targets[0].productLineId, 'pl_2');
+    assert.doesNotMatch(workerLog, /Target resolution failed|Please login|请先登录/);
+  }, {
+    workItems: [],
+    employeeList: [
+      { id: 'emp_product_root', name: 'Product Root', status: 'active', role: 'product' },
+    ],
+    employees: {
+      emp_product_root: {
+        role: 'product',
+        documents: {
+          soul: '# Soul\n\nProduct-line scoped worker.\n',
+          skill: '# Skill\n\nReview product-line work.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
 {
   const result = await run(['stop-work', '--help'], { timeout: 2000 });
   assert.match(result.stdout, /axis stop-work/);
