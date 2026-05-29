@@ -1345,6 +1345,97 @@ await withTempDir(async (dir) => {
   assert.equal(result.stderr, '');
 }
 
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const liveSession = 'axis-live-start-work-all-skip';
+    const live = spawnFakeLiveWorker(liveSession);
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeWorkerFixture(axisHome, liveSession, {
+      pid: live.pid,
+      status: 'polling',
+      scope: { employeeId: 'emp_all_development' },
+    }, {
+      argv: ['start-work', '--foreground', '--worker-session', liveSession],
+      scope: { employeeId: 'emp_all_development' },
+    });
+
+    try {
+      const result = await run([
+        'start-work',
+        '--repo',
+        repo,
+        '--interval',
+        '0',
+        '--iterations',
+        '1',
+        '--json',
+      ], {
+        timeout: 5000,
+        env: {
+          HOME: home,
+        },
+      });
+
+      const payload = JSON.parse(result.stdout);
+      assert.equal(payload.ok, true);
+      assert.equal(payload.mode, 'start-work-all');
+      assert.equal(payload.background, true);
+      assert.equal(payload.employeeCount, 2);
+      assert.equal(payload.workerCount, 1);
+      assert.equal(payload.skippedCount, 1);
+      assert.deepEqual(payload.workers.map((worker) => worker.employeeId), ['emp_all_product']);
+      assert.deepEqual(payload.skipped.map((worker) => worker.employeeId), ['emp_all_development']);
+      assert.equal(payload.skipped[0].reason, 'already-running');
+      assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees'));
+      assert.ok(!payload.workers.some((worker) => worker.employeeId === 'emp_all_archived'));
+
+      for (const worker of payload.workers) {
+        const config = JSON.parse(await readFile(path.join(home, '.axis', 'workers', worker.sessionId, 'config.json'), 'utf8'));
+        assert.equal(config.scope.employeeId, worker.employeeId);
+        assert.equal(config.maxIterations, 1);
+      }
+
+      const deadline = Date.now() + 3000;
+      while (Date.now() < deadline && payload.workers.some((worker) => isProcessAlive(worker.pid))) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.equal(payload.workers.some((worker) => isProcessAlive(worker.pid)), false);
+    } finally {
+      live.kill('SIGTERM');
+      await waitForChildExit(live, liveSession);
+    }
+  }, {
+    workItems: [],
+    employeeList: [
+      { id: 'emp_all_development', name: 'Development', status: 'active', role: 'development' },
+      { id: 'emp_all_product', name: 'Product', status: 'active', role: 'product' },
+      { id: 'emp_all_archived', name: 'Archived', status: 'archived', role: 'qa' },
+    ],
+    employees: {
+      emp_all_development: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nDevelopment engineer.\n',
+          skill: '# Skill\n\nImplementation.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+      emp_all_product: {
+        role: 'product',
+        documents: {
+          soul: '# Soul\n\nProduct manager.\n',
+          skill: '# Skill\n\nReview intake.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
 {
   const result = await run(['stop-work', '--help'], { timeout: 2000 });
   assert.match(result.stdout, /axis stop-work/);
@@ -2110,6 +2201,89 @@ await withTempDir(async (dir) => {
     assert.equal(prepare.projectContext.documents.length, 1);
     assert.equal(prepare.projectContext.workItems.length, 1);
     assert.doesNotMatch(result.stdout, /orbit-dev-token|orbit-dev-key|orbit-dev-session/);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_product_bug_review';
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-product-bug-review-prompts.txt');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--employee-id',
+      employeeId,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.ready, 1);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 1);
+    assert.equal(state.claims.length, 0);
+    assert.equal(state.poolDocuments, 1);
+    assert.ok(state.workItemUpdates.some((entry) => entry.id === 'wi-product-bug' && entry.payload.status === 'WAIT_USER_CONFIRM'));
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'executed');
+    assert.equal(projectResult.workItemId, 'wi-product-bug');
+    assert.equal(projectResult.selection.selectedWorkItemId, 'wi-product-bug');
+    assert.equal(projectResult.selection.source, 'fallback');
+    assert.match(projectResult.selection.reason, /review-stage|产品/);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /employee\.role: product/);
+    assert.match(prompts, /多位员工作时心跳仅更新了第一个/);
+  }, {
+    poolSeeds: [],
+    documents: [],
+    workItems: [
+      {
+        id: 'wi-product-bug',
+        title: '多位员工作时心跳仅更新了第一个',
+        type: 'bug',
+        pool: 'bug',
+        status: 'NEW',
+        notes: '心跳停止更新后员工状态仍是 active',
+        sourceArtifactId: 'doc-product-bug',
+      },
+    ],
+    employees: {
+      emp_product_bug_review: {
+        role: 'product',
+        documents: {
+          soul: '# Soul\n\nProduct manager responsible for intake and review.\n',
+          skill: '# Skill\n\nClarifies scope and acceptance criteria before user confirmation.\n',
+          memory: '# Memory\n\nOwns review-stage pool inputs.\n',
+        },
+      },
+    },
   });
 });
 
@@ -3550,6 +3724,8 @@ await withTempDir(async (dir) => {
       repo,
       '--agent',
       'codex',
+      '--employee-id',
+      'emp_background_single',
       '--heartbeat-interval',
       '1',
       '--interval',

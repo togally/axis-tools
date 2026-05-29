@@ -43,9 +43,9 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
 - `axis project show`
   - 查看当前 repo 的 AxisNode 绑定
 - `axis start-work`
-  - 新的员工执行 worker；默认后台启动，立即返回 session id、pid 和日志路径
+  - 新的员工执行 worker；默认后台启动所有 active 员工，已在本机运行的员工会跳过
   - 读取 Hub 上的 `employee.role` + `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，并按员工职责选择对应队列：产品扫 `NEW`/`WAIT_REVIEW`，架构/美工扫 review+coding，开发/测试/运维扫 `WAIT_CODE`，再只领取所选任务执行
-  - 支持 `--agent codex` 和 `--agent claude-code`，也可用 `--foreground` 在当前终端调试
+  - 支持 `--agent codex` 和 `--agent claude-code`；用 `--employee-id` 或 `--foreground` 做单员工调试
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
   - `work-review` 持续运行 review/refine worker，把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems
@@ -209,7 +209,7 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis start-work` 是新的员工执行 worker。它默认从后台启动一个本地 worker session，立即返回 `sessionId`、`pid` 和日志路径；worker 会持续向 Axis Hub 发送 heartbeat。默认情况下，`axis start-work` 会使用 `axis create-employee` 创建并记录的当前本地员工；也可以用 `--employee-id` 显式覆盖。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 作为 Employee Context，再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
+`axis start-work` 是新的员工执行 worker。它默认从后台为当前 backend 上所有 active 员工启动本地 worker session，已在本机运行的员工会跳过；返回结果会列出 started / skipped 的员工、session id、pid 和日志路径。每个 worker 会持续向 Axis Hub 发送 heartbeat。用 `--employee-id <id>` 可以显式只启动一个员工；用 `--foreground` 可以在当前终端跑单员工 debug。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 作为 Employee Context，再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
 
 新电脑或新环境的最短路径：
 
@@ -254,14 +254,14 @@ axis start-work --project-id <id> --product-line-id <id>
 `axis start-work` 支持：
 
 - `--agent <codex|claude-code|claude>`：选择 Agent runtime；未传时沿用项目/全局 `selectedAgent`，再自动检测本机 `codex` 或 `claude`。
-- `--employee-id <id>`：显式覆盖当前本地员工；未传时优先使用 `AXIS_EMPLOYEE_ID`，再使用当前/default employee，最后在本地只有一个员工配置时使用它。
-- `--foreground`：不 fork 后台进程，在当前终端运行和输出日志。
+- `--employee-id <id>`：显式只启动这个员工；未传且非前台模式时默认启动所有 active 员工。`AXIS_EMPLOYEE_ID` 仍可用于脚本化单员工启动。
+- `--foreground`：不 fork 后台进程，在当前终端运行和输出日志；用于单员工调试。
 - `--interval <seconds>`：`WAIT_CODE` 队列轮询间隔；默认 10 秒。
 - `--heartbeat-interval <seconds>`：发往 Hub 的 worker heartbeat 间隔；默认 30 秒，失败只记录 warning 并继续重试。
 - `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定。
 - `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
 - `--product-line-id <id>` / `--product-line-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问产品线。
-- `--json`：返回机器可读输出；后台启动会包含 `sessionId`、`pid`、`agent`、`heartbeatIntervalSeconds`、`scope`、`logPath`，前台执行会额外包含 `iterations[]`、`summary` 和 `stopReason`。
+- `--json`：返回机器可读输出；默认后台启动会包含 `workers[]`、`skipped[]`、`workerCount` 和 `skippedCount`，单员工后台启动会包含 `sessionId`、`pid`、`agent`、`heartbeatIntervalSeconds`、`scope`、`logPath`，前台执行会额外包含 `iterations[]`、`summary` 和 `stopReason`。
 
 `start-work` 的执行语义：
 

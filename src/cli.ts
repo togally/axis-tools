@@ -407,6 +407,7 @@ interface StartWorkRemoteEmployee {
   name?: string | null;
   status?: string | null;
   role?: string | null;
+  agent?: string | null;
   active?: boolean;
   archived?: boolean;
   deleted?: boolean;
@@ -523,7 +524,7 @@ function printUsage(): void {
 }
 
 function printStartWorkUsage(): void {
-  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts a detached background worker and returns the worker session id, pid, agent, scope, and log path immediately. By default, the worker uses the current local employee created by axis create-employee. With a resolved or explicit employee id, the worker reads that employee's remote Hub soul.md / skill.md / memory.md plus structured employee.role, probes role-appropriate WorkItem queues (product uses NEW/WAIT_REVIEW; architecture/design use review+coding; development/qa/devops use WAIT_CODE), asks the agent to choose the best matching WorkItem for that employee's responsibilities, then claims only the selected item.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Override the current local employee id for worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run in this terminal and stream logs for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between role-aware queue polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --heartbeat-interval 30\n`);
+  console.log(`axis start-work\n\nUsage:\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n\nDefault behavior:\n  Starts detached background workers for all active Axis employees on the current backend, skipping employees that already have a verified live local worker. Each worker reads that employee's remote Hub soul.md / skill.md / memory.md plus structured employee.role, probes role-appropriate WorkItem queues (product uses NEW/WAIT_REVIEW; architecture/design use review+coding; development/qa/devops use WAIT_CODE), asks the agent to choose the best matching WorkItem for that employee's responsibilities, then claims only the selected item. Use --employee-id to start one employee explicitly, or --foreground for a single-employee debug run.\n\nFlags:\n  --agent <codex|claude-code|claude>\n                                   Agent runtime. Defaults to configured selectedAgent, then local codex/claude detection.\n  --employee-id <id>               Start only this employee; also overrides worker scope, prompts, claims, heartbeats, and remote Hub employee context.\n  --foreground                     Run one worker in this terminal for debugging\n  --repo <path>                    Narrow to one bound repo\n  --project-id <id>, --project-uuid <uuid>\n                                   Narrow workspace mode to one accessible project\n  --product-line-id <id>, --product-line-uuid <uuid>\n                                   Narrow workspace mode to one accessible product line\n  --interval <seconds>             Seconds between role-aware queue polls\n  --heartbeat-interval <seconds>   Seconds between Hub worker heartbeats; default 30\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis start-work --agent codex\n  axis start-work --employee-id emp_example\n  axis start-work --foreground --employee-id emp_example --heartbeat-interval 30\n`);
   console.log(`Responsibility categories:\n  开发/development, 测试/QA, 运维/DevOps, 架构/architecture, 产品/product, 美工/design/visual\n`);
 }
 
@@ -4066,6 +4067,7 @@ function asStartWorkRemoteEmployee(value: unknown): StartWorkRemoteEmployee | nu
     name: safeString(value.name) ?? safeString(value.displayName),
     status: safeString(value.status),
     role: safeString(value.role),
+    agent: safeString(value.agent) ?? safeString(value.agentType),
     active: value.active === true || value.isActive === true || value.enabled === true,
     archived: value.archived === true || value.isArchived === true,
     deleted: value.deleted === true || value.isDeleted === true,
@@ -4116,14 +4118,18 @@ async function persistResolvedStartWorkEmployee(employee: StartWorkRemoteEmploye
   });
 }
 
+async function fetchStartWorkRemoteEmployees(backendUrl: string, tokenHint?: string | null): Promise<StartWorkRemoteEmployee[]> {
+  const token = await tokenForStartWorkBackend(backendUrl, tokenHint);
+  const payload = await fetchOrbitJson(backendUrl, '/api/employees', token);
+  return remoteEmployeesRoot(payload)
+    .map(asStartWorkRemoteEmployee)
+    .filter((employee): employee is StartWorkRemoteEmployee => Boolean(employee));
+}
+
 async function resolveStartWorkRemoteEmployeeId(backendUrl: string | null, tokenHint?: string | null, agentHint?: string | null): Promise<string | null> {
   if (!backendUrl) return null;
   try {
-    const token = await tokenForStartWorkBackend(backendUrl, tokenHint);
-    const payload = await fetchOrbitJson(backendUrl, '/api/employees', token);
-    const employees = remoteEmployeesRoot(payload)
-      .map(asStartWorkRemoteEmployee)
-      .filter((employee): employee is StartWorkRemoteEmployee => Boolean(employee));
+    const employees = await fetchStartWorkRemoteEmployees(backendUrl, tokenHint);
     const employeeId = chooseStartWorkRemoteEmployee(employees, backendUrl);
     if (!employeeId) return null;
     const employee = employees.find((entry) => entry.id === employeeId);
@@ -4133,6 +4139,38 @@ async function resolveStartWorkRemoteEmployeeId(backendUrl: string | null, token
     if (error instanceof OrbitCliError) return null;
     return null;
   }
+}
+
+async function resolveStartWorkAllEmployees(backendUrl: string | null, tokenHint?: string | null): Promise<{ employees: StartWorkRemoteEmployee[]; warnings: string[] }> {
+  const warnings: string[] = [];
+  if (backendUrl) {
+    try {
+      const activeEmployees = (await fetchStartWorkRemoteEmployees(backendUrl, tokenHint))
+        .filter(startWorkRemoteEmployeeSelectable)
+        .filter(startWorkRemoteEmployeeActive);
+      if (activeEmployees.length > 0) return { employees: activeEmployees, warnings };
+      warnings.push(`No active remote Axis employees found at ${normalizeBackendUrl(backendUrl)}.`);
+    } catch (error) {
+      warnings.push(`Could not list remote Axis employees at ${normalizeBackendUrl(backendUrl)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  const localEmployees = await readLocalEmployees(backendUrl);
+  if (localEmployees.length > 0) {
+    return {
+      employees: localEmployees.map((employee) => ({
+        id: employee.employeeId,
+        name: employee.name ?? employee.employeeId,
+        status: 'active',
+        agent: employee.agent,
+        active: true,
+      })),
+      warnings,
+    };
+  }
+
+  warnings.push(`No local Axis employees found${backendUrl ? ` for ${normalizeBackendUrl(backendUrl)}` : ''}.`);
+  return { employees: [], warnings };
 }
 
 async function resolveStartWorkEmployeeId(backendUrl: string | null, tokenHint?: string | null, agentHint?: string | null): Promise<string | null> {
@@ -5448,12 +5486,24 @@ function fallbackStartWorkSelection(
     };
   }
 
+  const structuredRole = startWorkStructuredEmployeeRole(contextDocuments);
+  if (structuredRole === 'product') {
+    const reviewCandidate = claimable.find((candidate) => isReviewInputStatus(safeString(candidate.summary.status)));
+    if (reviewCandidate) {
+      return {
+        selectedWorkItemId: reviewCandidate.id,
+        source: 'fallback',
+        reason: `Fallback selected ${reviewCandidate.id} because structured employee.role product/产品 owns review-stage pool inputs including bugs, requirements, ideas, and suggestions. Fallback used because ${fallbackCause}.`,
+        warning: fallbackCause,
+      };
+    }
+  }
+
   const responsibilityContextDocuments = startWorkResponsibilityContextDocuments(contextDocuments);
   const contextText = responsibilityContextDocuments
     .map((document) => `${document.key}\n${document.markdown ?? document.content}`)
     .join('\n\n')
     .toLowerCase();
-  const structuredRole = startWorkStructuredEmployeeRole(contextDocuments);
   const structuredRoleGroup = structuredRole
     ? START_WORK_RESPONSIBILITY_KEYWORD_GROUPS.find((group) => group.role === structuredRole)
     : null;
@@ -5547,7 +5597,13 @@ async function selectStartWorkItem(values: {
   try {
     const output = await runPoolAgent(startWorkRunnerAgent(values.agent), values.target.repoPath, prompt, { progress: values.progress });
     const parsed = parseStartWorkSelectionOutput(output, candidateIds);
-    if (parsed.selection) return parsed.selection;
+    if (parsed.selection) {
+      if (parsed.selection.selectedWorkItemId === null) {
+        const fallback = fallbackStartWorkSelection(values.contextDocuments, values.workItems, `selection agent returned null: ${parsed.selection.reason}`);
+        if (fallback.selectedWorkItemId) return fallback;
+      }
+      return parsed.selection;
+    }
     return fallbackStartWorkSelection(values.contextDocuments, values.workItems, parsed.warning ?? 'selection agent returned an invalid decision');
   } catch (error) {
     const warning = `selection agent failed: ${error instanceof Error ? error.message : String(error)}`;
@@ -6318,9 +6374,114 @@ async function spawnStartWorkBackground(options: {
   };
 }
 
+async function spawnStartWorkBackgroundForEmployee(options: {
+  employee: StartWorkRemoteEmployee;
+  agent: StartWorkAgentChoice;
+  intervalSeconds: number;
+  heartbeatIntervalSeconds: number;
+  maxIterations: number | null;
+}): Promise<Json> {
+  const previousEmployeeId = resolvedStartWorkEmployeeId;
+  try {
+    resolvedStartWorkEmployeeId = options.employee.id;
+    const sessionId = createStartWorkSessionId(options.agent);
+    const payload = await spawnStartWorkBackground({
+      sessionId,
+      agent: options.agent,
+      intervalSeconds: options.intervalSeconds,
+      heartbeatIntervalSeconds: options.heartbeatIntervalSeconds,
+      maxIterations: options.maxIterations,
+    });
+    return {
+      ...payload,
+      employeeId: options.employee.id,
+      employeeName: options.employee.name ?? null,
+      employeeRole: options.employee.role ?? null,
+    };
+  } finally {
+    resolvedStartWorkEmployeeId = previousEmployeeId;
+  }
+}
+
+async function spawnStartWorkAllBackground(options: {
+  agent: StartWorkAgentChoice;
+  backendUrl: string | null;
+  token: string | null;
+  intervalSeconds: number;
+  heartbeatIntervalSeconds: number;
+  maxIterations: number | null;
+}): Promise<Json> {
+  const startedAt = new Date().toISOString();
+  const employeeResolution = await resolveStartWorkAllEmployees(options.backendUrl, options.token);
+  const liveEmployeeIds = await liveLocalWorkerEmployeeIds();
+  const workers: Json[] = [];
+  const skipped: Json[] = [];
+
+  for (const employee of employeeResolution.employees) {
+    if (liveEmployeeIds.has(employee.id)) {
+      skipped.push({
+        employeeId: employee.id,
+        employeeName: employee.name ?? null,
+        employeeRole: employee.role ?? null,
+        reason: 'already-running',
+      });
+      continue;
+    }
+
+    const worker = await spawnStartWorkBackgroundForEmployee({
+      employee,
+      agent: options.agent,
+      intervalSeconds: options.intervalSeconds,
+      heartbeatIntervalSeconds: options.heartbeatIntervalSeconds,
+      maxIterations: options.maxIterations,
+    });
+    workers.push(worker);
+    liveEmployeeIds.add(employee.id);
+  }
+
+  const warning = employeeResolution.warnings.length > 0 ? employeeResolution.warnings.join(' ') : null;
+  return {
+    ok: true,
+    mode: 'start-work-all',
+    background: true,
+    agent: options.agent,
+    agentCommand: startWorkAgentCommand(options.agent),
+    cliVersion: cliVersion(),
+    intervalSeconds: options.intervalSeconds,
+    heartbeatIntervalSeconds: options.heartbeatIntervalSeconds,
+    maxIterations: options.maxIterations,
+    employeeCount: employeeResolution.employees.length,
+    workerCount: workers.length,
+    skippedCount: skipped.length,
+    workers,
+    skipped,
+    startedAt,
+    warning,
+  };
+}
+
 function printStartWorkResult(payload: Json): void {
   if (hasFlag('--json')) {
     console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  if (safeString(payload.mode) === 'start-work-all') {
+    console.log(`mode: ${payload.mode}`);
+    console.log(`agent: ${payload.agent}`);
+    console.log(`employees: ${payload.employeeCount ?? 0}`);
+    console.log(`started: ${payload.workerCount ?? 0}`);
+    console.log(`skipped: ${payload.skippedCount ?? 0}`);
+    const workers = Array.isArray(payload.workers) ? payload.workers : [];
+    for (const worker of workers) {
+      if (!isJson(worker)) continue;
+      console.log(`worker: employee=${safeString(worker.employeeId) ?? '-'} session=${safeString(worker.sessionId) ?? '-'} pid=${worker.pid ?? '-'} log=${safeString(worker.logPath) ?? '-'}`);
+    }
+    const skipped = Array.isArray(payload.skipped) ? payload.skipped : [];
+    for (const skip of skipped) {
+      if (!isJson(skip)) continue;
+      console.log(`skip: employee=${safeString(skip.employeeId) ?? '-'} reason=${safeString(skip.reason) ?? '-'}`);
+    }
+    if (safeString(payload.warning)) console.log(`warning: ${payload.warning}`);
     return;
   }
   console.log(`mode: ${payload.mode}`);
@@ -6345,11 +6506,25 @@ async function startWorkCommand(): Promise<void> {
   const repoPath = repoArg ? path.resolve(repoArg) : null;
   const agent = await resolveStartWorkAgent(repoPath);
   const backendHint = await startWorkBackendHint(repoPath);
-  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(backendHint.backendUrl, backendHint.token, agent);
   const sessionId = getArg('--worker-session') ?? createStartWorkSessionId(agent);
   const intervalSeconds = secondsArgAny(['--interval', '--sleep'], 10, 3600);
   const heartbeatIntervalSeconds = Math.max(1, secondsArgAny(['--heartbeat-interval'], 30, 3600));
   const maxIterations = workLoopMaxIterationsArg();
+  const singleEmployeeRequested = Boolean(safeString(getArg('--employee-id')) || safeString(process.env.AXIS_EMPLOYEE_ID));
+
+  if (!foreground && !singleEmployeeRequested) {
+    printStartWorkResult(await spawnStartWorkAllBackground({
+      agent,
+      backendUrl: backendHint.backendUrl,
+      token: backendHint.token,
+      intervalSeconds,
+      heartbeatIntervalSeconds,
+      maxIterations,
+    }));
+    return;
+  }
+
+  resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(backendHint.backendUrl, backendHint.token, agent);
 
   if (!foreground) {
     printStartWorkResult(await spawnStartWorkBackground({ sessionId, agent, intervalSeconds, heartbeatIntervalSeconds, maxIterations }));
@@ -6465,6 +6640,17 @@ async function listLiveLocalWorkerProcesses(): Promise<LocalWorkerProcess[]> {
     if (worker.processStatus.alive && worker.processStatus.verified) workers.push(worker);
   }
   return workers;
+}
+
+async function liveLocalWorkerEmployeeIds(): Promise<Set<string>> {
+  const employeeIds = new Set<string>();
+  const workers = await listLiveLocalWorkerProcesses();
+  for (const worker of workers) {
+    const lastHeartbeat = await readJsonFile<Json>(path.join(worker.sessionDir, 'last-heartbeat.json'), {});
+    const employeeId = workerEmployeeId(worker.state, worker.config, lastHeartbeat);
+    if (employeeId) employeeIds.add(employeeId);
+  }
+  return employeeIds;
 }
 
 function summarizeStopWorker(worker: LocalWorkerProcess): Json {
