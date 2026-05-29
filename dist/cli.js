@@ -7217,6 +7217,11 @@ function reviewDocumentIdsForHandling(candidate) {
     ].filter((entry) => Boolean(entry));
     return [...new Set(ids)];
 }
+function isPoolSeedReviewCandidate(candidate) {
+    return safeString(candidate.candidateSource) === 'pool-seed'
+        || safeString(candidate.sourceType) === 'pool-seed'
+        || safeString(candidate.source) === 'pool-seed';
+}
 async function markReviewWorkItemHandled(repoPath, candidate, submit) {
     const workItemIds = reviewWorkItemIdsForHandling(candidate);
     const documentIds = reviewDocumentIdsForHandling(candidate);
@@ -7264,17 +7269,18 @@ async function markReviewWorkItemHandled(repoPath, candidate, submit) {
     const patches = [];
     const failures = [];
     const projectId = projectApiId(binding);
+    const documentEndpoint = isPoolSeedReviewCandidate(candidate) ? 'pool-seeds' : 'documents';
     for (const documentIdValue of documentIds) {
         if (!projectId) {
             failures.push(`project binding has no projectId/projectUuid for document ${documentIdValue}`);
             continue;
         }
         try {
-            const patch = await patchOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/documents/${encodeURIComponent(documentIdValue)}`, {
+            const patch = await patchOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/${documentEndpoint}/${encodeURIComponent(documentIdValue)}`, {
                 status: LIFECYCLE_WAIT_USER_CONFIRM,
                 owner: 'axis-work-review',
             }, token);
-            patches.push({ documentId: documentIdValue, response: patch });
+            patches.push({ documentId: documentIdValue, endpoint: documentEndpoint, response: patch });
         }
         catch (error) {
             failures.push(error instanceof Error ? error.message : String(error));

@@ -826,6 +826,7 @@ async function withPoolServer(fn, options = {}) {
     poolDocumentPayloads: [],
     loginCount: 0,
     accountByToken: {},
+    poolSeedUpdates: [],
     workItemUpdates: [],
     documentUpdates: [],
     heartbeats: [],
@@ -1184,6 +1185,24 @@ async function withPoolServer(fn, options = {}) {
           kind: payload.kind,
           status: payload.status,
           url: `/projects/proj_1/pool/seeds/seed-1`,
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
+    if (req.method === 'PATCH' && req.url.startsWith('/api/projects/proj_1/pool-seeds/')) {
+      if (!requireAuth()) return;
+      const documentId = req.url.split('/').pop();
+      readJson().then((payload) => {
+        state.poolSeedUpdates.push({ id: documentId, payload });
+        if (Array.isArray(options.poolSeeds)) {
+          for (const item of options.poolSeeds) {
+            if (item.id === documentId || item.documentId === documentId) item.status = payload.status;
+          }
+        }
+        res.end(JSON.stringify({
+          document: { id: documentId, title: 'Updated pool seed', source: { type: 'requirement', stage: 'seed' }, status: payload.status },
+          items: [],
           runtime: { store: 'mock' },
         }));
       });
@@ -4201,8 +4220,9 @@ JSON
     assert.equal(payload.iterations[0].review.results[0].handled.status, 'WAIT_USER_CONFIRM');
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'requirement');
-    assert.deepEqual(state.documentUpdates.map((entry) => entry.id), ['seed-work-review']);
-    assert.deepEqual(state.documentUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.id), ['seed-work-review']);
+    assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.documentUpdates, []);
   }, {
     poolSeeds: [
       { id: 'seed-work-review', kind: 'requirement', title: 'Work review converts seed', seed: 'Convert this in work-review', status: 'NEW' },
@@ -4345,8 +4365,9 @@ JSON
     assert.equal(state.workItemUpdates[0].id, 'wi-dupe');
     assert.equal(state.workItemUpdates[0].payload.status, 'WAIT_USER_CONFIRM');
     assert.equal(state.workItemUpdates[0].payload.sourceArtifactId, 'doc-pool-1');
-    assert.deepEqual(state.documentUpdates.map((entry) => entry.id), ['doc-dupe']);
-    assert.deepEqual(state.documentUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.id), ['doc-dupe']);
+    assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.documentUpdates, []);
   }, {
     poolSeeds: [
       { id: 'doc-dupe', kind: 'requirement', title: 'Duplicate source', seed: 'Convert duplicate once', status: 'NEW' },
@@ -4788,7 +4809,8 @@ JSON
     assert.equal(payload.summary.converted, 1);
     assert.equal(payload.summary.conversions, 1);
     assert.equal(state.poolDocuments, 1);
-    assert.deepEqual(state.documentUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
+    assert.deepEqual(state.documentUpdates, []);
   }, {
     poolSeeds: [
       { id: 'seed-loop-bug', kind: 'bug', title: 'Loop bug', seed: 'Crash in loop mode', status: 'pending-confirmation' },
