@@ -540,7 +540,7 @@ async function assertGlobalConfigHasNoLocalBindingKeys(home) {
 }
 
 async function withProductServer(fn, options = {}) {
-  const state = { loginCount: 0, requests: [], accountByToken: {} };
+  const state = { loginCount: 0, loginBodies: [], requests: [], accountByToken: {} };
   const catalog = {
     products: [
       {
@@ -658,6 +658,7 @@ async function withProductServer(fn, options = {}) {
           res.end(JSON.stringify({ error: 'account and password are required' }));
           return;
         }
+        state.loginBodies.push(payload);
         state.accountByToken['orbit-dev-token'] = payload.account;
         const user = {
           id: 'orbit-dev-user',
@@ -825,11 +826,13 @@ async function withPoolServer(fn, options = {}) {
     poolSeedPayloads: [],
     poolDocumentPayloads: [],
     loginCount: 0,
+    loginBodies: [],
     accountByToken: {},
     poolSeedUpdates: [],
     workItemUpdates: [],
     documentUpdates: [],
     heartbeats: [],
+    sessionPatches: [],
     heartbeatAttempts: 0,
     claims: [],
     lifecycleActions: [],
@@ -919,6 +922,7 @@ async function withPoolServer(fn, options = {}) {
           res.end(JSON.stringify({ error: 'account and password are required' }));
           return;
         }
+        state.loginBodies.push(payload);
         state.accountByToken['orbit-dev-token'] = payload.account;
         res.end(JSON.stringify({
           token: 'orbit-dev-token',
@@ -950,6 +954,18 @@ async function withPoolServer(fn, options = {}) {
           permissions: ['products:read', 'projects:bind'],
         },
       }));
+      return;
+    }
+    if (req.method === 'PATCH' && req.url === '/api/sessions/current') {
+      if (!requireAuth()) return;
+      readJson().then((payload) => {
+        state.sessionPatches.push(payload);
+        res.end(JSON.stringify({
+          ok: true,
+          machineId: payload.machineId,
+          session: { id: 'orbit-dev-session', expiresAt: '2026-12-31T00:00:00.000Z' },
+        }));
+      });
       return;
     }
     if (req.method === 'GET' && req.url === '/api/products') {
@@ -1630,6 +1646,89 @@ await withTempDir(async (dir) => {
   });
 });
 
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const binDir = path.join(dir, 'bin');
+    const ordinaryDir = path.join(dir, 'ordinary');
+
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await mkdir(ordinaryDir, { recursive: true });
+    await writeFakeCodex(binDir);
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      selectedAgent: 'codex',
+      token: 'orbit-dev-token',
+      key: 'orbit-dev-key',
+      session: 'orbit-dev-session',
+      account: 'orbit-user',
+      user: { account: 'orbit-user' },
+    }, null, 2));
+
+    const result = await run([
+      'start-work',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      cwd: ordinaryDir,
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'start-work-all');
+    assert.equal(payload.employeeCount, 1);
+    assert.equal(payload.workerCount, 1);
+    assert.equal(payload.skippedCount, 0);
+    assert.equal(payload.workers[0].employeeId, 'emp_global_only');
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/employees' && entry.authorization === 'Bearer orbit-dev-token'));
+
+    const worker = payload.workers[0];
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && isProcessAlive(worker.pid)) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(isProcessAlive(worker.pid), false);
+
+    const sessionDir = path.join(axisHome, 'workers', worker.sessionId);
+    const workerState = JSON.parse(await readFile(path.join(sessionDir, 'state.json'), 'utf8'));
+    const workerLog = await readFile(path.join(sessionDir, 'worker.log'), 'utf8');
+    assert.notEqual(workerState.status, 'reconnecting');
+    assert.equal(workerState.stopReason, 'max-iterations');
+    assert.equal(workerState.scope.targets[0].backendUrl, backendUrl);
+    assert.match(workerState.scope.targets[0].repoPath, /Hermes.Console|Hermes Console|Hermes-Console/i);
+    assert.equal(state.sessionPatches.length, 1);
+    assert.match(state.sessionPatches[0].machineId, /^[a-f0-9]{16}$/);
+    assert.equal(state.sessionPatches[0].client, 'axis-tools');
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/products' && entry.authorization === 'Bearer orbit-dev-token'));
+    assert.doesNotMatch(workerLog, /Target resolution failed|Please login|请先登录/);
+  }, {
+    workItems: [],
+    employeeList: [
+      { id: 'emp_global_only', name: 'Global Only', status: 'active', role: 'development' },
+    ],
+    employees: {
+      emp_global_only: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nGlobal session worker.\n',
+          skill: '# Skill\n\nUse cached login from any directory.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
 {
   const result = await run(['stop-work', '--help'], { timeout: 2000 });
   assert.match(result.stdout, /axis stop-work/);
@@ -1833,6 +1932,14 @@ await withTempDir(async (dir) => {
     assert.equal(config.sessions[backendUrl].mcpUrl, undefined);
     assert.equal(config.sessions[backendUrl].token, 'orbit-dev-token');
     assert.equal(config.sessions[backendUrl].password, undefined);
+    assert.equal(state.loginBodies.length, 1);
+    assert.equal(state.loginBodies[0].account, 'orbit-user');
+    assert.equal(state.loginBodies[0].password, TEST_PASSWORD);
+    assert.match(state.loginBodies[0].machineId, /^[a-f0-9]{16}$/);
+    assert.ok(state.loginBodies[0].machineName || state.loginBodies[0].hostname);
+    assert.match(state.loginBodies[0].platform, /^(linux|darwin|win32|freebsd|openbsd|aix|sunos)-/);
+    assert.equal(state.loginBodies[0].client, 'axis-tools');
+    assert.equal(state.loginBodies[0].cliVersion, packageJson.version);
 
     await runInteractive([
       'init',

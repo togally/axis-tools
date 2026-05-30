@@ -808,7 +808,26 @@ function insufficientPermissionMessage(backendUrl) {
 }
 async function cachedLoginSession(backendUrl) {
     const config = await readGlobalOrbitConfig();
-    return asCachedLoginSession(globalSessions(config)[normalizeBackendUrl(backendUrl)]);
+    const normalizedBackendUrl = normalizeBackendUrl(backendUrl);
+    const session = asCachedLoginSession(globalSessions(config)[normalizedBackendUrl]);
+    if (session)
+        return session;
+    const legacyBackendUrl = safeString(config.backendUrl);
+    const legacyToken = safeString(config.token);
+    if (!legacyBackendUrl || !legacyToken || normalizeBackendUrl(legacyBackendUrl) !== normalizedBackendUrl) {
+        return null;
+    }
+    const legacyUser = isJson(config.user) ? config.user : {};
+    return asCachedLoginSession({
+        backendUrl: normalizedBackendUrl,
+        mcpUrl: config.mcpUrl,
+        account: safeString(config.account) ?? safeString(legacyUser.account),
+        token: legacyToken,
+        key: safeString(config.key) ?? legacyToken,
+        session: config.session,
+        user: legacyUser,
+        updatedAt: safeString(config.updatedAt) ?? new Date(0).toISOString(),
+    });
 }
 async function writeGlobalOrbitConfigObject(config) {
     const filePath = globalOrbitConfigPath();
@@ -850,9 +869,18 @@ async function requireCachedLoginSession(backendUrl, mcpUrl) {
         throw new OrbitCliError(loginRequiredMessage(backendUrl));
     }
     const user = await fetchCurrentUser(backendUrl, cached.token);
+    await syncCurrentSessionMachineMetadata(backendUrl, cached.token);
     const account = user.account ?? cached.account;
     const refreshed = await saveLoginSession(backendUrl, mcpUrl ?? cached.mcpUrl ?? undefined, account, { ...cached, user });
     return { login: refreshed, account };
+}
+async function syncCurrentSessionMachineMetadata(backendUrl, token) {
+    try {
+        await patchOrbitJson(backendUrl, '/api/sessions/current', localMachineMetadata(), token);
+    }
+    catch {
+        // Older AxisNode backends do not have this endpoint; cached token reuse should still work.
+    }
 }
 async function loginCommand() {
     const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
@@ -1103,7 +1131,7 @@ async function tokenForBinding(binding) {
     return safeString(config.token);
 }
 async function loginOrbitHub(backendUrl, account, password) {
-    const payload = await postOrbitJson(backendUrl, '/api/login', { account, password });
+    const payload = await postOrbitJson(backendUrl, '/api/login', { account, password, ...localMachineMetadata() });
     const session = asLoginSession(payload, account);
     if (!session) {
         throw new Error('AxisNode backend response for /api/login did not include token/key/user data');
@@ -4124,6 +4152,27 @@ function cliVersion() {
     }
     catch {
         return null;
+    }
+}
+function localMachineMetadata() {
+    const hostname = safeString(os.hostname()) ?? 'unknown-host';
+    const username = localUsername();
+    const platform = `${process.platform}-${process.arch}`;
+    return {
+        machineId: createHash('sha256').update([hostname, username, platform].join('\n')).digest('hex').slice(0, 16),
+        machineName: hostname,
+        hostname,
+        platform,
+        client: 'axis-tools',
+        cliVersion: cliVersion(),
+    };
+}
+function localUsername() {
+    try {
+        return safeString(os.userInfo().username) ?? '';
+    }
+    catch {
+        return safeString(process.env.USER) ?? safeString(process.env.USERNAME) ?? '';
     }
 }
 function axisWorkerRootDir() {
