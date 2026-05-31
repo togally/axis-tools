@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -776,6 +776,10 @@ function isProcessAlive(pid) {
   }
 }
 
+async function sameRealPath(left, right) {
+  return await realpath(left) === await realpath(right);
+}
+
 async function writeProductLineBinding(root, backendUrl, extra = {}) {
   await mkdir(path.join(root, '.orbit'), { recursive: true });
   await writeFile(path.join(root, '.orbit', 'product-line.json'), JSON.stringify({
@@ -1449,6 +1453,7 @@ await withTempDir(async (dir) => {
     }
   }, {
     workItems: [],
+    poolSeeds: [],
     employeeList: [
       { id: 'emp_all_development', name: 'Development', status: 'active', role: 'development' },
       { id: 'emp_all_product', name: 'Product', status: 'active', role: 'product' },
@@ -1559,6 +1564,7 @@ await withTempDir(async (dir) => {
     }
   }, {
     workItems: [],
+    poolSeeds: [],
     employeeList: [
       { id: 'emp_scope_product', name: 'Product', status: 'active', role: 'product' },
     ],
@@ -1625,7 +1631,7 @@ await withTempDir(async (dir) => {
     const workerLog = await readFile(path.join(sessionDir, 'worker.log'), 'utf8');
     assert.notEqual(workerState.status, 'reconnecting');
     assert.equal(workerState.stopReason, 'max-iterations');
-    assert.equal(workerState.scope.targets[0].repoPath, project);
+    assert.equal(await sameRealPath(workerState.scope.targets[0].repoPath, project), true);
     assert.equal(workerState.scope.targets[0].productLineId, 'pl_2');
     assert.doesNotMatch(workerLog, /Target resolution failed|Please login|请先登录/);
   }, {
@@ -1699,7 +1705,10 @@ await withTempDir(async (dir) => {
     const gitCheck = await execFileAsync('git', ['-C', project, 'rev-parse', '--is-inside-work-tree']);
     const parentEntries = await readdir(productRoot);
 
-    assert.ok(workerStates.every((entry) => entry.state.scope.targets.some((target) => target.repoPath === project)));
+    for (const entry of workerStates) {
+      const matches = await Promise.all(entry.state.scope.targets.map((target) => sameRealPath(target.repoPath, project)));
+      assert.ok(matches.some(Boolean));
+    }
     assert.equal(gitCheck.stdout.trim(), 'true');
     assert.ok(parentEntries.some((entry) => entry.startsWith('hermes-console.axis-non-git-')));
     assert.match(await readFile(path.join(project, 'README.md'), 'utf8'), /Fixture/);
@@ -1968,7 +1977,7 @@ await withTempDir(async (dir) => {
     const gitCheck = await execFileAsync('git', ['-C', projectPath, 'rev-parse', '--is-inside-work-tree']);
     const parentEntries = await readdir(path.dirname(cachedProjectPath));
 
-    assert.equal(projectPath, cachedProjectPath);
+    assert.equal(await sameRealPath(projectPath, cachedProjectPath), true);
     assert.equal(gitCheck.stdout.trim(), 'true');
     assert.ok(parentEntries.some((entry) => entry.startsWith('hermes-console.axis-non-git-')));
     assert.match(await readFile(path.join(projectPath, 'README.md'), 'utf8'), /Fixture/);
@@ -2177,6 +2186,42 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'repo');
+    const home = path.join(dir, 'home');
+
+    await runInteractive(['login', '--backend-url', backendUrl], `orbit-user\n${TEST_PASSWORD}\n`, { env: { HOME: home } });
+    await run([
+      'project',
+      'bind',
+      '--repo',
+      repo,
+      '--backend-url',
+      backendUrl,
+      '--product-line-id',
+      'pl_2',
+      '--product-line-uuid',
+      '8f938fdc-f2be-44d6-8c48-91bc9156836d',
+      '--project-id',
+      'proj_1',
+      '--project-uuid',
+      '71533d74-80e3-4e7e-adbb-69c42a25db0c',
+      '--json',
+    ], { env: { HOME: home } });
+
+    const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
+    assert.equal(globalConfig.sessions[backendUrl].token, 'orbit-dev-token');
+
+    const result = await run(['axis-req', 'Submit after non-interactive bind', '--repo', repo, '--json'], { env: { HOME: home } });
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.mode, 'hub-seed');
+    assert.equal(payload.id, 'seed-1');
+    assert.equal(state.poolSeeds, 1);
+    assert.equal(state.requests.some((entry) => entry.method === 'POST' && entry.url === '/api/projects/proj_1/pool-seeds' && entry.authorization === 'Bearer orbit-dev-token'), true);
+  }, { poolSeeds: [] });
+});
+
+await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl, state) => {
     const repoOne = path.join(dir, 'repo-one');
     const repoTwo = path.join(dir, 'repo-two');
@@ -2204,6 +2249,7 @@ await withTempDir(async (dir) => {
     assert.match(state.loginBodies[0].platform, /^(linux|darwin|win32|freebsd|openbsd|aix|sunos)-/);
     assert.equal(state.loginBodies[0].client, 'axis-tools');
     assert.equal(state.loginBodies[0].cliVersion, packageJson.version);
+    assert.equal(typeof state.loginBodies[0].ipAddress, 'string');
 
     await runInteractive([
       'init',
@@ -2385,7 +2431,7 @@ await withTempDir(async (dir) => {
     assert.equal(rootConfig.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
     assert.equal(rootConfig.productLineId, 'pl_2');
     assert.equal(rootConfig.productLineName, 'Hermes');
-    assert.equal(rootConfig.rootPath, root);
+    assert.equal(await sameRealPath(rootConfig.rootPath, root), true);
 
     const consoleProject = JSON.parse(await readFile(path.join(root, 'console', '.orbit', 'project.json'), 'utf8'));
     assert.equal(consoleProject.backendUrl, backendUrl);
@@ -2396,7 +2442,7 @@ await withTempDir(async (dir) => {
     assert.equal(consoleProject.productLineUuid, '8f938fdc-f2be-44d6-8c48-91bc9156836d');
     assert.equal(consoleProject.projectUuid, '71533d74-80e3-4e7e-adbb-69c42a25db0c');
     assert.equal(consoleProject.projectName, 'Hermes Console');
-    assert.equal(consoleProject.repo, path.join(root, 'console'));
+    assert.equal(await sameRealPath(consoleProject.repo, path.join(root, 'console')), true);
     assert.equal(consoleProject.owner, 'product-owner');
     assert.equal(consoleProject.selectedAgent, undefined);
     assert.equal(consoleProject.skillPath, undefined);
@@ -2420,10 +2466,10 @@ await withTempDir(async (dir) => {
     ], '2\n2\n1\n', { cwd: root, env: { HOME: home, USER: 'system-user' } });
 
     const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
-    assert.equal(rootConfig.rootPath, root);
+    assert.equal(await sameRealPath(rootConfig.rootPath, root), true);
 
     const consoleProject = JSON.parse(await readFile(path.join(root, 'console', '.orbit', 'project.json'), 'utf8'));
-    assert.equal(consoleProject.repo, path.join(root, 'console'));
+    assert.equal(await sameRealPath(consoleProject.repo, path.join(root, 'console')), true);
     assert.equal(consoleProject.owner, 'orbit-account');
     assert.equal(consoleProject.backendUrl, backendUrl);
   });
@@ -2445,7 +2491,7 @@ await withTempDir(async (dir) => {
     ], '2\n', { env: { HOME: home } });
 
     const rootConfig = JSON.parse(await readFile(path.join(root, '.orbit', 'product-line.json'), 'utf8'));
-    assert.equal(rootConfig.rootPath, root);
+    assert.equal(await sameRealPath(rootConfig.rootPath, root), true);
   });
 });
 
@@ -3115,6 +3161,9 @@ await withTempDir(async (dir) => {
     assert.equal(state.heartbeats[0].sessionId, payload.sessionId);
     assert.equal(state.heartbeats[0].agentType, 'codex');
     assert.equal(state.heartbeats[0].timeZone, 'Asia/Shanghai');
+    assert.match(state.heartbeats[0].machineId, /^[a-f0-9]{16}$/);
+    assert.equal(state.heartbeats[0].client, 'axis-tools');
+    assert.equal(typeof state.heartbeats[0].ipAddress, 'string');
     assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url.startsWith('/api/agent-context?')));
     assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
     assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-start-work']);
@@ -3235,7 +3284,7 @@ await withTempDir(async (dir) => {
     assert.ok(firstHeartbeatIndex < contextIndex, `heartbeat should precede context preload: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
     assert.ok(firstHeartbeatIndex < workItemsIndex, `heartbeat should precede work selection: ${JSON.stringify(state.requests.map((entry) => entry.url))}`);
     assert.equal(state.heartbeats[0].status, 'starting');
-    assert.equal(state.heartbeats[0].scope.repoPath, repo);
+    assert.equal(await sameRealPath(state.heartbeats[0].scope.repoPath, repo), true);
   }, {
     agentContextDelayMs: 50,
     workItems: [
@@ -4332,6 +4381,82 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const employeeId = 'emp_product_review_gate';
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+if printf '%s\\n' "$@" | grep -q "Axis start-work task selection"; then
+  printf '%s\\n' '{"selectedWorkItemId":"seed-gated","reason":"Product owns the pending seed."}'
+  exit 0
+fi
+cat <<'JSON'
+{"schemaVersion":"orbit.pool.artifact.v1","kind":"requirement","title":"Gate generated implementation","summary":"Generated work must wait for user confirmation.","status":"WAIT_CODE","markdown":"# Gate generated implementation - Keep generated work behind user confirmation.","sections":[],"workItems":[{"title":"Implement gated work","type":"requirement","status":"WAIT_CODE","notes":"Should not be executable before user confirmation."}]}
+JSON
+exit 0
+`);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--employee-id',
+      employeeId,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.summary.executed, 1);
+    assert.equal(state.poolDocuments, 1);
+    assert.equal(state.poolDocumentPayloads[0].status, 'WAIT_USER_CONFIRM');
+    assert.equal(state.poolDocumentPayloads[0].workItems[0].status, 'WAIT_USER_CONFIRM');
+    assert.ok(state.poolSeedUpdates.some((entry) => entry.id === 'seed-gated' && entry.payload.status === 'WAIT_USER_CONFIRM'));
+  }, {
+    poolSeeds: [
+      {
+        id: 'seed-gated',
+        documentId: 'seed-gated',
+        kind: 'requirement',
+        title: 'Gate generated implementation',
+        seed: 'Create gated implementation work.',
+        status: 'NEW',
+      },
+    ],
+    workItems: [],
+    documents: [],
+    employees: {
+      emp_product_review_gate: {
+        role: 'product',
+        documents: {
+          soul: '# Soul\n\nProduct manager responsible for review.\n',
+          skill: '# Skill\n\nKeeps implementation tasks blocked until user confirmation.\n',
+          memory: '# Memory\n\nReview-stage work must stop at confirmation.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl) => {
     const repo = path.join(dir, 'bound-repo');
     const home = path.join(dir, 'home');
@@ -4863,7 +4988,7 @@ JSON
     assert.equal(state.workItemUpdates.length, 1);
     assert.equal(state.workItemUpdates[0].id, 'wi-dupe');
     assert.equal(state.workItemUpdates[0].payload.status, 'WAIT_USER_CONFIRM');
-    assert.equal(state.workItemUpdates[0].payload.sourceArtifactId, 'doc-pool-1');
+    assert.equal(state.workItemUpdates[0].payload.sourceArtifactId, undefined);
     assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.id), ['doc-dupe']);
     assert.deepEqual(state.poolSeedUpdates.map((entry) => entry.payload.status), ['WAIT_USER_CONFIRM']);
     assert.deepEqual(state.documentUpdates, []);
@@ -4897,13 +5022,13 @@ await withTempDir(async (dir) => {
     const created = JSON.parse(result.stdout);
     assert.equal(created.ok, true);
     assert.equal(created.mode, 'hub-seed');
-    assert.equal(created.repo, project);
+    assert.equal(await sameRealPath(created.repo, project), true);
     assert.equal(created.id, 'seed-1');
     assert.equal(created.kind, 'bug');
     assert.match(created.warning, /resolved/i);
     assert.equal(state.poolSeeds, 1);
     assert.equal(state.lastPoolSeed.kind, 'bug');
-    assert.equal(state.lastPoolSeed.repo, project);
+    assert.equal(await sameRealPath(state.lastPoolSeed.repo, project), true);
   });
 });
 
@@ -4921,7 +5046,7 @@ await withTempDir(async (dir) => {
     const created = JSON.parse(result.stdout);
     assert.equal(created.ok, true);
     assert.equal(created.mode, 'local-seed');
-    assert.equal(created.repo, root);
+    assert.equal(await sameRealPath(created.repo, root), true);
     assert.equal(created.id, null);
     assert.equal(state.poolSeeds, 0);
     assert.match(created.savedPath, /pull-root\/\.axis\/pool-seeds\/\d{8}-req-/);
@@ -4941,7 +5066,7 @@ await withTempDir(async (dir) => {
     const created = JSON.parse(result.stdout);
     assert.equal(created.ok, true);
     assert.equal(created.mode, 'local-seed');
-    assert.equal(created.repo, root);
+    assert.equal(await sameRealPath(created.repo, root), true);
     assert.equal(state.poolSeeds, 0);
     assert.match(created.warning, /product-line binding/);
     assert.match(created.warning, /no project binding/);
@@ -4957,7 +5082,7 @@ await withTempDir(async (dir) => {
   const created = JSON.parse(result.stdout);
   assert.equal(created.ok, true);
   assert.equal(created.mode, 'local-seed');
-  assert.equal(created.repo, root);
+  assert.equal(await sameRealPath(created.repo, root), true);
   assert.match(created.savedPath, /empty-root\/\.axis\/pool-seeds\/\d{8}-sug-/);
   assert.match(created.warning, /No AxisNode project binding found/);
 });
@@ -5432,8 +5557,8 @@ JSON
     assert.equal(payload.mode, 'work-review');
     assert.equal(payload.scope, 'workspace');
     assert.equal(payload.repo, null);
-    assert.equal(payload.workspaceRoot, path.join(home, '.axis'));
-    assert.equal(payload.catalogPath, path.join(home, '.axis', 'catalog.json'));
+    assert.equal(await sameRealPath(payload.workspaceRoot, path.join(home, '.axis')), true);
+    assert.equal(await sameRealPath(payload.catalogPath, path.join(home, '.axis', 'catalog.json')), true);
     assert.equal(payload.projectCount, 2);
     assert.notEqual(payload.stopReason, 'no-project-binding');
     assert.equal(payload.stopReason, 'max-iterations');
@@ -5445,7 +5570,7 @@ JSON
     assert.equal(payload.summary.converted, 1);
     const catalog = JSON.parse(await readFile(payload.catalogPath, 'utf8'));
     assert.equal(catalog.schemaVersion, 'axis.workspace.catalog.v1');
-    assert.equal(catalog.workspaceRoot, path.join(home, '.axis'));
+    assert.equal(await sameRealPath(catalog.workspaceRoot, path.join(home, '.axis')), true);
     assert.equal(catalog.projectCount, 2);
     assert.equal(state.poolDocuments, 1);
     assert.equal(state.lastPoolDocument.kind, 'requirement');
@@ -5485,8 +5610,8 @@ await withTempDir(async (dir) => {
     assert.equal(payload.mode, 'work-coding');
     assert.equal(payload.scope, 'workspace');
     assert.equal(payload.repo, null);
-    assert.equal(payload.workspaceRoot, axisHome);
-    assert.equal(payload.catalogPath, path.join(axisHome, 'catalog.json'));
+    assert.equal(await sameRealPath(payload.workspaceRoot, axisHome), true);
+    assert.equal(await sameRealPath(payload.catalogPath, path.join(axisHome, 'catalog.json')), true);
     assert.equal(payload.projectCount, 2);
     assert.notEqual(payload.stopReason, 'no-project-binding');
     assert.equal(payload.stopReason, 'max-iterations');
@@ -5499,7 +5624,7 @@ await withTempDir(async (dir) => {
     assert.equal(payload.summary.ready, 1);
     assert.equal(payload.summary.blocked, 1);
     const catalog = JSON.parse(await readFile(payload.catalogPath, 'utf8'));
-    assert.equal(catalog.workspaceRoot, axisHome);
+    assert.equal(await sameRealPath(catalog.workspaceRoot, axisHome), true);
     assert.equal(catalog.projectCount, 2);
   });
 });

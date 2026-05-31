@@ -795,7 +795,7 @@ async function writeGlobalOrbitConfig(values: Json): Promise<void> {
   const filePath = globalOrbitConfigPath();
   ensureDir(path.dirname(filePath));
   const current = await readGlobalOrbitConfig();
-  await writeFile(filePath, `${JSON.stringify(cleanGlobalOrbitConfig({ ...current, ...values, updatedAt: new Date().toISOString() }), null, 2)}\n`, 'utf8');
+  await writeFile(filePath, `${JSON.stringify(cleanGlobalOrbitConfig({ ...current, ...omitUndefinedValues(values), updatedAt: new Date().toISOString() }), null, 2)}\n`, 'utf8');
 }
 
 async function readProjectBinding(repoPath: string): Promise<ProjectBinding | null> {
@@ -1225,6 +1225,12 @@ function cleanGlobalOrbitConfig(config: Json): Json {
     delete config[key];
   }
   return config;
+}
+
+function omitUndefinedValues(values: Json): Json {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined),
+  ) as Json;
 }
 
 function asPermissionList(value: unknown): string[] {
@@ -5032,10 +5038,27 @@ function localMachineMetadata(): Json {
     machineId: createHash('sha256').update([hostname, username, platform].join('\n')).digest('hex').slice(0, 16),
     machineName: hostname,
     hostname,
+    ipAddress: localIPAddress(),
     platform,
     client: 'axis-tools',
     cliVersion: cliVersion(),
   };
+}
+
+function localIPAddress(): string {
+  try {
+    const interfaces = os.networkInterfaces();
+    for (const addresses of Object.values(interfaces)) {
+      for (const address of addresses ?? []) {
+        if (address.family === 'IPv4' && !address.internal && address.address) {
+          return address.address;
+        }
+      }
+    }
+  } catch {
+    // Leave IP blank when the runtime cannot inspect network interfaces.
+  }
+  return '';
 }
 
 function localUsername(): string {
@@ -6341,6 +6364,7 @@ async function sendStartWorkHeartbeat(values: {
   }
   const payload: Json = {
     sessionId,
+    ...localMachineMetadata(),
     agentType: agent,
     agentName: startWorkAgentName(agent),
     employeeId: startWorkEmployeeId(),
@@ -8070,6 +8094,18 @@ function reviewArtifactForCandidate(artifact: PoolArtifact, candidate: Json): Po
   };
 }
 
+function gateReviewArtifactForUserConfirmation(artifact: PoolArtifact): PoolArtifact {
+  return {
+    ...artifact,
+    status: LIFECYCLE_WAIT_USER_CONFIRM,
+    workItems: artifact.workItems.map((item) => (
+      isJson(item)
+        ? { ...item, status: LIFECYCLE_WAIT_USER_CONFIRM }
+        : item
+    )),
+  };
+}
+
 function methodologyPromptBlock(methodology: MethodologyInjection): string {
   if (!methodology.injected) {
     return [
@@ -8198,7 +8234,7 @@ async function convertPoolSeedWithAgent(
   try {
     const output = await runPoolAgent(agent, repoPath, buildWorkRefineAgentPrompt(pool, seed, prepare, methodology), options);
     const artifact = normalizePoolArtifact(pool, output);
-    const submitArtifact = reviewArtifactForCandidate(artifact, seed);
+    const submitArtifact = gateReviewArtifactForUserConfirmation(reviewArtifactForCandidate(artifact, seed));
     const submit = await submitPoolArtifact(pool, repoPath, submitArtifact, `axis work refine${seedId ? ` ${seedId}` : ''}`);
     const handled = await markReviewWorkItemHandled(repoPath, seed, submit as unknown as Json);
     const handledWarning = isJson(handled) ? safeString(handled.warning) : null;
@@ -8607,6 +8643,7 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
     documentUrl ? `url: ${documentUrl}` : null,
     previousNotes ? `original notes: ${previousNotes}` : null,
   ].filter((line): line is string => Boolean(line)).join('\n');
+  const relinkSourceWorkItems = !isPoolSeedReviewCandidate(candidate);
 
   const patches: Json[] = [];
   const failures: string[] = [];
@@ -8629,12 +8666,13 @@ async function markReviewWorkItemHandled(repoPath: string, candidate: Json, subm
   }
   for (const workItemIdValue of workItemIds) {
     try {
-      const patch = await patchOrbitJson(binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemIdValue)}`, {
+      const payload: Json = {
         status: LIFECYCLE_WAIT_USER_CONFIRM,
         notes,
-        sourceArtifactId: documentId ?? undefined,
         owner: 'axis-work-review',
-      }, token);
+      };
+      if (relinkSourceWorkItems && documentId) payload.sourceArtifactId = documentId;
+      const patch = await patchOrbitJson(binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemIdValue)}`, payload, token);
       patches.push({ workItemId: workItemIdValue, response: patch });
     } catch (error) {
       failures.push(error instanceof Error ? error.message : String(error));
