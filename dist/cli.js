@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync } from 'node:fs';
-import { appendFile, chmod, copyFile, cp, readdir, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
+import { appendFile, chmod, copyFile, cp, mkdir as mkdirAsync, readdir, readFile, rename, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -26,6 +26,7 @@ class OrbitHttpError extends Error {
 }
 const SHARED_BACKEND_URL = 'http://117.72.14.134:18081';
 const execFileAsync = promisify(execFile);
+const GIT_COMMAND_TIMEOUT_MS = 30_000;
 const POOL_SEED_DISCOVERY_MAX_DEPTH = 2;
 const POOL_SEED_DISCOVERY_MAX_DIRS = 80;
 const POOL_SEED_DISCOVERY_MAX_CHILDREN = 60;
@@ -1860,7 +1861,7 @@ async function isGitRepo(repoPath) {
     if (!await directoryExists(repoPath))
         return false;
     try {
-        await execFileAsync('git', ['-C', repoPath, 'rev-parse', '--is-inside-work-tree']);
+        await execGit(['-C', repoPath, 'rev-parse', '--is-inside-work-tree']);
         return true;
     }
     catch {
@@ -1876,23 +1877,131 @@ function summarizeCommandError(error) {
     }
     return String(error);
 }
-async function syncRepository(repoUrl, targetPath) {
-    if (!await directoryExists(targetPath) || await directoryIsEmpty(targetPath)) {
-        ensureDir(path.dirname(targetPath));
+async function execGit(args) {
+    return execFileAsync('git', args, {
+        timeout: GIT_COMMAND_TIMEOUT_MS,
+        env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    });
+}
+function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+async function withRepositorySyncLock(targetPath, run) {
+    const lockPath = `${targetPath}.axis-sync.lock`;
+    const deadline = Date.now() + 120_000;
+    ensureDir(path.dirname(lockPath));
+    while (true) {
         try {
-            await execFileAsync('git', ['clone', repoUrl, targetPath]);
-            return { status: 'cloned' };
+            await mkdirAsync(lockPath);
+            break;
         }
         catch (error) {
-            return { status: 'clone-failed', error: summarizeCommandError(error) };
+            const code = error.code;
+            if (code !== 'EEXIST')
+                throw error;
+            try {
+                const lockStat = await stat(lockPath);
+                if (Date.now() - lockStat.mtimeMs > 300_000) {
+                    await rm(lockPath, { recursive: true, force: true });
+                    continue;
+                }
+            }
+            catch {
+                continue;
+            }
+            if (Date.now() > deadline) {
+                throw new Error(`Timed out waiting for repository sync lock ${lockPath}`);
+            }
+            await delay(200);
         }
     }
+    try {
+        return await run();
+    }
+    finally {
+        await rm(lockPath, { recursive: true, force: true }).catch(() => undefined);
+    }
+}
+async function moveNonGitWorkspaceAside(targetPath) {
+    const suffix = `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+    const backupPath = `${targetPath}.axis-non-git-${suffix}`;
+    await rename(targetPath, backupPath);
+    return backupPath;
+}
+function temporaryClonePath(targetPath) {
+    const suffix = `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`;
+    return `${targetPath}.axis-clone-${suffix}`;
+}
+function httpsCloneFallback(repoUrl) {
+    const scpLike = repoUrl.match(/^git@([^:]+):(.+)$/);
+    if (scpLike)
+        return `https://${scpLike[1]}/${scpLike[2]}`;
+    const sshUrl = repoUrl.match(/^ssh:\/\/git@([^/]+)\/(.+)$/);
+    if (sshUrl)
+        return `https://${sshUrl[1]}/${sshUrl[2]}`;
+    return null;
+}
+function cloneUrlCandidates(repoUrl) {
+    const fallback = httpsCloneFallback(repoUrl);
+    return fallback && fallback !== repoUrl ? [repoUrl, fallback] : [repoUrl];
+}
+async function cloneRepositoryWithFallback(repoUrl, targetPath) {
+    const errors = [];
+    for (const candidate of cloneUrlCandidates(repoUrl)) {
+        await rm(targetPath, { recursive: true, force: true }).catch(() => undefined);
+        try {
+            await execGit(['clone', candidate, targetPath]);
+            return { ok: true, url: candidate, error: null };
+        }
+        catch (error) {
+            errors.push(`${candidate}: ${summarizeCommandError(error)}`);
+        }
+    }
+    return { ok: false, url: null, error: errors.join(' | ') };
+}
+async function syncRepository(repoUrl, targetPath, options = {}) {
+    return withRepositorySyncLock(targetPath, () => syncRepositoryUnlocked(repoUrl, targetPath, options));
+}
+async function syncRepositoryUnlocked(repoUrl, targetPath, options) {
+    if (!await directoryExists(targetPath) || await directoryIsEmpty(targetPath)) {
+        ensureDir(path.dirname(targetPath));
+        const clone = await cloneRepositoryWithFallback(repoUrl, targetPath);
+        if (clone.ok) {
+            return { status: 'cloned' };
+        }
+        return { status: 'clone-failed', error: clone.error ?? 'git clone failed' };
+    }
     if (await isGitRepo(targetPath)) {
-        await execFileAsync('git', ['-C', targetPath, 'fetch', '--all', '--prune']);
-        await execFileAsync('git', ['-C', targetPath, 'pull', '--ff-only']);
+        if (options.pullExisting === false)
+            return { status: 'existing-git' };
+        await execGit(['-C', targetPath, 'fetch', '--all', '--prune']);
+        await execGit(['-C', targetPath, 'pull', '--ff-only']);
         return { status: 'pulled' };
     }
-    return { status: 'skipped-nonempty' };
+    const clonePath = temporaryClonePath(targetPath);
+    const clone = await cloneRepositoryWithFallback(repoUrl, clonePath);
+    if (!clone.ok) {
+        return { status: 'clone-failed', error: `Git clone failed before replacing existing non-git directory: ${clone.error ?? 'git clone failed'}` };
+    }
+    let backupPath;
+    try {
+        backupPath = await moveNonGitWorkspaceAside(targetPath);
+    }
+    catch (error) {
+        await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
+        return { status: 'skipped-nonempty', error: `Existing non-git directory could not be moved aside: ${summarizeCommandError(error)}` };
+    }
+    try {
+        await rename(clonePath, targetPath);
+        return { status: 'cloned', backupPath };
+    }
+    catch (error) {
+        await rm(clonePath, { recursive: true, force: true }).catch(() => undefined);
+        if (!await directoryExists(targetPath)) {
+            await rename(backupPath, targetPath).catch(() => undefined);
+        }
+        return { status: 'clone-failed', error: `Existing non-git directory moved to ${backupPath}, but cloned repository could not be installed: ${summarizeCommandError(error)}`, backupPath };
+    }
 }
 async function selectProductLinesToPull(prompt, backendUrl, token, account) {
     const productLines = await fetchProductLines(backendUrl, token, { account });
@@ -2006,9 +2115,9 @@ async function syncAxisWorkspaceProject(values) {
     let warning = null;
     if (repoUrl) {
         try {
-            const sync = await syncRepository(repoUrl, repoPath);
+            const sync = await syncRepository(repoUrl, repoPath, { pullExisting: false });
             syncStatus = sync.status;
-            materialized = sync.status === 'cloned' || sync.status === 'pulled';
+            materialized = sync.status === 'cloned' || sync.status === 'pulled' || sync.status === 'existing-git';
             warning = sync.error ? `Repository sync failed for ${values.project.name}: ${sync.error}` : null;
         }
         catch (error) {
@@ -2788,6 +2897,8 @@ function canPromptForPoolSeedTarget() {
 }
 function shouldScanPoolSeedDir(entryName) {
     if (POOL_SEED_DISCOVERY_EXCLUDED_DIRS.has(entryName))
+        return false;
+    if (entryName.includes('.axis-non-git-') || entryName.includes('.axis-clone-') || entryName.endsWith('.axis-sync.lock'))
         return false;
     if (entryName.startsWith('.') || entryName === '')
         return false;
@@ -3672,7 +3783,45 @@ function projectModuleFromBinding(repoPath, binding) {
         remoteUrl: binding.remoteUrl,
     };
 }
+async function syncProductLineBindingProject(repoPath, binding) {
+    const project = projectModuleFromBinding(repoPath, binding);
+    const repoUrl = explicitCloneAddress(project);
+    let materialized = await isGitRepo(repoPath);
+    let syncStatus = materialized ? 'local-binding' : 'local-binding-non-git';
+    let warning = null;
+    let syncedBinding = binding;
+    if (repoUrl) {
+        try {
+            const sync = await syncRepository(repoUrl, repoPath, { pullExisting: false });
+            syncStatus = sync.status;
+            materialized = sync.status === 'cloned' || sync.status === 'pulled' || sync.status === 'existing-git';
+            warning = sync.error ? `Repository sync failed for ${binding.projectName ?? path.basename(repoPath)}: ${sync.error}` : null;
+            if (materialized) {
+                syncedBinding = {
+                    ...binding,
+                    repo: repoPath,
+                    repoPath,
+                    repositoryUrl: binding.repositoryUrl ?? repoUrl,
+                    updatedAt: new Date().toISOString(),
+                };
+                await writeProjectBinding(repoPath, syncedBinding);
+            }
+        }
+        catch (error) {
+            syncStatus = 'sync-failed';
+            materialized = await isGitRepo(repoPath);
+            warning = `Repository sync failed for ${binding.projectName ?? path.basename(repoPath)}: ${error instanceof Error ? error.message : String(error)}`;
+        }
+    }
+    else if (!materialized) {
+        warning = `Project binding at ${repoPath} is not a git repository and has no repository URL; worker may be unable to develop.`;
+    }
+    return { binding: syncedBinding, materialized, repoUrl, syncStatus, warning };
+}
 async function resolveProductLineWorkspaceForWorker(productLine) {
+    return withRepositorySyncLock(productLine.rootPath, () => resolveProductLineWorkspaceForWorkerUnlocked(productLine));
+}
+async function resolveProductLineWorkspaceForWorkerUnlocked(productLine) {
     const binding = productLine.binding;
     const backendUrl = normalizeBackendUrl(binding.backendUrl);
     const account = binding.account ?? binding.user?.account ?? 'unknown';
@@ -3694,17 +3843,20 @@ async function resolveProductLineWorkspaceForWorker(productLine) {
             warnings.push(`Project binding at ${candidate.repoPath} has no projectId/projectUuid; worker cannot claim WAIT_CODE work.`);
             continue;
         }
-        const project = projectModuleFromBinding(candidate.repoPath, projectBinding);
+        const sync = await syncProductLineBindingProject(candidate.repoPath, projectBinding);
+        if (sync.warning)
+            warnings.push(sync.warning);
+        const project = projectModuleFromBinding(candidate.repoPath, sync.binding);
         projects.push({
             workspaceRoot: productLine.rootPath,
             product,
             project,
             repoPath: candidate.repoPath,
-            binding: projectBinding,
-            materialized: true,
-            repoUrl: explicitCloneAddress(project),
-            syncStatus: 'local-binding',
-            warning: null,
+            binding: sync.binding,
+            materialized: sync.materialized,
+            repoUrl: sync.repoUrl,
+            syncStatus: sync.syncStatus,
+            warning: sync.warning,
         });
     }
     if (projects.length === 0) {
@@ -5119,8 +5271,34 @@ async function patchStartWorkResult(target, workItemID, values) {
         `agent: ${values.agent}`,
         values.output ? `agent output:\n${truncateText(values.output, 12_000)}` : null,
     ].filter((entry) => Boolean(entry)).join('\n\n');
+    const payload = { notes, owner: values.sessionId };
+    if (!values.ok)
+        payload.status = values.status ?? 'WAIT_CODE';
     try {
-        return await patchOrbitJson(target.binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemID)}`, { notes, owner: values.sessionId }, await tokenForBinding(target.binding));
+        return await patchOrbitJson(target.binding.backendUrl, `/api/work-items/${encodeURIComponent(workItemID)}`, payload, await tokenForBinding(target.binding));
+    }
+    catch {
+        return null;
+    }
+}
+function detectStartWorkAgentBlockedOutput(output) {
+    const text = output.replace(/\s+/g, ' ').trim();
+    if (!text)
+        return null;
+    const checks = [
+        { reason: 'target is not a git repository', pattern: /not a git repository|不是\s*(?:git|Git)\s*仓库/i },
+        { reason: 'workspace is read-only', pattern: /read[- ]only|只读|readonly/i },
+        { reason: 'agent could not write source changes', pattern: /cannot\s+(?:write|modify|edit|implement|complete)|unable\s+to\s+(?:write|modify|edit|implement|complete)|不能.{0,24}(?:写入|修改|开发|实现|完成)/i },
+        { reason: 'agent reported it could not complete development', pattern: /无法.{0,30}(?:完成|开发|实现|修改|修复)/i },
+        { reason: 'missing writable source repository', pattern: /no\s+(?:writable\s+)?(?:source|repository|repo)|没有.{0,24}(?:源码|仓库|写权限)/i },
+        { reason: 'permission or sandbox blocker', pattern: /permission denied|blocked by|cannot proceed|sandbox.{0,40}(?:read[- ]only|permission|blocked|限制)/i },
+    ];
+    const matched = checks.find((check) => check.pattern.test(text));
+    return matched ? `agent reported blocked output: ${matched.reason}` : null;
+}
+async function releaseStartWorkItemAfterFailure(target, workItemID, payload) {
+    try {
+        return await postWorkItemLifecycle(target, workItemID, 'release', payload);
     }
     catch {
         return null;
@@ -5270,6 +5448,25 @@ async function processStartWorkTarget(values) {
         await postWorkItemLifecycle(target, id, 'start', claimPayload);
         const prompt = buildStartWorkAgentPrompt({ sessionId, agent, target, workItem: item, contextDocuments });
         const output = await runPoolAgent(startWorkRunnerAgent(agent), target.repoPath, prompt, { progress });
+        const blockedWarning = detectStartWorkAgentBlockedOutput(output);
+        if (blockedWarning) {
+            summary.failed++;
+            pushUniqueWarning(summary.warnings, blockedWarning);
+            await patchStartWorkResult(target, id, { sessionId, agent, output, ok: false, status: 'WAIT_CODE' });
+            const release = await releaseStartWorkItemAfterFailure(target, id, claimPayload);
+            heartbeatState.status = 'blocked';
+            heartbeatState.currentWorkItemId = id;
+            return {
+                status: 'failed',
+                target: startWorkTargetScope(target),
+                workItemId: id,
+                title: workItemTitle(item),
+                selection: startWorkSelectionJson(selection),
+                warning: blockedWarning,
+                release,
+                output: truncateText(output, 2_000),
+            };
+        }
         await patchStartWorkResult(target, id, { sessionId, agent, output, ok: true });
         const complete = await postWorkItemLifecycle(target, id, 'complete', claimPayload);
         summary.executed++;
@@ -5290,7 +5487,8 @@ async function processStartWorkTarget(values) {
         summary.failed++;
         const message = error instanceof Error ? error.message : String(error);
         pushUniqueWarning(summary.warnings, message);
-        await patchStartWorkResult(target, id, { sessionId, agent, output: message, ok: false });
+        await patchStartWorkResult(target, id, { sessionId, agent, output: message, ok: false, status: 'WAIT_CODE' });
+        const release = await releaseStartWorkItemAfterFailure(target, id, claimPayload);
         heartbeatState.status = 'blocked';
         heartbeatState.currentWorkItemId = id;
         return {
@@ -5300,6 +5498,7 @@ async function processStartWorkTarget(values) {
             title: workItemTitle(item),
             selection: startWorkSelectionJson(selection),
             warning: message,
+            release,
         };
     }
 }

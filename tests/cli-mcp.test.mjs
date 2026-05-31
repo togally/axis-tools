@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
@@ -1647,6 +1647,185 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  const bareRepo = await createBareGitFixture(dir);
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const binDir = path.join(dir, 'bin');
+    const productRoot = path.join(dir, 'hermes');
+    const project = path.join(productRoot, 'hermes-console');
+
+    await writeFakeCodex(binDir);
+    await writeProductLineBinding(productRoot, backendUrl, { selectedAgent: 'codex' });
+    await writeProjectBinding(project, backendUrl, { selectedAgent: 'codex', repositoryUrl: bareRepo });
+    await mkdir(path.join(project, 'docs', 'requirements'), { recursive: true });
+    await writeFile(path.join(project, 'docs', 'requirements', 'doc-196.md'), '# Cached doc\n', 'utf8');
+
+    const result = await run([
+      'start-work',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      cwd: productRoot,
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'start-work-all');
+    assert.equal(payload.workerCount, 2);
+
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && payload.workers.some((worker) => isProcessAlive(worker.pid))) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(payload.workers.some((worker) => isProcessAlive(worker.pid)), false);
+
+    const workerStates = await Promise.all(payload.workers.map(async (worker) => {
+      const sessionDir = path.join(axisHome, 'workers', worker.sessionId);
+      return {
+        state: JSON.parse(await readFile(path.join(sessionDir, 'state.json'), 'utf8')),
+        log: await readFile(path.join(sessionDir, 'worker.log'), 'utf8'),
+      };
+    }));
+    const gitCheck = await execFileAsync('git', ['-C', project, 'rev-parse', '--is-inside-work-tree']);
+    const parentEntries = await readdir(productRoot);
+
+    assert.ok(workerStates.every((entry) => entry.state.scope.targets.some((target) => target.repoPath === project)));
+    assert.equal(gitCheck.stdout.trim(), 'true');
+    assert.ok(parentEntries.some((entry) => entry.startsWith('hermes-console.axis-non-git-')));
+    assert.match(await readFile(path.join(project, 'README.md'), 'utf8'), /Fixture/);
+    for (const entry of workerStates) {
+      assert.doesNotMatch(entry.log, /not a git repository|不是\s*Git\s*仓库|Target resolution failed|Please login|请先登录/i);
+    }
+  }, {
+    workItems: [],
+    employeeList: [
+      { id: 'emp_product_root_git', name: 'Product Root Git', status: 'active', role: 'development' },
+      { id: 'emp_product_root_git_2', name: 'Product Root Git 2', status: 'active', role: 'qa' },
+    ],
+    employees: {
+      emp_product_root_git: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nProduct-line scoped development worker.\n',
+          skill: '# Skill\n\nDevelop only inside real git checkouts.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+      emp_product_root_git_2: {
+        role: 'qa',
+        documents: {
+          soul: '# Soul\n\nProduct-line scoped QA worker.\n',
+          skill: '# Skill\n\nVerify inside real git checkouts.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const binDir = path.join(dir, 'bin');
+    const productRoot = path.join(dir, 'hermes');
+    const project = path.join(productRoot, 'hermes-console');
+    const gitLog = path.join(dir, 'git.log');
+
+    await writeFakeCodex(binDir);
+    await writeExecutable(path.join(binDir, 'git'), `#!/bin/sh
+printf '%s\\n' "$@" >> "$AXIS_TEST_GIT_LOG"
+if [ "$1" = "-C" ]; then
+  if [ "$3" = "rev-parse" ]; then
+    test -d "$2/.git" && printf 'true\\n' && exit 0
+    printf 'fatal: not a git repository\\n' >&2
+    exit 128
+  fi
+  if [ "$3" = "fetch" ] || [ "$3" = "pull" ]; then
+    exit 0
+  fi
+fi
+if [ "$1" = "clone" ]; then
+  if [ "$2" = "git@github.com:togally/hermes-console.git" ]; then
+    printf 'ssh blocked\\n' >&2
+    exit 128
+  fi
+  if [ "$2" = "https://github.com/togally/hermes-console.git" ]; then
+    mkdir -p "$3/.git"
+    printf 'ref: refs/heads/main\\n' > "$3/.git/HEAD"
+    printf '# HTTPS fallback\\n' > "$3/README.md"
+    exit 0
+  fi
+fi
+printf 'unexpected git invocation: %s\\n' "$*" >&2
+exit 2
+`);
+    await writeProductLineBinding(productRoot, backendUrl, { selectedAgent: 'codex' });
+    await writeProjectBinding(project, backendUrl, { selectedAgent: 'codex', repositoryUrl: 'git@github.com:togally/hermes-console.git' });
+    await writeFile(path.join(project, 'cached.txt'), 'cached metadata\n', 'utf8');
+
+    const result = await run([
+      'start-work',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      cwd: productRoot,
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+        AXIS_TEST_GIT_LOG: gitLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.workerCount, 1);
+
+    const worker = payload.workers[0];
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && isProcessAlive(worker.pid)) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(isProcessAlive(worker.pid), false);
+
+    const log = await readFile(gitLog, 'utf8');
+    assert.match(log, /clone\ngit@github\.com:togally\/hermes-console\.git/);
+    assert.match(log, /clone\nhttps:\/\/github\.com\/togally\/hermes-console\.git/);
+    assert.match(await readFile(path.join(project, 'README.md'), 'utf8'), /HTTPS fallback/);
+  }, {
+    workItems: [],
+    employeeList: [
+      { id: 'emp_product_root_https_fallback', name: 'Product Root HTTPS Fallback', status: 'active', role: 'development' },
+    ],
+    employees: {
+      emp_product_root_https_fallback: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nProduct-line scoped development worker.\n',
+          skill: '# Skill\n\nDevelop only inside real git checkouts.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
   await withPoolServer(async (backendUrl, state) => {
     const home = path.join(dir, 'home');
     const axisHome = path.join(home, '.axis');
@@ -1722,6 +1901,91 @@ await withTempDir(async (dir) => {
         documents: {
           soul: '# Soul\n\nGlobal session worker.\n',
           skill: '# Skill\n\nUse cached login from any directory.\n',
+          memory: '# Memory\n\nNo recent work.\n',
+        },
+      },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  const bareRepo = await createBareGitFixture(dir);
+  await withPoolServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const binDir = path.join(dir, 'bin');
+    const ordinaryDir = path.join(dir, 'ordinary');
+    const cachedProjectPath = path.join(axisHome, 'hermes', 'hermes-console');
+
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await mkdir(path.join(cachedProjectPath, 'docs', 'requirements'), { recursive: true });
+    await mkdir(ordinaryDir, { recursive: true });
+    await writeFakeCodex(binDir);
+    await writeFile(path.join(cachedProjectPath, 'docs', 'requirements', 'doc-196.md'), '# Cached doc\n', 'utf8');
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      backendUrl,
+      selectedAgent: 'codex',
+      token: 'orbit-dev-token',
+      key: 'orbit-dev-key',
+      session: 'orbit-dev-session',
+      account: 'orbit-user',
+      user: { account: 'orbit-user' },
+    }, null, 2));
+
+    const result = await run([
+      'start-work',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      cwd: ordinaryDir,
+      timeout: 5000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'start-work-all');
+    assert.equal(payload.workerCount, 1);
+
+    const worker = payload.workers[0];
+    const deadline = Date.now() + 3000;
+    while (Date.now() < deadline && isProcessAlive(worker.pid)) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assert.equal(isProcessAlive(worker.pid), false);
+
+    const sessionDir = path.join(axisHome, 'workers', worker.sessionId);
+    const workerState = JSON.parse(await readFile(path.join(sessionDir, 'state.json'), 'utf8'));
+    const workerLog = await readFile(path.join(sessionDir, 'worker.log'), 'utf8');
+    const projectPath = workerState.scope.targets[0].repoPath;
+    const gitCheck = await execFileAsync('git', ['-C', projectPath, 'rev-parse', '--is-inside-work-tree']);
+    const parentEntries = await readdir(path.dirname(cachedProjectPath));
+
+    assert.equal(projectPath, cachedProjectPath);
+    assert.equal(gitCheck.stdout.trim(), 'true');
+    assert.ok(parentEntries.some((entry) => entry.startsWith('hermes-console.axis-non-git-')));
+    assert.match(await readFile(path.join(projectPath, 'README.md'), 'utf8'), /Fixture/);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/products'));
+    assert.doesNotMatch(workerLog, /not a git repository|不是\s*Git\s*仓库|Target resolution failed|Please login|请先登录/i);
+  }, {
+    repositoryUrl: bareRepo,
+    workItems: [],
+    employeeList: [
+      { id: 'emp_global_git', name: 'Global Git', status: 'active', role: 'development' },
+    ],
+    employees: {
+      emp_global_git: {
+        role: 'development',
+        documents: {
+          soul: '# Soul\n\nGlobal development worker.\n',
+          skill: '# Skill\n\nDevelop only inside real git checkouts.\n',
           memory: '# Memory\n\nNo recent work.\n',
         },
       },
@@ -2870,6 +3134,63 @@ await withTempDir(async (dir) => {
       'skill.md': { key: 'skill.md', found: false, content: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', markdown: '# skill.md\n\nAgent context document skill.md was not found; using empty fallback.', warning: 'Agent context document skill.md was not found; using empty fallback.' },
       'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nPrevious queue was idle.', markdown: '# Memory\n\nPrevious queue was idle.' },
     },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeExecutable(path.join(fakeBin, 'codex'), `#!/bin/sh
+if printf '%s\\n' "$@" | grep -q "Axis start-work task selection"; then
+  printf '%s\\n' '{"selectedWorkItemId":"wi-start-work","reason":"Only candidate matches the employee context."}'
+  exit 0
+fi
+printf '%s\\n' "无法在当前会话完成代码实现：目标目录不是 Git 仓库，当前沙箱只读。"
+exit 0
+`);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.summary.claimed, 1);
+    assert.equal(payload.summary.executed, 0);
+    assert.equal(payload.summary.failed, 1);
+    assert.deepEqual(state.lifecycleActions.map((entry) => entry.action), ['start', 'release']);
+    assert.equal(state.workItemUpdates.length, 1);
+    assert.equal(state.workItemUpdates[0].id, 'wi-start-work');
+    assert.match(state.workItemUpdates[0].payload.notes, /无法在当前会话完成代码实现|不是 Git 仓库|只读/);
+    assert.equal(state.workItemUpdates[0].payload.status, 'WAIT_CODE');
+
+    const projectResult = payload.iterations[0].results[0];
+    assert.equal(projectResult.status, 'failed');
+    assert.equal(projectResult.workItemId, 'wi-start-work');
+    assert.match(projectResult.warning, /agent reported blocked output/i);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
   });
 });
 
