@@ -1372,6 +1372,17 @@ async function requireCachedLoginSession(backendUrl: string, mcpUrl?: string): P
   return { login: refreshed, account };
 }
 
+const sessionMachineMetadataSyncs = new Set<string>();
+
+async function syncCurrentSessionMachineMetadataOnce(backendUrl: string, token?: string | null): Promise<void> {
+  const safeToken = safeString(token);
+  if (!safeToken) return;
+  const key = `${normalizeBackendUrl(backendUrl)}\n${safeToken}`;
+  if (sessionMachineMetadataSyncs.has(key)) return;
+  await syncCurrentSessionMachineMetadata(backendUrl, safeToken);
+  sessionMachineMetadataSyncs.add(key);
+}
+
 async function syncCurrentSessionMachineMetadata(backendUrl: string, token: string): Promise<void> {
   try {
     await patchOrbitJson(backendUrl, '/api/sessions/current', localMachineMetadata(), token);
@@ -6380,7 +6391,9 @@ async function sendStartWorkHeartbeat(values: {
     scope: heartbeatState.scope,
   };
   try {
-    const response = await postOrbitJson(target.binding.backendUrl, '/api/agent-workers/heartbeat', payload, await tokenForBinding(target.binding));
+    const token = await tokenForBinding(target.binding);
+    await syncCurrentSessionMachineMetadataOnce(target.binding.backendUrl, token);
+    const response = await postOrbitJson(target.binding.backendUrl, '/api/agent-workers/heartbeat', payload, token);
     retryState.failures = 0;
     retryState.lastWarning = null;
     retryState.lastSuccessAt = payload.sentAt as string;

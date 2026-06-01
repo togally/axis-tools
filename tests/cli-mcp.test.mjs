@@ -1894,7 +1894,7 @@ await withTempDir(async (dir) => {
     assert.equal(workerState.stopReason, 'max-iterations');
     assert.equal(workerState.scope.targets[0].backendUrl, backendUrl);
     assert.match(workerState.scope.targets[0].repoPath, /Hermes.Console|Hermes Console|Hermes-Console/i);
-    assert.equal(state.sessionPatches.length, 1);
+    assert.ok(state.sessionPatches.length >= 1);
     assert.match(state.sessionPatches[0].machineId, /^[a-f0-9]{16}$/);
     assert.equal(state.sessionPatches[0].client, 'axis-tools');
     assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/products' && entry.authorization === 'Bearer orbit-dev-token'));
@@ -3164,6 +3164,14 @@ await withTempDir(async (dir) => {
     assert.match(state.heartbeats[0].machineId, /^[a-f0-9]{16}$/);
     assert.equal(state.heartbeats[0].client, 'axis-tools');
     assert.equal(typeof state.heartbeats[0].ipAddress, 'string');
+    assert.ok(state.sessionPatches.length >= 1);
+    assert.match(state.sessionPatches[0].machineId, /^[a-f0-9]{16}$/);
+    assert.equal(typeof state.sessionPatches[0].ipAddress, 'string');
+    const sessionPatchIndex = state.requests.findIndex((entry) => entry.url === '/api/sessions/current');
+    const heartbeatIndex = state.requests.findIndex((entry) => entry.url === '/api/agent-workers/heartbeat');
+    assert.notEqual(sessionPatchIndex, -1);
+    assert.notEqual(heartbeatIndex, -1);
+    assert.ok(sessionPatchIndex < heartbeatIndex);
     assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url.startsWith('/api/agent-context?')));
     assert.ok(state.requests.some((entry) => entry.url.includes('/work-items?status=WAIT_CODE')));
     assert.deepEqual(state.claims.map((entry) => entry.id), ['wi-start-work']);
