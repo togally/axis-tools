@@ -44,8 +44,12 @@ AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisN
   - 查看当前 repo 的 AxisNode 绑定
 - `axis start-work`
   - 新的员工执行 worker；默认后台启动所有 active 员工，已在本机运行的员工会跳过
-  - 读取 Hub 上的 `employee.role` + `soul.md` / `skill.md` / `memory.md`，发送 heartbeat，并按员工职责选择对应队列：产品扫 `NEW`/`WAIT_REVIEW`，架构/美工扫 review+coding，开发/测试/运维扫 `WAIT_CODE`，再只领取所选任务执行
+  - 启动前把员工云端 `employee.role` + `soul.md` / `skill.md` / `memory.md` 同步到独立工作空间，并生成 `AGENTS.md` / `CLAUDE.md` 引导 Agent 先读这些上下文
+  - 发送 heartbeat，并按员工职责选择对应队列：产品扫 `NEW`/`WAIT_REVIEW`，架构/美工扫 review+coding，开发/测试/运维扫 `WAIT_CODE`，再只领取所选任务执行
   - 支持 `--agent codex` 和 `--agent claude-code`；用 `--employee-id` 或 `--foreground` 做单员工调试
+- `axis sync-employee`
+  - 将单个员工的云端 `soul.md` / `skill.md` / `memory.md` 拉到 `$AXIS_HOME/employees/<id>/`，同时写入 `AGENTS.md` / `CLAUDE.md`
+  - `--push` 会先把本地工作空间内的员工上下文文件推回 Hub，再重新拉取云端版本
 - `axis work-review` / `axis work-coding`
   - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
   - `work-review` 持续运行 review/refine worker，把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems
@@ -209,14 +213,21 @@ axis-bug --delete bug-1 --yes --json
 
 ### Work CLI
 
-`axis start-work` 是新的员工执行 worker。它默认从后台为当前 backend 上所有 active 员工启动本地 worker session；如果某员工已经有覆盖当前请求 scope 的本地 worker，会跳过该员工，单项目 worker 不会阻止同员工再启动产品线/工作区 worker。返回结果会列出 started / skipped 的员工、session id、pid 和日志路径。每个 worker 会持续向 Axis Hub 发送 heartbeat。用 `--employee-id <id>` 可以显式只启动一个员工；用 `--foreground` 可以在当前终端跑单员工 debug。解析到 employee id 后，worker 会从 Hub 读取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 作为 Employee Context，再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地 `$AXIS_HOME/employees/<id>/` 文件是创建/bootstrap/cache，不作为运行员工的权威上下文。
+`axis start-work` 是新的员工执行 worker。它默认从后台为当前 backend 上所有 active 员工启动本地 worker session；如果某员工已经有覆盖当前请求 scope 的本地 worker，会跳过该员工，单项目 worker 不会阻止同员工再启动产品线/工作区 worker。返回结果会列出 started / skipped 的员工、session id、pid 和日志路径。每个 worker 会持续向 Axis Hub 发送 heartbeat。用 `--employee-id <id>` 可以显式只启动一个员工；用 `--foreground` 可以在当前终端跑单员工 debug。解析到 employee id 后，worker 会先执行员工工作空间同步：从 Hub 拉取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 到 `$AXIS_HOME/employees/<id>/`，并生成 `AGENTS.md` / `agents.md`、`CLAUDE.md` / `claude.md`，要求 Agent 工作前先读取这些同步文件。随后 worker 再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地员工工作空间是云端上下文的同步副本，云端仍是运行权威来源。
 
 新电脑或新环境的最短路径：
 
 ```bash
 axis login
 axis pull
+axis sync-employee --employee-id <id>
 axis start-work --agent codex
+```
+
+需要把本地修改过的员工 soul / skill / memory 推回 Hub 时：
+
+```bash
+axis sync-employee --employee-id <id> --push
 ```
 
 Claude Code 运行方式：
@@ -265,6 +276,7 @@ axis start-work --project-id <id> --product-line-id <id>
 
 `start-work` 的执行语义：
 
+- 解析到 employee id 后会同步员工工作空间 `$AXIS_HOME/employees/<id>/`：拉取 Hub employee document，写入 `soul.md` / `skill.md` / `memory.md`，并生成 `AGENTS.md` / `CLAUDE.md` 指引 Codex / Claude Code 工作前读取同步上下文。
 - 根据员工结构化角色选择候选池：产品员工消费需求/想法等 review 阶段 WorkItems（`NEW` / `WAIT_REVIEW`，兼容 `pending-confirmation`）；架构/美工员工可同时看到 review + coding；开发/测试/运维员工消费 coding execution queue（`WAIT_CODE`，兼容 `ready`）。新写入仍使用 canonical lifecycle status。
 - 领取前会先把角色匹配后的候选 WorkItem 摘要交给 Agent 选择。解析到 employee id 时，选择 prompt 的 Employee Context 来自 Hub `/api/employees/{employeeId}` 返回的结构化 `employee.role` 和远程 `documents.soul` / `documents.skill` / `documents.memory`，Project Context 单独标注为补充；候选摘要包含 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的岗位职责挑任务，而不是固定拿第一条；职责模型使用 broad categories：开发/development、测试/QA、运维/DevOps、架构/architecture、产品/product、美工/design/visual。
 - 如果远程 Employee Context 不可用，或 Agent 选择 `null`、输出不可用且 fallback 也找不到职责匹配，worker 会 idle/skip 并记录原因，不会静默领取无关任务，也不会把本地员工文件当作权威替代。

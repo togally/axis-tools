@@ -275,6 +275,95 @@ async function withEmployeeRegisterServer(fn) {
   }
 }
 
+async function withEmployeeSyncServer(fn) {
+  const requests = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      raw += chunk;
+    });
+    req.on('end', () => {
+      requests.push({ method: req.method, url: req.url, body: raw ? JSON.parse(raw) : null, authorization: req.headers.authorization ?? '' });
+      if (req.method === 'GET' && req.url === '/api/employees/emp_sync') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          employee: {
+            id: 'emp_sync',
+            name: 'Sync Employee',
+            language: 'zh',
+            role: 'architecture',
+            agentType: 'codex',
+            status: 'active',
+            documents: {
+              soul: { kind: 'soul', content: '# Sync Soul\n\n职位：架构', version: 3 },
+              skill: { kind: 'skill', content: '# Sync Skill\n\nDesign systems.', version: 4 },
+              memory: { kind: 'memory', content: '# Sync Memory\n\nRemember team decisions.', version: 5 },
+            },
+          },
+          runtime: { store: 'test' },
+        }));
+        return;
+      }
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'not found' }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    return await fn(`http://127.0.0.1:${address.port}`, requests);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+}
+
+{
+  await withTempDir(async (dir) => {
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await withEmployeeSyncServer(async (backendUrl, requests) => {
+      await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+        backendUrl,
+        token: 'sync-token',
+        key: 'sync-token',
+        account: 'sync-user',
+      }, null, 2), 'utf8');
+
+      const { stdout } = await run(['sync-employee', '--employee-id', 'emp_sync', '--backend-url', backendUrl, '--json'], {
+        env: {
+          HOME: home,
+          AXIS_HOME: path.join(home, '.axis'),
+        },
+      });
+
+      const payload = JSON.parse(stdout);
+      const employeeDir = path.join(home, '.axis', 'employees', 'emp_sync');
+      assert.equal(payload.ok, true);
+      assert.equal(payload.mode, 'sync-employee');
+      assert.equal(payload.employeeId, 'emp_sync');
+      assert.equal(payload.localPath, employeeDir);
+      assert.equal(payload.documents.length, 3);
+      assert.equal(requests[0].authorization, 'Bearer sync-token');
+      assert.match(await readFile(path.join(employeeDir, 'soul.md'), 'utf8'), /职位：架构/);
+      assert.match(await readFile(path.join(employeeDir, 'skill.md'), 'utf8'), /Design systems/);
+      assert.match(await readFile(path.join(employeeDir, 'memory.md'), 'utf8'), /Remember team decisions/);
+      const agents = await readFile(path.join(employeeDir, 'AGENTS.md'), 'utf8');
+      assert.match(agents, /Read the synced employee context before starting work/);
+      assert.match(agents, /soul\.md/);
+      assert.match(agents, /skill\.md/);
+      assert.match(agents, /memory\.md/);
+      const claude = await readFile(path.join(employeeDir, 'CLAUDE.md'), 'utf8');
+      assert.match(claude, /Read AGENTS\.md first/);
+      const config = JSON.parse(await readFile(path.join(employeeDir, 'config.json'), 'utf8'));
+      assert.equal(config.employeeId, 'emp_sync');
+      assert.equal(config.backendUrl, backendUrl);
+      assert.equal(config.role, 'architecture');
+      assert.equal(config.sync.documents.memory.version, 5);
+    });
+  });
+}
+
 {
   await withTempDir(async (dir) => {
     const home = path.join(dir, 'home');
@@ -1351,6 +1440,8 @@ async function withPoolServer(fn, options = {}) {
   assert.match(usage.stdout, /bind = bind a repo or product-line root/);
   assert.match(usage.stdout, /pull = clone\/pull maintained repos from AxisNode/);
   assert.match(usage.stdout, /create-employee \[--agent <codex\|claude-code\|cc>\] \[--language <zh\|en>\] \[--role <development\|qa\|devops\|architecture\|product\|design>\]/);
+  assert.match(usage.stdout, /sync-employee \[--employee-id <id>\] \[--backend-url <url>\] \[--push\] \[--json\]/);
+  assert.match(usage.stdout, /sync-employee = sync one employee workspace from Axis Hub/);
   assert.doesNotMatch(usage.stdout, /\n  register(\s|\n)/);
   assert.doesNotMatch(usage.stdout, /  setup \[--repo <path>\]/);
   await assert.rejects(run(['definitely-unknown-command']), (error) => error.code === 1);

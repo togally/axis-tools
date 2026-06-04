@@ -151,6 +151,8 @@ const EMPLOYEE_ROLE_OPTIONS: { value: EmployeeRole; label: string }[] = [
   { value: 'product', label: '产品' },
   { value: 'design', label: '美工' },
 ];
+const EMPLOYEE_CONTEXT_DOCUMENTS = ['soul', 'skill', 'memory'] as const;
+type EmployeeContextDocumentKind = typeof EMPLOYEE_CONTEXT_DOCUMENTS[number];
 
 interface PoolConfig {
   command: string;
@@ -523,7 +525,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
 ];
 
 function printUsage(): void {
-  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+  console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n  sync-employee = sync one employee workspace from Axis Hub, optionally pushing local context docs first\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
   console.log(`Employee role flag:\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>]\n`);
   console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
@@ -539,6 +541,10 @@ function printStopWorkUsage(): void {
 
 function printCreateEmployeeUsage(): void {
   console.log(`axis create-employee\n\nUsage:\n  axis create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>] [--backend-url <url>] [--json]\n\nDefault behavior:\n  Creates ~/.axis/employees/<employeeId>/ with soul.md, skill.md, memory.md, config.json, then registers the employee to Axis Hub.\n\nFlags:\n  --agent <codex|claude-code|cc>   Agent runtime used to generate soul.md. Interactive mode asks when both are available.\n  --language <zh|en>               Document/profile language. Aliases: chinese, english. Interactive default is 中文.\n  --role <role>                    Optional structured role: development, qa, devops, architecture, product, or design.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --json                           Print machine-readable output and never prompt.\n  --help, -h                       Print this help\n`);
+}
+
+function printSyncEmployeeUsage(): void {
+  console.log(`axis sync-employee\n\nUsage:\n  axis sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n\nDefault behavior:\n  Pulls the employee's Hub soul.md, skill.md, and memory.md into ~/.axis/employees/<employeeId>/, writes AGENTS.md/agents.md and CLAUDE.md/claude.md, and refreshes config.json sync metadata. With --push, uploads local soul.md, skill.md, and memory.md first, then pulls the authoritative Hub result.\n\nFlags:\n  --employee-id <id>               Employee to sync. Defaults to current employee when configured.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --push                           Push local soul.md/skill.md/memory.md to Hub before pulling\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n`);
 }
 
 function printWorkWorkerUsage(workerType: WorkWorkerType): void {
@@ -4135,6 +4141,18 @@ function axisEmployeeDir(employeeId: string): string {
   return path.join(axisEmployeesRootDir(), employeeId);
 }
 
+function axisEmployeeDocumentPath(employeeId: string, key: EmployeeContextDocumentKind): string {
+  return path.join(axisEmployeeDir(employeeId), `${key}.md`);
+}
+
+function axisEmployeeAgentsPath(employeeId: string): string {
+  return path.join(axisEmployeeDir(employeeId), 'AGENTS.md');
+}
+
+function axisEmployeeClaudePath(employeeId: string): string {
+  return path.join(axisEmployeeDir(employeeId), 'CLAUDE.md');
+}
+
 function asCurrentEmployee(value: unknown): AxisCurrentEmployee | null {
   if (!isJson(value)) return null;
   const employeeId = safeString(value.employeeId) ?? safeString(value.id);
@@ -4885,6 +4903,190 @@ async function registerEmployeeToHub(values: {
   } catch (error) {
     return { ok: false, status: 'failed', warning: error instanceof Error ? error.message : String(error), response: null };
   }
+}
+
+function syncEmployeePayloadEmployee(payload: unknown): Json {
+  if (isJson(payload) && isJson(payload.employee)) return payload.employee as Json;
+  return isJson(payload) ? payload : {};
+}
+
+function syncEmployeeDocumentFromPayload(employee: Json, kind: EmployeeContextDocumentKind): { content: string; version: number | null; updatedAt: string | null } {
+  const documents = isJson(employee.documents) ? employee.documents as Json : {};
+  const raw = documents[kind] ?? documents[`${kind}.md`];
+  const parsed = remoteEmployeeDocumentContent(raw);
+  return {
+    content: parsed?.content ?? '',
+    version: isJson(raw) && typeof raw.version === 'number' ? raw.version : null,
+    updatedAt: isJson(raw) ? safeString(raw.updatedAt) ?? null : null,
+  };
+}
+
+function employeeWorkspaceInstructions(values: {
+  employeeId: string;
+  name: string | null;
+  role: string | null;
+  backendUrl: string;
+}): string {
+  return [
+    '# Axis Employee Workspace',
+    '',
+    `Employee id: ${values.employeeId}`,
+    `Employee name: ${values.name ?? values.employeeId}`,
+    `Employee role: ${values.role ?? 'unassigned'}`,
+    `Axis backend: ${normalizeBackendUrl(values.backendUrl)}`,
+    '',
+    '## Required Startup Context',
+    '',
+    'Read the synced employee context before starting work:',
+    '',
+    '1. `soul.md` for identity, operating principles, and role framing.',
+    '2. `skill.md` for capabilities and execution rules.',
+    '3. `memory.md` for durable decisions and handoff notes.',
+    '',
+    'Treat these files as synced cloud context. If cloud context and local assumptions conflict, prefer the cloud-synced files in this directory.',
+    'Do not write Axis tokens, sessions, passwords, or private keys into this workspace.',
+    '',
+    '## Collaboration',
+    '',
+    'When a user delegates work through Axis Hub, clarify blockers in the conversation thread, then update task progress through the assigned WorkItem or delegation record.',
+  ].join('\n');
+}
+
+function claudeWorkspaceInstructions(): string {
+  return [
+    '# Claude Code Employee Workspace',
+    '',
+    'Read AGENTS.md first.',
+    'Before working, also read `soul.md`, `skill.md`, and `memory.md` from this employee workspace.',
+  ].join('\n');
+}
+
+async function writeEmployeeWorkspaceGuides(employeeId: string, values: { name: string | null; role: string | null; backendUrl: string }): Promise<void> {
+  const agents = `${employeeWorkspaceInstructions({ employeeId, ...values })}\n`;
+  const claude = `${claudeWorkspaceInstructions()}\n`;
+  await writeFile(axisEmployeeAgentsPath(employeeId), agents, 'utf8');
+  await writeFile(path.join(axisEmployeeDir(employeeId), 'agents.md'), agents, 'utf8');
+  await writeFile(axisEmployeeClaudePath(employeeId), claude, 'utf8');
+  await writeFile(path.join(axisEmployeeDir(employeeId), 'claude.md'), claude, 'utf8');
+}
+
+async function pushLocalEmployeeDocuments(values: { backendUrl: string; token: string | null; employeeId: string }): Promise<string[]> {
+  const pushed: string[] = [];
+  for (const kind of EMPLOYEE_CONTEXT_DOCUMENTS) {
+    const filePath = axisEmployeeDocumentPath(values.employeeId, kind);
+    if (!existsSync(filePath)) continue;
+    const content = await readFile(filePath, 'utf8');
+    await patchOrbitJson(values.backendUrl, `/api/employees/${encodeURIComponent(values.employeeId)}/documents/${kind}`, { content }, values.token);
+    pushed.push(kind);
+  }
+  return pushed;
+}
+
+async function syncEmployeeWorkspace(values: {
+  backendUrl: string;
+  employeeId: string;
+  tokenHint?: string | null;
+  push?: boolean;
+  agentHint?: string | null;
+}): Promise<Json> {
+  const backendUrl = normalizeBackendUrl(values.backendUrl);
+  const token = await tokenForStartWorkBackend(backendUrl, values.tokenHint);
+  const employeeId = values.employeeId;
+  const employeeDir = axisEmployeeDir(employeeId);
+  ensureDir(employeeDir);
+  const pushed = values.push ? await pushLocalEmployeeDocuments({ backendUrl, token, employeeId }) : [];
+  const payload = await fetchOrbitJson(backendUrl, `/api/employees/${encodeURIComponent(employeeId)}`, token);
+  const employee = syncEmployeePayloadEmployee(payload);
+  const name = safeString(employee.name) ?? employeeId;
+  const role = safeString(employee.role);
+  const language = safeString(employee.language);
+  const agent = safeString(employee.agentType) ?? safeString(employee.agent) ?? values.agentHint ?? 'codex';
+  const syncedAt = new Date().toISOString();
+  const documentResults: Json[] = [];
+  const syncDocuments: Json = {};
+
+  for (const kind of EMPLOYEE_CONTEXT_DOCUMENTS) {
+    const document = syncEmployeeDocumentFromPayload(employee, kind);
+    await writeFile(axisEmployeeDocumentPath(employeeId, kind), `${document.content.trimEnd()}\n`, 'utf8');
+    syncDocuments[kind] = {
+      version: document.version,
+      updatedAt: document.updatedAt,
+      syncedAt,
+    };
+    documentResults.push({
+      kind,
+      path: axisEmployeeDocumentPath(employeeId, kind),
+      version: document.version,
+      updatedAt: document.updatedAt,
+    });
+  }
+
+  await writeEmployeeWorkspaceGuides(employeeId, { name, role: role ?? null, backendUrl });
+  await writeJsonFile(path.join(employeeDir, 'config.json'), {
+    employeeId,
+    name,
+    ...(language ? { language } : {}),
+    ...(role ? { role } : {}),
+    agentType: agent,
+    backendUrl,
+    localPath: employeeDir,
+    status: safeString(employee.status) ?? 'active',
+    sync: {
+      syncedAt,
+      pushed,
+      documents: syncDocuments,
+    },
+    updatedAt: syncedAt,
+  });
+  await persistCurrentEmployee({ employeeId, backendUrl, agent, name });
+
+  return {
+    ok: true,
+    mode: 'sync-employee',
+    employeeId,
+    name,
+    ...(role ? { role } : {}),
+    agent,
+    backendUrl,
+    localPath: employeeDir,
+    documents: documentResults,
+    guides: {
+      agents: axisEmployeeAgentsPath(employeeId),
+      claude: axisEmployeeClaudePath(employeeId),
+    },
+    pushed,
+    syncedAt,
+  };
+}
+
+async function syncEmployeeCommand(): Promise<void> {
+  if (isHelpFlag(process.argv[3])) {
+    printSyncEmployeeUsage();
+    return;
+  }
+  const config = await readGlobalOrbitConfig();
+  const backendUrl = normalizeBackendUrl(getArg('--backend-url') ?? safeString(config.backendUrl) ?? defaultBackendUrl());
+  const explicitEmployeeId = safeString(getArg('--employee-id')) ?? safeString(process.env.AXIS_EMPLOYEE_ID);
+  const current = explicitEmployeeId ? null : await readCurrentEmployeeFromGlobalConfig(config) ?? await readCurrentEmployeeFromAxisHome();
+  const employeeId = explicitEmployeeId ?? current?.employeeId;
+  if (!employeeId) {
+    throw new OrbitCliError('No employee id configured. Pass --employee-id <id> or run axis create-employee first.');
+  }
+  const payload = await syncEmployeeWorkspace({
+    backendUrl,
+    employeeId,
+    tokenHint: safeString(config.token),
+    push: hasFlag('--push'),
+    agentHint: current?.agent,
+  });
+  if (hasFlag('--json')) {
+    console.log(JSON.stringify(payload, null, 2));
+    return;
+  }
+  console.log(`employee: ${payload.employeeId}`);
+  console.log(`workspace: ${payload.localPath}`);
+  console.log(`documents: ${Array.isArray(payload.documents) ? payload.documents.length : 0}`);
+  if (Array.isArray(payload.pushed) && payload.pushed.length > 0) console.log(`pushed: ${payload.pushed.join(', ')}`);
 }
 
 async function createEmployeeCommand(): Promise<void> {
@@ -5689,6 +5891,7 @@ function buildStartWorkAgentPrompt(values: {
     `Worker session: ${values.sessionId}`,
     `Agent runtime: ${values.agent}`,
     `Employee id: ${startWorkEmployeeId() ?? 'unassigned'}`,
+    `Employee workspace: ${startWorkEmployeeId() ? axisEmployeeDir(startWorkEmployeeId() as string) : 'unassigned'}`,
     `Repository: ${values.target.repoPath}`,
     '',
     ...contextSections,
@@ -5704,6 +5907,7 @@ function buildStartWorkAgentPrompt(values: {
     '# Instructions',
     '',
     'Implement the requested coding work in this repository.',
+    'Before editing, read the employee workspace AGENTS.md plus soul.md, skill.md, and memory.md when an Employee workspace path is available.',
     'Use Employee Context as the employee identity and responsibility authority. Project Agent Context can supplement project details but must not redefine the employee role.',
     'Run the relevant verification commands for the changed surface when practical.',
     'Keep changes scoped to the WorkItem. Do not include Axis tokens, sessions, keys, or passwords in files or output.',
@@ -5738,6 +5942,7 @@ function buildStartWorkSelectionPrompt(values: {
     `Worker session: ${values.sessionId}`,
     `Agent runtime: ${values.agent}`,
     `Employee id: ${startWorkEmployeeId() ?? 'unassigned'}`,
+    `Employee workspace: ${startWorkEmployeeId() ? axisEmployeeDir(startWorkEmployeeId() as string) : 'unassigned'}`,
     `Repository: ${values.target.repoPath}`,
     '',
     ...contextSections,
@@ -6636,6 +6841,25 @@ async function runStartWorkForeground(options: {
       const targetTokenHint = targets.length === 1 && targetBackendUrl ? safeString(targets[0].binding.token) : null;
       resolvedStartWorkEmployeeId = await resolveStartWorkEmployeeId(targetBackendUrl, targetTokenHint, agent);
       reportStartWorkEmployeeResolutionWarnings(summary, progress);
+    }
+    if (resolvedStartWorkEmployeeId) {
+      const targetBackendUrl = startWorkBackendUrlFromTargets(targets);
+      const targetTokenHint = targets.length === 1 && targetBackendUrl ? safeString(targets[0].binding.token) : null;
+      if (targetBackendUrl) {
+        try {
+          const synced = await syncEmployeeWorkspace({
+            backendUrl: targetBackendUrl,
+            employeeId: resolvedStartWorkEmployeeId,
+            tokenHint: targetTokenHint,
+            agentHint: agent,
+          });
+          progress(`employee workspace synced: ${safeString(synced.localPath) ?? axisEmployeeDir(resolvedStartWorkEmployeeId)}`);
+        } catch (error) {
+          const warning = `Employee workspace sync failed for ${resolvedStartWorkEmployeeId}; continuing with remote prompt context. ${error instanceof Error ? error.message : String(error)}`;
+          pushUniqueWarning(summary.warnings, warning);
+          progress(`context warning: ${warning}`);
+        }
+      }
     }
     scope = startWorkTargetsScope(targets);
     heartbeatState.scope = scope;
@@ -9727,6 +9951,11 @@ async function main(): Promise<void> {
 
   if (group === 'create-employee') {
     await createEmployeeCommand();
+    return;
+  }
+
+  if (group === 'sync-employee') {
+    await syncEmployeeCommand();
     return;
   }
 
