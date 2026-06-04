@@ -107,7 +107,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n  sync-employee = sync one employee workspace from Axis Hub, optionally pushing local context docs first\n\nPool examples:\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  submit <text> [--type <requirement|bug|suggestion|idea>] [--team-id <id>] [--json]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n  sync-employee = sync one employee workspace from Axis Hub, optionally pushing local context docs first\n  submit = submit app/CLI/user work to a project team discussion and WorkItem\n\nPool examples:\n  axis submit "登录页报错" --type bug --team-id team_core\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Employee role flag:\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
@@ -123,6 +123,9 @@ function printCreateEmployeeUsage() {
 }
 function printSyncEmployeeUsage() {
     console.log(`axis sync-employee\n\nUsage:\n  axis sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n\nDefault behavior:\n  Pulls the employee's Hub soul.md, skill.md, and memory.md into ~/.axis/employees/<employeeId>/, writes AGENTS.md/agents.md and CLAUDE.md/claude.md, and refreshes config.json sync metadata. With --push, uploads local soul.md, skill.md, and memory.md first, then pulls the authoritative Hub result.\n\nFlags:\n  --employee-id <id>               Employee to sync. Defaults to current employee when configured.\n  --backend-url <url>              Axis Hub backend. Defaults to cached config, then shared backend.\n  --push                           Push local soul.md/skill.md/memory.md to Hub before pulling\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n`);
+}
+function printSubmitUsage() {
+    console.log(`axis submit\n\nUsage:\n  axis submit <text> [--type <requirement|bug|suggestion|idea>] [--team-id <id>] [--employee-id <id>] [--repo <path>] [--json]\n\nDefault behavior:\n  Submits user work into the bound Axis Hub project through /team-intake, creating a discussion, a source document, and a WorkItem. When no Hub project binding is available, the seed is saved locally under .axis/pool-seeds.\n\nFlags:\n  --type, --kind <kind>            Work kind. If omitted, Axis infers bug/suggestion/idea/requirement from the text.\n  --team-id, --team <id>           Team that should organize the work. Hub assigns leader, architect, or first member when no employee is specified.\n  --employee-id, --target-employee-id <id>\n                                   Optional direct employee assignee for the team discussion.\n  --title <title>                  Override the generated title.\n  --requester <name>               User/app requester label.\n  --source <source>                Source label. Defaults to axis-cli-submit.\n  --from <file> / --stdin          Read submit text from file or stdin.\n  --local / --save-local           Force local seed save instead of Hub submit.\n  --json                           Print machine-readable output\n  --help, -h                       Print this help\n\nExamples:\n  axis submit "登录页报错" --type bug --team-id team_core\n  axis submit "商品详情页希望支持视频评价" --json\n`);
 }
 function printWorkWorkerUsage(workerType) {
     const command = workerType === 'review' ? 'work-review' : 'work-coding';
@@ -2822,7 +2825,24 @@ async function readPoolInput(args) {
     return collectFreeText(args);
 }
 function collectFreeText(args) {
-    const flagsWithValue = new Set(['--repo', '--from', '--file', '--agent', '--page', '--page-size', '--delete']);
+    const flagsWithValue = new Set([
+        '--repo',
+        '--from',
+        '--file',
+        '--agent',
+        '--page',
+        '--page-size',
+        '--delete',
+        '--type',
+        '--kind',
+        '--team-id',
+        '--team',
+        '--employee-id',
+        '--target-employee-id',
+        '--title',
+        '--requester',
+        '--source',
+    ]);
     const text = [];
     for (let index = 0; index < args.length; index++) {
         const arg = args[index];
@@ -3179,6 +3199,200 @@ function printPoolSeed(result) {
         console.log(`savedPath: ${result.savedPath}`);
     if (result.warning)
         console.log(`warning: ${result.warning}`);
+}
+function normalizeSubmitKind(value) {
+    const normalized = value?.trim().toLowerCase();
+    if (!normalized)
+        return null;
+    if (normalized === 'requirement' || normalized === 'req')
+        return 'requirement';
+    if (normalized === 'bug' || normalized === 'defect')
+        return 'bug';
+    if (normalized === 'suggestion' || normalized === 'sug' || normalized === 'improvement' || normalized === 'optimization')
+        return 'suggestion';
+    if (normalized === 'idea' || normalized === 'ide')
+        return 'idea';
+    throw new Error('--type must be one of: requirement, bug, suggestion, idea');
+}
+function inferSubmitKind(text) {
+    if (/bug|crash|error|exception|fail|failed|报错|错误|异常|失败|崩溃|无法|500|404/i.test(text))
+        return 'bug';
+    if (/优化|建议|体验|改进|improve|suggest|enhance/i.test(text))
+        return 'suggestion';
+    if (/想法|灵感|idea|maybe/i.test(text))
+        return 'idea';
+    return 'requirement';
+}
+function submitKindFromArgs(text) {
+    return normalizeSubmitKind(getArg('--type') ?? getArg('--kind')) ?? inferSubmitKind(text);
+}
+function buildTeamIntakePayload(kind, seed, repoPath) {
+    const pool = AXIS_POOLS_BY_KIND[kind];
+    const trimmed = seed.trim();
+    const title = safeString(getArg('--title')) ?? poolSeedTitle(pool, trimmed);
+    const teamId = safeString(getArg('--team-id') ?? getArg('--team'));
+    const targetEmployeeId = safeString(getArg('--target-employee-id') ?? getArg('--employee-id'));
+    const requester = safeString(getArg('--requester'));
+    const source = safeString(getArg('--source')) ?? 'axis-cli-submit';
+    return {
+        kind,
+        title,
+        description: trimmed,
+        seed: trimmed,
+        summary: trimmed,
+        status: LIFECYCLE_NEW,
+        source,
+        sourceId: newPoolSourceId('axis-submit'),
+        repo: repoPath,
+        ...(teamId ? { teamId } : {}),
+        ...(targetEmployeeId ? { targetEmployeeId } : {}),
+        ...(requester ? { requester } : {}),
+    };
+}
+async function submitTeamIntakeToHub(binding, token, payload) {
+    const projectId = projectApiId(binding);
+    if (!projectId)
+        throw new Error('project binding has no projectId/projectUuid');
+    if (!token)
+        throw new Error('project binding has no token and no cached login session');
+    return postOrbitJson(binding.backendUrl, `/api/projects/${encodeURIComponent(projectId)}/team-intake`, payload, token);
+}
+function extractTeamIntakeWorkItemId(payload) {
+    if (!isJson(payload))
+        return null;
+    return (isJson(payload.intake) ? safeString(payload.intake.workItemId) : null)
+        ?? (isJson(payload.item) ? extractId(payload.item) : null)
+        ?? safeString(payload.workItemId)
+        ?? extractId(payload);
+}
+function extractTeamIntakeDocumentId(payload) {
+    if (!isJson(payload))
+        return null;
+    return (isJson(payload.intake) ? safeString(payload.intake.documentId) : null)
+        ?? (isJson(payload.document) ? extractId(payload.document) : null)
+        ?? safeString(payload.documentId);
+}
+function extractTeamIntakeConversationId(payload) {
+    if (!isJson(payload))
+        return null;
+    return (isJson(payload.intake) ? safeString(payload.intake.conversationId) : null)
+        ?? (isJson(payload.conversation) ? extractId(payload.conversation) : null)
+        ?? safeString(payload.conversationId);
+}
+async function submitTeamIntake(repoPath, seed) {
+    const kind = submitKindFromArgs(seed);
+    const pool = AXIS_POOLS_BY_KIND[kind];
+    const initialPayload = buildTeamIntakePayload(kind, seed, repoPath);
+    const title = safeString(initialPayload.title) ?? poolSeedTitle(pool, seed);
+    const description = safeString(initialPayload.description) ?? seed.trim();
+    const teamId = safeString(initialPayload.teamId);
+    const targetEmployeeId = safeString(initialPayload.targetEmployeeId);
+    if (hasFlag('--dry-run')) {
+        return { ok: true, mode: 'dry-run', repo: repoPath, pool: pool.pool, kind, title, description, teamId, targetEmployeeId, id: null, documentId: null, conversationId: null, url: null, savedPath: null, warning: null };
+    }
+    if (shouldUseLocalOnly()) {
+        const savedPath = await savePoolSeed(pool, initialPayload, repoPath);
+        return { ok: true, mode: 'local-seed', repo: repoPath, pool: pool.pool, kind, title, description, teamId, targetEmployeeId, id: null, documentId: null, conversationId: null, url: null, savedPath, warning: null };
+    }
+    const target = await resolvePoolSeedTarget(repoPath);
+    const payload = buildTeamIntakePayload(kind, seed, target.repoPath);
+    if (target.binding) {
+        try {
+            const response = await submitTeamIntakeToHub(target.binding, await tokenForBinding(target.binding), payload);
+            return {
+                ok: true,
+                mode: 'team-intake',
+                repo: target.repoPath,
+                pool: pool.pool,
+                kind,
+                title,
+                description,
+                teamId,
+                targetEmployeeId,
+                id: extractTeamIntakeWorkItemId(response),
+                documentId: extractTeamIntakeDocumentId(response),
+                conversationId: extractTeamIntakeConversationId(response),
+                url: extractUrl(response),
+                savedPath: null,
+                warning: target.warning,
+                response,
+            };
+        }
+        catch (error) {
+            const savedPath = await savePoolSeed(pool, payload, target.repoPath);
+            const submitWarning = `AxisNode team intake submit failed; seed saved locally instead. ${error instanceof Error ? error.message : String(error)}`;
+            return {
+                ok: true,
+                mode: 'local-seed',
+                repo: target.repoPath,
+                pool: pool.pool,
+                kind,
+                title,
+                description,
+                teamId,
+                targetEmployeeId,
+                id: null,
+                documentId: null,
+                conversationId: null,
+                url: null,
+                savedPath,
+                warning: target.warning ? `${target.warning} ${submitWarning}` : submitWarning,
+            };
+        }
+    }
+    const savedPath = await savePoolSeed(pool, payload, target.repoPath);
+    return {
+        ok: true,
+        mode: 'local-seed',
+        repo: target.repoPath,
+        pool: pool.pool,
+        kind,
+        title,
+        description,
+        teamId,
+        targetEmployeeId,
+        id: null,
+        documentId: null,
+        conversationId: null,
+        url: null,
+        savedPath,
+        warning: target.warning,
+    };
+}
+function printTeamIntakeSubmit(result) {
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(result, null, 2));
+        return;
+    }
+    console.log(`${result.kind}: ${result.title}`);
+    console.log(`mode: ${result.mode}`);
+    if (result.teamId)
+        console.log(`team: ${result.teamId}`);
+    if (result.targetEmployeeId)
+        console.log(`employee: ${result.targetEmployeeId}`);
+    if (result.id)
+        console.log(`workItem: ${result.id}`);
+    if (result.documentId)
+        console.log(`document: ${result.documentId}`);
+    if (result.conversationId)
+        console.log(`conversation: ${result.conversationId}`);
+    if (result.url)
+        console.log(`url: ${result.url}`);
+    if (result.savedPath)
+        console.log(`savedPath: ${result.savedPath}`);
+    if (result.warning)
+        console.log(`warning: ${result.warning}`);
+}
+async function submitCommand(args) {
+    if (hasFlag('--help') || hasFlag('-h')) {
+        printSubmitUsage();
+        return;
+    }
+    const repoPath = resolveRepoArg();
+    const input = await readPoolInput(args);
+    if (!input.trim())
+        throw new Error('submit text is required');
+    printTeamIntakeSubmit(await submitTeamIntake(repoPath, input));
 }
 async function submitRequirementToHub(pool, binding, token, artifact, repoPath) {
     const projectId = projectApiId(binding);
@@ -8955,6 +9169,10 @@ async function main() {
     }
     if (group === 'sync-employee') {
         await syncEmployeeCommand();
+        return;
+    }
+    if (group === 'submit') {
+        await submitCommand(process.argv.slice(3));
         return;
     }
     if (group === 'work') {

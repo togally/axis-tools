@@ -916,7 +916,9 @@ async function withPoolServer(fn, options = {}) {
     poolDocuments: 0,
     requirements: 0,
     poolSeeds: 0,
+    teamIntakes: 0,
     poolSeedPayloads: [],
+    teamIntakePayloads: [],
     poolDocumentPayloads: [],
     loginCount: 0,
     loginBodies: [],
@@ -1294,6 +1296,33 @@ async function withPoolServer(fn, options = {}) {
           kind: payload.kind,
           status: payload.status,
           url: `/projects/proj_1/pool/seeds/seed-1`,
+          runtime: { store: 'mock' },
+        }));
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/api/projects/proj_1/team-intake') {
+      if (!requireAuth()) return;
+      readJson().then((payload) => {
+        state.teamIntakes++;
+        state.lastTeamIntake = payload;
+        state.teamIntakePayloads.push(payload);
+        res.statusCode = 201;
+        res.end(JSON.stringify({
+          intake: {
+            projectId: 'proj_1',
+            kind: payload.kind,
+            title: payload.title,
+            teamId: payload.teamId,
+            targetEmployeeId: payload.targetEmployeeId ?? 'emp_lead',
+            documentId: 'seed-1',
+            workItemId: 'wi-team-intake',
+            conversationId: 'ethread-1',
+          },
+          url: '/projects/proj_1/docs/seed-1',
+          document: { id: 'seed-1', title: payload.title, source: { type: payload.kind, teamId: payload.teamId } },
+          item: { id: 'wi-team-intake', title: payload.title, type: payload.kind, pool: payload.kind === 'suggestion' ? 'improvement' : payload.kind, status: 'NEW' },
+          conversation: { id: 'ethread-1', title: payload.title, teamId: payload.teamId, targetEmployeeId: payload.targetEmployeeId ?? 'emp_lead' },
           runtime: { store: 'mock' },
         }));
       });
@@ -2310,6 +2339,31 @@ await withTempDir(async (dir) => {
     assert.equal(state.poolSeeds, 1);
     assert.equal(state.requests.some((entry) => entry.method === 'POST' && entry.url === '/api/projects/proj_1/pool-seeds' && entry.authorization === 'Bearer orbit-dev-token'), true);
   }, { poolSeeds: [] });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['submit', '登录页报错', '--type', 'bug', '--team-id', 'team_core', '--repo', repo, '--json']);
+    const payload = JSON.parse(result.stdout);
+
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'team-intake');
+    assert.equal(payload.kind, 'bug');
+    assert.equal(payload.teamId, 'team_core');
+    assert.equal(payload.id, 'wi-team-intake');
+    assert.equal(payload.documentId, 'seed-1');
+    assert.equal(payload.conversationId, 'ethread-1');
+    assert.equal(payload.url, '/projects/proj_1/docs/seed-1');
+    assert.equal(state.teamIntakes, 1);
+    assert.equal(state.lastTeamIntake.kind, 'bug');
+    assert.equal(state.lastTeamIntake.description, '登录页报错');
+    assert.equal(state.lastTeamIntake.teamId, 'team_core');
+    assert.equal(state.lastTeamIntake.source, 'axis-cli-submit');
+    assert.equal(state.requests.some((entry) => entry.method === 'POST' && entry.url === '/api/projects/proj_1/team-intake' && entry.authorization === 'Bearer orbit-dev-token'), true);
+  });
 });
 
 await withTempDir(async (dir) => {
