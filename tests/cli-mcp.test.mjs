@@ -871,6 +871,45 @@ async function writeProjectBinding(repo, backendUrl, extra = {}) {
   }, null, 2));
 }
 
+function employeeWorkContextForTest(employeeId, employee, versionSuffix = 'v1', documentOverrides = {}) {
+  const documents = { ...(employee.documents ?? {}), ...documentOverrides };
+  return {
+    employee: {
+      id: employeeId,
+      name: employee.name ?? employeeId,
+      role: employee.role ?? null,
+      agentType: employee.agentType ?? 'codex',
+      status: employee.status ?? 'active',
+      modelProvider: employee.modelProvider ?? null,
+      modelName: employee.modelName ?? null,
+      modelLevel: employee.modelLevel ?? null,
+      documents: {},
+    },
+    documents: {
+      soul: {
+        employeeId,
+        kind: 'soul',
+        content: documents.soul ?? '',
+        version: 1,
+      },
+      skill: {
+        employeeId,
+        kind: 'skill',
+        content: documents.skill ?? '',
+        version: 1,
+      },
+      memory: {
+        employeeId,
+        kind: 'memory',
+        content: documents.memory ?? '',
+        version: versionSuffix === 'v2' ? 2 : 1,
+      },
+    },
+    roleWorkflow: employee.roleWorkflow ?? null,
+    loadedAt: new Date().toISOString(),
+  };
+}
+
 async function writeWorkerFixture(axisHome, sessionId, state = {}, config = {}) {
   const sessionDir = path.join(axisHome, 'workers', sessionId);
   await mkdir(sessionDir, { recursive: true });
@@ -1269,12 +1308,24 @@ async function withPoolServer(fn, options = {}) {
         }
         if (!options.heartbeatRequiredToken && !requireAuth()) return;
         state.heartbeats.push(payload);
+        const employee = payload.employeeId ? options.employees?.[payload.employeeId] : null;
+        const contextVersionSuffix = state.heartbeats.length > 1 ? 'v2' : 'v1';
+        const documentOverrides = contextVersionSuffix === 'v2'
+          ? options.heartbeatWorkContextDocuments?.[payload.employeeId] ?? {}
+          : {};
+        const heartbeatContextVersion = employee
+          ? `employee:${payload.employeeId}|role:${employee.role ?? ''}|doc:memory:${contextVersionSuffix}${employee.roleWorkflow ? `|workflow:${employee.roleWorkflow.role}:v${employee.roleWorkflow.version}` : ''}`
+          : null;
         res.end(JSON.stringify({
           worker: {
             ...payload,
             heartbeatCount: state.heartbeats.filter((entry) => entry.sessionId === payload.sessionId).length,
             lastHeartbeatAt: new Date().toISOString(),
           },
+          ...(employee ? {
+            workContext: employeeWorkContextForTest(payload.employeeId, employee, contextVersionSuffix, documentOverrides),
+            workContextVersion: heartbeatContextVersion,
+          } : {}),
           runtime: { store: 'mock' },
         }));
       });
@@ -1662,6 +1713,119 @@ await withTempDir(async (dir) => {
           memory: '# Memory\n\nNo recent work.\n',
         },
       },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const axisHome = path.join(home, '.axis');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-heartbeat-context-prompts.txt');
+    const employeeId = 'emp_heartbeat_context';
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--employee-id',
+      employeeId,
+      '--foreground',
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 6000,
+      env: {
+        HOME: home,
+        AXIS_HOME: axisHome,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+        AXIS_TEST_AGENT_PROMPT_APPEND: '1',
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    assert.ok(state.heartbeats.length >= 2, 'start-work should send an initial heartbeat and a scoped heartbeat');
+
+    const employeeDir = path.join(axisHome, 'employees', employeeId);
+    assert.match(await readFile(path.join(employeeDir, 'memory.md'), 'utf8'), /Heartbeat memory v2 from cloud/);
+    const workContext = JSON.parse(await readFile(path.join(employeeDir, 'work-context.json'), 'utf8'));
+    assert.equal(workContext.version, 'employee:emp_heartbeat_context|role:architecture|doc:memory:v2|workflow:architecture:v3');
+    assert.equal(workContext.roleWorkflow.title, '架构云端工作流');
+    assert.equal(workContext.documents.memory.version, 2);
+    const roleWorkflow = JSON.parse(await readFile(path.join(employeeDir, 'role-workflow.json'), 'utf8'));
+    assert.equal(roleWorkflow.title, '架构云端工作流');
+    assert.equal(roleWorkflow.steps[0].output, 'spec.md');
+
+    const lastHeartbeat = JSON.parse(await readFile(path.join(axisHome, 'workers', payload.sessionId, 'last-heartbeat.json'), 'utf8'));
+    assert.equal(lastHeartbeat.workContextVersion, workContext.version);
+
+    const prompts = await readFile(promptLog, 'utf8');
+    assert.match(prompts, /Heartbeat memory v2 from cloud/);
+    assert.doesNotMatch(prompts, /Initial memory before heartbeat/);
+    assert.match(prompts, /架构云端工作流/);
+    assert.match(prompts, /Output: spec\.md/);
+  }, {
+    workItems: [
+      {
+        id: 'wi-start-work',
+        title: 'Implement architecture task',
+        type: 'requirement',
+        pool: 'requirement',
+        status: 'WAIT_CODE',
+        notes: 'Architecture work: draft the implementation spec and verify technical constraints.',
+      },
+    ],
+    employees: {
+      emp_heartbeat_context: {
+        name: 'Heartbeat Context',
+        role: 'architecture',
+        agentType: 'codex',
+        status: 'active',
+        documents: {
+          soul: '# Soul\n\nArchitecture employee.\n',
+          skill: '# Skill\n\nSystem design and technical sequencing.\n',
+          memory: '# Memory\n\nInitial memory before heartbeat.\n',
+        },
+        roleWorkflow: {
+          role: 'architecture',
+          title: '架构云端工作流',
+          description: '先输出接口和实施约束，再交给开发和测试。',
+          version: 3,
+          steps: [
+            {
+              id: 'spec',
+              name: '接口规格',
+              role: 'architecture',
+              objective: '形成接口 spec 和依赖约束。',
+              output: 'spec.md',
+              dependsOn: [],
+            },
+          ],
+          updatedAt: '2026-06-06T00:00:00.000Z',
+        },
+      },
+    },
+    heartbeatWorkContextDocuments: {
+      emp_heartbeat_context: {
+        memory: '# Memory\n\nHeartbeat memory v2 from cloud.\n',
+      },
+    },
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Project Soul\n\nProject fallback.', markdown: '# Project Soul\n\nProject fallback.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Project Skill\n\nProject fallback.', markdown: '# Project Skill\n\nProject fallback.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Project Memory\n\nProject fallback.', markdown: '# Project Memory\n\nProject fallback.' },
     },
   });
 });
