@@ -295,6 +295,17 @@ async function withEmployeeSyncServer(fn) {
             role: 'architecture',
             agentType: 'codex',
             status: 'active',
+            avatarUrl: 'https://axis.example/avatar/sync.png',
+            humanReferenceName: '真人架构师',
+            profileNote: 'Matches the architecture lead reference profile.',
+            modelProvider: 'OpenAI',
+            modelName: 'gpt-5-team',
+            modelLevel: 'L4',
+            modelConfigJson: '{"reasoning":"high"}',
+            runtimeStatus: 'idle',
+            runtimeModelProvider: 'OpenAI',
+            runtimeModelName: 'gpt-5-team',
+            runtimeModelLevel: 'L4',
             documents: {
               soul: { kind: 'soul', content: '# Sync Soul\n\n职位：架构', version: 3 },
               skill: { kind: 'skill', content: '# Sync Skill\n\nDesign systems.', version: 4 },
@@ -359,6 +370,24 @@ async function withEmployeeSyncServer(fn) {
       assert.equal(config.employeeId, 'emp_sync');
       assert.equal(config.backendUrl, backendUrl);
       assert.equal(config.role, 'architecture');
+      assert.deepEqual(config.profile, {
+        avatarUrl: 'https://axis.example/avatar/sync.png',
+        humanReferenceName: '真人架构师',
+        profileNote: 'Matches the architecture lead reference profile.',
+      });
+      assert.deepEqual(config.model, {
+        provider: 'OpenAI',
+        name: 'gpt-5-team',
+        level: 'L4',
+        configJson: '{"reasoning":"high"}',
+      });
+      assert.deepEqual(config.runtimeModel, {
+        status: 'idle',
+        provider: 'OpenAI',
+        name: 'gpt-5-team',
+        level: 'L4',
+      });
+      assert.deepEqual(payload.model, config.model);
       assert.equal(config.sync.documents.memory.version, 5);
     });
   });
@@ -1633,6 +1662,102 @@ await withTempDir(async (dir) => {
           memory: '# Memory\n\nNo recent work.\n',
         },
       },
+    },
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'bound-repo');
+    const home = path.join(dir, 'home');
+    const fakeBin = path.join(dir, 'fake-bin');
+    const promptLog = path.join(dir, 'start-work-model-prompt.txt');
+    const employeeId = 'emp_model_runner';
+
+    await writeProjectBinding(repo, backendUrl, { selectedAgent: 'codex' });
+    await writeFakeCodex(fakeBin);
+
+    const result = await run([
+      'start-work',
+      '--repo',
+      repo,
+      '--foreground',
+      '--employee-id',
+      employeeId,
+      '--heartbeat-interval',
+      '1',
+      '--interval',
+      '0',
+      '--iterations',
+      '1',
+      '--json',
+    ], {
+      timeout: 5000,
+      env: {
+        HOME: home,
+        PATH: `${fakeBin}:${process.env.PATH}`,
+        TZ: 'Asia/Shanghai',
+        AXIS_TEST_AGENT_PROMPT: promptLog,
+      },
+    });
+
+    const payload = JSON.parse(result.stdout);
+    assert.equal(payload.ok, true);
+    const heartbeat = state.heartbeats.find((entry) => entry.employeeId === employeeId && entry.runtimeModelName === 'gpt-5-team');
+    assert.equal(heartbeat.runtimeModelProvider, 'OpenAI');
+    assert.equal(heartbeat.runtimeModelLevel, 'L4');
+    assert.equal(heartbeat.runtimeStatus, heartbeat.status);
+
+    const lastHeartbeat = JSON.parse(await readFile(path.join(home, '.axis', 'workers', payload.sessionId, 'last-heartbeat.json'), 'utf8'));
+    assert.equal(lastHeartbeat.runtimeModelProvider, 'OpenAI');
+    assert.equal(lastHeartbeat.runtimeModelName, 'gpt-5-team');
+    assert.equal(lastHeartbeat.runtimeModelLevel, 'L4');
+
+    const statusJson = await run(['work-status', '--include-stale', '--json'], {
+      timeout: 3000,
+      env: { HOME: home },
+    });
+    const statusPayload = JSON.parse(statusJson.stdout);
+    const worker = statusPayload.workers.find((entry) => entry.sessionId === payload.sessionId);
+    assert.equal(worker.model.provider, 'OpenAI');
+    assert.equal(worker.model.name, 'gpt-5-team');
+    assert.equal(worker.model.level, 'L4');
+    assert.equal(worker.lastHeartbeat.runtimeModelName, 'gpt-5-team');
+
+    const statusText = await run(['work-status', '--include-stale'], {
+      timeout: 3000,
+      env: { HOME: home },
+    });
+    assert.match(statusText.stdout, /model=OpenAI\/gpt-5-team\/L4/);
+  }, {
+    workItems: [
+      { id: 'wi-start-work', title: 'Implement start-work execution', type: 'requirement', pool: 'requirement', status: 'WAIT_CODE', notes: 'Run the coding agent with Axis context.' },
+    ],
+    employees: {
+      emp_model_runner: {
+        name: 'Model Runner',
+        role: 'development',
+        agentType: 'codex',
+        status: 'active',
+        modelProvider: 'OpenAI',
+        modelName: 'gpt-5-team',
+        modelLevel: 'L4',
+        modelConfigJson: '{"reasoning":"high"}',
+        runtimeStatus: 'idle',
+        runtimeModelProvider: 'OpenAI',
+        runtimeModelName: 'gpt-5-team',
+        runtimeModelLevel: 'L4',
+        documents: {
+          soul: '# Soul\n\nDevelopment employee using configured model.\n',
+          skill: '# Skill\n\nImplement code with verification.\n',
+          memory: '# Memory\n\nPreserve configured model during work.\n',
+        },
+      },
+    },
+    agentContextDocuments: {
+      'soul.md': { key: 'soul.md', found: true, content: '# Soul\n\nBuild reliable workers.', markdown: '# Soul\n\nBuild reliable workers.' },
+      'skill.md': { key: 'skill.md', found: true, content: '# Skill\n\nUse TDD.', markdown: '# Skill\n\nUse TDD.' },
+      'memory.md': { key: 'memory.md', found: true, content: '# Memory\n\nNo recent notes.', markdown: '# Memory\n\nNo recent notes.' },
     },
   });
 });

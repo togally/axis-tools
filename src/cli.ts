@@ -5236,6 +5236,79 @@ function syncEmployeeDocumentFromPayload(employee: Json, kind: EmployeeContextDo
   };
 }
 
+function compactStringObject(entries: Array<[string, string | null | undefined]>): Json | null {
+  const payload: Json = {};
+  for (const [key, value] of entries) {
+    const text = safeString(value);
+    if (text) payload[key] = text;
+  }
+  return Object.keys(payload).length > 0 ? payload : null;
+}
+
+function employeeProfileFromPayload(employee: Json): Json | null {
+  return compactStringObject([
+    ['avatarUrl', safeString(employee.avatarUrl)],
+    ['humanReferenceName', safeString(employee.humanReferenceName)],
+    ['profileNote', safeString(employee.profileNote)],
+  ]);
+}
+
+function employeeModelFromPayload(employee: Json): Json | null {
+  return compactStringObject([
+    ['provider', safeString(employee.modelProvider)],
+    ['name', safeString(employee.modelName)],
+    ['level', safeString(employee.modelLevel)],
+    ['configJson', safeString(employee.modelConfigJson)],
+  ]);
+}
+
+function employeeRuntimeModelFromPayload(employee: Json): Json | null {
+  return compactStringObject([
+    ['status', safeString(employee.runtimeStatus)],
+    ['provider', safeString(employee.runtimeModelProvider)],
+    ['name', safeString(employee.runtimeModelName)],
+    ['level', safeString(employee.runtimeModelLevel)],
+  ]);
+}
+
+function runtimeModelForHeartbeat(config: Json): Json | null {
+  const model = isJson(config.model) ? config.model as Json : {};
+  const runtimeModel = isJson(config.runtimeModel) ? config.runtimeModel as Json : {};
+  return compactStringObject([
+    ['provider', safeString(runtimeModel.provider) ?? safeString(model.provider)],
+    ['name', safeString(runtimeModel.name) ?? safeString(model.name)],
+    ['level', safeString(runtimeModel.level) ?? safeString(model.level)],
+  ]);
+}
+
+async function readStartWorkEmployeeRuntimeModel(employeeId: string | null): Promise<Json | null> {
+  if (!employeeId) return null;
+  return runtimeModelForHeartbeat(await readJsonFile<Json>(path.join(axisEmployeeDir(employeeId), 'config.json'), {}));
+}
+
+function runtimeModelFields(model: Json | null): Json {
+  if (!model) return {};
+  return {
+    ...(safeString(model.provider) ? { runtimeModelProvider: safeString(model.provider) } : {}),
+    ...(safeString(model.name) ? { runtimeModelName: safeString(model.name) } : {}),
+    ...(safeString(model.level) ? { runtimeModelLevel: safeString(model.level) } : {}),
+  };
+}
+
+function modelFromHeartbeat(value: Json | null): Json | null {
+  if (!value) return null;
+  return compactStringObject([
+    ['provider', safeString(value.runtimeModelProvider)],
+    ['name', safeString(value.runtimeModelName)],
+    ['level', safeString(value.runtimeModelLevel)],
+  ]);
+}
+
+function modelSummaryText(model: Json | null): string | null {
+  const parts = [safeString(model?.provider), safeString(model?.name), safeString(model?.level)].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join('/') : null;
+}
+
 function employeeWorkspaceInstructions(values: {
   employeeId: string;
   name: string | null;
@@ -5316,6 +5389,9 @@ async function syncEmployeeWorkspace(values: {
   const role = safeString(employee.role);
   const language = safeString(employee.language);
   const agent = safeString(employee.agentType) ?? safeString(employee.agent) ?? values.agentHint ?? 'codex';
+  const profile = employeeProfileFromPayload(employee);
+  const model = employeeModelFromPayload(employee);
+  const runtimeModel = employeeRuntimeModelFromPayload(employee);
   const syncedAt = new Date().toISOString();
   const documentResults: Json[] = [];
   const syncDocuments: Json = {};
@@ -5342,6 +5418,9 @@ async function syncEmployeeWorkspace(values: {
     name,
     ...(language ? { language } : {}),
     ...(role ? { role } : {}),
+    ...(profile ? { profile } : {}),
+    ...(model ? { model } : {}),
+    ...(runtimeModel ? { runtimeModel } : {}),
     agentType: agent,
     backendUrl,
     localPath: employeeDir,
@@ -5361,6 +5440,9 @@ async function syncEmployeeWorkspace(values: {
     employeeId,
     name,
     ...(role ? { role } : {}),
+    ...(profile ? { profile } : {}),
+    ...(model ? { model } : {}),
+    ...(runtimeModel ? { runtimeModel } : {}),
     agent,
     backendUrl,
     localPath: employeeDir,
@@ -5744,6 +5826,11 @@ function compactLastHeartbeat(value: Json): Json | null {
   const lastSuccessAt = safeString(value.lastSuccessAt);
   const backendUrl = safeString(value.backendUrl);
   const employeeId = safeString(value.employeeId);
+  const runtimeStatus = safeString(value.runtimeStatus);
+  const runtimeModelProvider = safeString(value.runtimeModelProvider);
+  const runtimeModelName = safeString(value.runtimeModelName);
+  const runtimeModelLevel = safeString(value.runtimeModelLevel);
+  const model = modelFromHeartbeat(value);
   const hasEvidence = value.ok === true || value.ok === false || sentAt || warning || lastSuccessAt;
   if (!hasEvidence) return null;
   return {
@@ -5751,6 +5838,11 @@ function compactLastHeartbeat(value: Json): Json | null {
     status: value.ok === true ? 'ok' : 'warning',
     sentAt,
     employeeId,
+    runtimeStatus,
+    runtimeModelProvider,
+    runtimeModelName,
+    runtimeModelLevel,
+    ...(model ? { model } : {}),
     warning,
     failureCount: typeof value.failureCount === 'number' ? value.failureCount : null,
     lastSuccessAt,
@@ -6893,17 +6985,21 @@ async function sendStartWorkHeartbeat(values: {
   } catch {
     target = values.target;
   }
+  const employeeId = startWorkEmployeeId();
+  const runtimeModel = await readStartWorkEmployeeRuntimeModel(employeeId);
   const payload: Json = {
     sessionId,
     ...localMachineMetadata(),
     agentType: agent,
     agentName: startWorkAgentName(agent),
-    employeeId: startWorkEmployeeId(),
+    employeeId,
     host: os.hostname(),
     pid: process.pid,
     cliVersion: cliVersion(),
     account: target.binding.account ?? target.binding.user?.account ?? null,
     status: heartbeatState.status,
+    runtimeStatus: heartbeatState.status,
+    ...runtimeModelFields(runtimeModel),
     currentWorkItemId: heartbeatState.currentWorkItemId,
     startedAt,
     sentAt: new Date().toISOString(),
@@ -6923,6 +7019,10 @@ async function sendStartWorkHeartbeat(values: {
       backendUrl: normalizeBackendUrl(target.binding.backendUrl),
       employeeId: payload.employeeId,
       status: payload.status,
+      runtimeStatus: payload.runtimeStatus,
+      runtimeModelProvider: payload.runtimeModelProvider,
+      runtimeModelName: payload.runtimeModelName,
+      runtimeModelLevel: payload.runtimeModelLevel,
       scope: payload.scope,
       failureCount: 0,
       lastSuccessAt: retryState.lastSuccessAt,
@@ -6939,6 +7039,10 @@ async function sendStartWorkHeartbeat(values: {
       backendUrl: normalizeBackendUrl(target.binding.backendUrl),
       employeeId: payload.employeeId,
       status: payload.status,
+      runtimeStatus: payload.runtimeStatus,
+      runtimeModelProvider: payload.runtimeModelProvider,
+      runtimeModelName: payload.runtimeModelName,
+      runtimeModelLevel: payload.runtimeModelLevel,
       scope: payload.scope,
       warning,
       failureCount: retryState.failures,
@@ -7603,6 +7707,7 @@ async function workStatusCommand(): Promise<void> {
     const config = await readJsonFile<Json>(path.join(sessionDir, 'config.json'), {});
     const lastHeartbeat = compactLastHeartbeat(await readJsonFile<Json>(path.join(sessionDir, 'last-heartbeat.json'), {}));
     const employeeId = workerEmployeeId(state, config, lastHeartbeat);
+    const model = modelFromHeartbeat(lastHeartbeat);
     const pid = typeof state.pid === 'number' ? state.pid : null;
     const processStatus = await workerProcessStatus(entry, pid, state, config);
     const stale = !processStatus.alive;
@@ -7629,6 +7734,7 @@ async function workStatusCommand(): Promise<void> {
       updatedAt: safeString(state.updatedAt),
       startedAt: safeString(state.startedAt) ?? safeString(config.startedAt),
       logPath: safeString(state.logPath) ?? axisWorkerLogPath(entry),
+      model,
       lastHeartbeat,
     });
   }
@@ -7653,7 +7759,9 @@ async function workStatusCommand(): Promise<void> {
       : '';
     const heartbeatWarning = compactWarning(safeString(lastHeartbeat?.warning));
     const warningText = heartbeatWarning ? ` heartbeatWarning=${JSON.stringify(heartbeatWarning)}` : '';
-    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'}${employeeText}${heartbeatText}${warningText} log=${worker.logPath ?? '-'}${staleText}`);
+    const modelText = modelSummaryText(isJson(worker.model) ? worker.model as Json : null);
+    const modelOutput = modelText ? ` model=${modelText}` : '';
+    console.log(`${worker.sessionId} agent=${worker.agent ?? '-'} pid=${worker.pid ?? '-'} alive=${worker.alive ? 'true' : 'false'} status=${worker.status ?? '-'}${employeeText}${heartbeatText}${warningText}${modelOutput} log=${worker.logPath ?? '-'}${staleText}`);
   }
   if (prunedCount > 0) console.log(`${prunedCount} stale worker session${prunedCount === 1 ? '' : 's'} pruned.`);
   else if (staleCount > 0 && !includeStale) console.log(`${staleCount} stale worker session${staleCount === 1 ? '' : 's'} hidden; pass --include-stale to show them.`);
