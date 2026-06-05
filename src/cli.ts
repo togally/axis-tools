@@ -394,6 +394,15 @@ interface StartWorkContextDocument {
   employeeRole?: EmployeeRole;
 }
 
+interface SyncedEmployeeWorkContextResult {
+  employeeId: string;
+  version: string | null;
+  syncedAt: string;
+  documents: EmployeeContextDocumentKind[];
+  roleWorkflow: Json | null;
+  path: string;
+}
+
 interface StartWorkHeartbeatState {
   status: string;
   currentWorkItemId: string | null;
@@ -5456,6 +5465,134 @@ async function syncEmployeeWorkspace(values: {
   };
 }
 
+function axisEmployeeWorkContextPath(employeeId: string): string {
+  return path.join(axisEmployeeDir(employeeId), 'work-context.json');
+}
+
+function axisEmployeeRoleWorkflowPath(employeeId: string): string {
+  return path.join(axisEmployeeDir(employeeId), 'role-workflow.json');
+}
+
+function employeeWorkContextFromHeartbeatResponse(response: unknown): { context: Json; version: string | null } | null {
+  if (!isJson(response) || !isJson(response.workContext)) return null;
+  return {
+    context: response.workContext as Json,
+    version: safeString(response.workContextVersion) ?? null,
+  };
+}
+
+function employeeDocumentCacheEntry(raw: unknown, kind: EmployeeContextDocumentKind): Json | null {
+  const parsed = remoteEmployeeDocumentContent(raw);
+  if (!parsed?.found) return null;
+  if (isJson(raw)) {
+    return {
+      ...raw,
+      kind: safeString(raw.kind) ?? kind,
+      content: parsed.content,
+    };
+  }
+  return {
+    kind,
+    content: parsed.content,
+  };
+}
+
+async function syncEmployeeWorkContextFromHeartbeat(values: {
+  backendUrl: string;
+  employeeId: string | null;
+  response: unknown;
+}): Promise<SyncedEmployeeWorkContextResult | null> {
+  const employeeId = safeString(values.employeeId);
+  if (!employeeId) return null;
+  const extracted = employeeWorkContextFromHeartbeatResponse(values.response);
+  if (!extracted) return null;
+
+  const employeeDir = axisEmployeeDir(employeeId);
+  ensureDir(employeeDir);
+  const syncedAt = new Date().toISOString();
+  const context = extracted.context;
+  const employee = isJson(context.employee) ? context.employee as Json : {};
+  const rawDocuments = isJson(context.documents) ? context.documents as Json : {};
+  const cachedDocuments: Json = {};
+  const writtenDocuments: EmployeeContextDocumentKind[] = [];
+
+  for (const kind of EMPLOYEE_CONTEXT_DOCUMENTS) {
+    const cached = employeeDocumentCacheEntry(rawDocuments[kind] ?? rawDocuments[`${kind}.md`], kind);
+    if (!cached) continue;
+    cachedDocuments[kind] = cached;
+    const content = safeString(cached.content) ?? '';
+    await writeFile(axisEmployeeDocumentPath(employeeId, kind), `${content.trimEnd()}\n`, 'utf8');
+    writtenDocuments.push(kind);
+  }
+
+  const roleWorkflow = isJson(context.roleWorkflow) ? context.roleWorkflow as Json : null;
+  if (roleWorkflow) {
+    await writeJsonFile(axisEmployeeRoleWorkflowPath(employeeId), roleWorkflow);
+  }
+
+  const name = safeString(employee.name) ?? employeeId;
+  const role = normalizeEmployeeRoleValue(employee.role);
+  const agent = safeString(employee.agentType) ?? safeString(employee.agent) ?? safeString((await readJsonFile<Json>(path.join(employeeDir, 'config.json'), {})).agentType) ?? 'codex';
+  const cachedContext: Json = {
+    employeeId,
+    backendUrl: normalizeBackendUrl(values.backendUrl),
+    version: extracted.version,
+    syncedAt,
+    loadedAt: safeString(context.loadedAt) ?? null,
+    employee,
+    documents: cachedDocuments,
+    roleWorkflow,
+  };
+  await writeJsonFile(axisEmployeeWorkContextPath(employeeId), cachedContext);
+
+  const currentConfig = await readJsonFile<Json>(path.join(employeeDir, 'config.json'), {});
+  await writeEmployeeWorkspaceGuides(employeeId, { name, role: role ?? safeString(currentConfig.role) ?? null, backendUrl: values.backendUrl });
+  await writeJsonFile(path.join(employeeDir, 'config.json'), {
+    ...currentConfig,
+    employeeId,
+    name,
+    ...(role ? { role } : {}),
+    agentType: agent,
+    backendUrl: normalizeBackendUrl(values.backendUrl),
+    localPath: employeeDir,
+    status: safeString(employee.status) ?? safeString(currentConfig.status) ?? 'active',
+    cloudWorkContext: {
+      version: extracted.version,
+      syncedAt,
+      loadedAt: safeString(context.loadedAt) ?? null,
+      documents: Object.fromEntries(writtenDocuments.map((kind) => [kind, {
+        version: isJson(cachedDocuments[kind]) && typeof cachedDocuments[kind].version === 'number' ? cachedDocuments[kind].version : null,
+        syncedAt,
+      }])),
+      ...(roleWorkflow ? {
+        roleWorkflow: {
+          role: safeString(roleWorkflow.role) ?? null,
+          version: typeof roleWorkflow.version === 'number' ? roleWorkflow.version : safeString(roleWorkflow.version) ?? null,
+          syncedAt,
+        },
+      } : {}),
+    },
+    updatedAt: syncedAt,
+  });
+
+  return {
+    employeeId,
+    version: extracted.version,
+    syncedAt,
+    documents: writtenDocuments,
+    roleWorkflow,
+    path: axisEmployeeWorkContextPath(employeeId),
+  };
+}
+
+async function readSyncedEmployeeWorkContextDocuments(employeeId: string): Promise<{ documents: StartWorkContextDocument[]; warnings: string[] } | null> {
+  const contextPath = axisEmployeeWorkContextPath(employeeId);
+  if (!existsSync(contextPath)) return null;
+  const payload = await readJsonFile<Json>(contextPath, {});
+  if (!isJson(payload.documents) && !isJson(payload.roleWorkflow) && !isJson(payload.employee)) return null;
+  return startWorkEmployeeContextDocumentsFromPayload(employeeId, payload);
+}
+
 async function syncEmployeeCommand(): Promise<void> {
   if (isHelpFlag(process.argv[3])) {
     printSyncEmployeeUsage();
@@ -6069,17 +6206,34 @@ function remoteEmployeeContextMissingWarning(employeeId: string, key: string): s
 
 function startWorkRemoteEmployeeDocumentsRoot(payload: unknown): Json {
   if (!isJson(payload)) return {};
-  if (isJson(payload.employee) && isJson(payload.employee.documents)) return payload.employee.documents as Json;
+  if (isJson(payload.workContext) && isJson(payload.workContext.documents)) return payload.workContext.documents as Json;
+  if (isJson(payload.context) && isJson(payload.context.documents)) return payload.context.documents as Json;
   if (isJson(payload.documents)) return payload.documents as Json;
+  if (isJson(payload.employee) && isJson(payload.employee.documents)) return payload.employee.documents as Json;
   return {};
 }
 
 function startWorkRemoteEmployeeRole(payload: unknown): EmployeeRole | null {
   if (!isJson(payload)) return null;
+  if (isJson(payload.workContext) && isJson(payload.workContext.employee)) {
+    return normalizeEmployeeRoleValue(payload.workContext.employee.role);
+  }
+  if (isJson(payload.context) && isJson(payload.context.employee)) {
+    return normalizeEmployeeRoleValue(payload.context.employee.role);
+  }
   if (isJson(payload.employee)) {
     return normalizeEmployeeRoleValue(payload.employee.role);
   }
   return normalizeEmployeeRoleValue(payload.role);
+}
+
+function startWorkRemoteEmployeeRoleWorkflow(payload: unknown): Json | null {
+  if (!isJson(payload)) return null;
+  if (isJson(payload.workContext) && isJson(payload.workContext.roleWorkflow)) return payload.workContext.roleWorkflow as Json;
+  if (isJson(payload.context) && isJson(payload.context.roleWorkflow)) return payload.context.roleWorkflow as Json;
+  if (isJson(payload.employee) && isJson(payload.employee.roleWorkflow)) return payload.employee.roleWorkflow as Json;
+  if (isJson(payload.roleWorkflow)) return payload.roleWorkflow as Json;
+  return null;
 }
 
 function startWorkEmployeeRoleDocument(role: EmployeeRole): StartWorkContextDocument {
@@ -6097,6 +6251,51 @@ function startWorkEmployeeRoleDocument(role: EmployeeRole): StartWorkContextDocu
     markdown: content,
     source: 'employee',
     employeeRole: role,
+  };
+}
+
+function roleWorkflowStepsMarkdown(workflow: Json): string[] {
+  const steps = Array.isArray(workflow.steps) ? workflow.steps : [];
+  if (steps.length === 0) return ['Steps: none configured.'];
+  const lines = ['Steps:'];
+  for (const step of steps) {
+    if (!isJson(step)) continue;
+    const id = safeString(step.id) ?? 'step';
+    const name = safeString(step.name) ?? id;
+    lines.push(`- ${id}: ${name}`);
+    const role = safeString(step.role);
+    const objective = safeString(step.objective);
+    const output = safeString(step.output);
+    const dependsOn = Array.isArray(step.dependsOn)
+      ? step.dependsOn.map((entry) => safeString(entry)).filter((entry): entry is string => Boolean(entry))
+      : [];
+    if (role) lines.push(`  Role: ${role}`);
+    if (objective) lines.push(`  Objective: ${objective}`);
+    if (output) lines.push(`  Output: ${output}`);
+    if (dependsOn.length > 0) lines.push(`  Depends on: ${dependsOn.join(', ')}`);
+  }
+  return lines;
+}
+
+function startWorkEmployeeRoleWorkflowDocument(workflow: Json): StartWorkContextDocument | null {
+  const role = safeString(workflow.role);
+  const title = safeString(workflow.title);
+  if (!role && !title) return null;
+  const description = safeString(workflow.description);
+  const version = typeof workflow.version === 'number' ? String(workflow.version) : safeString(workflow.version);
+  const content = [
+    `employee.roleWorkflow: ${role ?? 'unassigned'}`,
+    title ? `Title: ${title}` : null,
+    description ? `Description: ${description}` : null,
+    version ? `Version: ${version}` : null,
+    ...roleWorkflowStepsMarkdown(workflow),
+  ].filter((entry): entry is string => Boolean(entry)).join('\n');
+  return {
+    key: 'employee.roleWorkflow',
+    found: true,
+    content,
+    markdown: content,
+    source: 'employee',
   };
 }
 
@@ -6132,6 +6331,11 @@ function startWorkEmployeeContextDocumentsFromPayload(employeeId: string, payloa
   const role = startWorkRemoteEmployeeRole(payload);
   if (role) {
     documents.push(startWorkEmployeeRoleDocument(role));
+  }
+  const roleWorkflow = startWorkRemoteEmployeeRoleWorkflow(payload);
+  const roleWorkflowDocument = roleWorkflow ? startWorkEmployeeRoleWorkflowDocument(roleWorkflow) : null;
+  if (roleWorkflowDocument) {
+    documents.push(roleWorkflowDocument);
   }
 
   for (const entry of keys) {
@@ -6179,6 +6383,8 @@ function hubMissingAgentContextWarning(warning: string): boolean {
 async function fetchStartWorkEmployeeContext(target: StartWorkTarget, employeeId: string): Promise<{ documents: StartWorkContextDocument[]; warnings: string[] }> {
   const token = await tokenForBinding(target.binding);
   try {
+    const syncedContext = await readSyncedEmployeeWorkContextDocuments(employeeId);
+    if (syncedContext) return syncedContext;
     const payload = await fetchOrbitJson(target.binding.backendUrl, `/api/employees/${encodeURIComponent(employeeId)}`, token);
     return startWorkEmployeeContextDocumentsFromPayload(employeeId, payload);
   } catch (error) {
@@ -7010,6 +7216,11 @@ async function sendStartWorkHeartbeat(values: {
     const token = await tokenForBinding(target.binding);
     await syncCurrentSessionMachineMetadataOnce(target.binding.backendUrl, token);
     const response = await postOrbitJson(target.binding.backendUrl, '/api/agent-workers/heartbeat', payload, token);
+    const syncedWorkContext = await syncEmployeeWorkContextFromHeartbeat({
+      backendUrl: target.binding.backendUrl,
+      employeeId: safeString(payload.employeeId) ?? null,
+      response,
+    });
     retryState.failures = 0;
     retryState.lastWarning = null;
     retryState.lastSuccessAt = payload.sentAt as string;
@@ -7026,6 +7237,10 @@ async function sendStartWorkHeartbeat(values: {
       scope: payload.scope,
       failureCount: 0,
       lastSuccessAt: retryState.lastSuccessAt,
+      ...(syncedWorkContext ? {
+        workContextVersion: syncedWorkContext.version,
+        workContextPath: syncedWorkContext.path,
+      } : {}),
       response: isJson(response) ? response : {},
     });
     return { ok: true, warning: null, target };
@@ -7307,6 +7522,9 @@ async function runStartWorkForeground(options: {
       heartbeatState.currentWorkItemId = null;
       await writeWorkerState(sessionId, { agent, pid: process.pid, background: false, status: 'polling', startedAt, iteration: iterationNumber, scope });
       progress(`iteration ${iterationNumber}: start`);
+      await heartbeat.sendNow();
+      context = await preloadStartWorkContexts(targets, progress);
+      for (const warning of context.warnings) pushUniqueWarning(summary.warnings, warning);
       const projectResults: Json[] = [];
       let handledWork = false;
       for (const target of targets) {
