@@ -107,7 +107,7 @@ const LOCAL_BINDING_GLOBAL_KEYS = [
     'lastProductLineRoot',
 ];
 function printUsage() {
-    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  submit <text> [--type <requirement|bug|suggestion|idea>] [--team-id <id>] [--json]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n  sync-employee = sync one employee workspace from Axis Hub, optionally pushing local context docs first\n  submit = submit app/CLI/user work to a project team discussion and WorkItem\n\nPool examples:\n  axis submit "登录页报错" --type bug --team-id team_core\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
+    console.log(`axis\n\nAliases: axis-tools, orbit, orbit-tools\n\nCommands:\n  login\n  me\n  plan [--backend-url <url>] [--json]\n  init\n  bind\n  pull\n  init-product-line\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--backend-url <url>] [--json]\n  sync-employee [--employee-id <id>] [--backend-url <url>] [--push] [--json]\n  install [--agent <codex|claude-code|cc|all>] [--force]\n  logout [--backend-url <url>]\n  submit <text> [--type <requirement|bug|suggestion|idea>] [--team-id <id>] [--json]\n  axis-req <text> [--repo <path>] [--json]\n  axis-req --list [--repo <path>] [--page <n>] [--page-size <n>] [--json]\n  axis-req --delete <id> [--repo <path>] [--yes] [--json]\n  axis-ide|axis-bug|axis-sug use the same seed/list/delete flags\n  axis start-work [--agent <codex|claude-code|claude>] [--foreground] [--interval <seconds>] [--heartbeat-interval <seconds>] [--json] [--employee-id <id>] [--project-id <id>|--product-line-id <id>]\n  axis work-status [--json] [--include-stale|--all] [--prune]\n  axis stop-work [--session <sessionId>|--all] [--json]\n  axis work-review [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  axis work-coding [--repo <path>] [--project-id <id>|--project-uuid <uuid>] [--interval <seconds>|--sleep <seconds>] [--iterations <n>|--max-iterations <n>|--once] [--json]\n  codex-hook ingest [--file <json-file>] [--repo <path>]\n  codex-status current [--repo <path>] [--json]\n  codex-status tail [--repo <path>] [--limit <n>]\n  codex-status summary [--repo <path>]\n  codex-run once --repo <path> --prompt <text> [--json] [--model <model>]\n  mcp install [--repo <path>] [--config <hermes-config>] [--backend-url <url>] [--mcp-url <url>] [--server-name <name>]\n  project bind --interactive [--repo <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project bind [--repo <path>] --product-line-uuid <uuid> --project-uuid <uuid> [--product-line-id <id>] [--project-id <id>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>]\n  project show [--repo <path>] [--json]\n\nDeprecated worker commands:\n  axis work-review [--repo <path>] ... = deprecated review/refine worker; use start-work for coding execution\n  axis work-coding [--repo <path>] ... = deprecated coding probe; use start-work for coding execution\n  work-review and work-coding are deprecated; use axis start-work\n\nDeprecated worker aliases:\n  axis work-once --repo <path> [--agent <codex|claude-code|none>] [--json]\n  axis work-loop --repo <path> [--iterations <n>|--max-iterations <n>|--once] [--interval <seconds>|--sleep <seconds>] [--agent <codex|claude-code|none>] [--json]\n  axis work once|loop ... = deprecated aliases for the review worker\n\nMain flow:\n  login = prompt for AxisNode account and hidden password; cache session\n  me = show current AxisNode user\n  plan = show current account package, status, quotas, and usage\n  init = packaged skill setup only\n  bind = bind a repo or product-line root to AxisNode\n  pull = clone/pull maintained repos from AxisNode into AXIS_HOME or ~/.axis by default\n  create-employee = create a local Axis employee runtime and register it to Axis Hub\n  sync-employee = sync one employee workspace from Axis Hub, optionally pushing local context docs first\n  submit = submit app/CLI/user work to a project team discussion and WorkItem\n\nPool examples:\n  axis submit "登录页报错" --type bug --team-id team_core\n  axis-req "商品评价支持图片"\n  axis-bug "登录失败"\n  axis-sug "优化按钮文案" --json\n  axis-req --list --page 1 --page-size 20\n\nWorker examples:\n  axis start-work --agent codex\n  axis start-work --agent claude-code\n  axis start-work --foreground --heartbeat-interval 30\n  axis work-status\n  axis stop-work\n  axis stop-work --session axis-host-123\n  axis stop-work --all --json\n  axis work-review --iterations 1 --json\n  axis work-coding --once --json\n\nPool flags:\n  --local / --save-local = force local seed save instead of Hub submit\n  --save = deprecated alias for --local\n  --from <file> / --stdin = read seed input from file or stdin\n  --json = machine-readable output\n\nAdvanced overrides:\n  init [--repo <path>] [--backend-url <url>] [--agent <codex|claude-code|none>]\n  bind [--repo <path>] [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n  pull [--root <path>] [--backend-url <url>]\n  init-product-line [--root <path>] [--owner <name>] [--backend-url <url>] [--mcp-url <url>] [--agent <codex|claude-code|none>]\n`);
     console.log(`Employee role flag:\n  create-employee [--agent <codex|claude-code|cc>] [--language <zh|en>] [--role <development|qa|devops|architecture|product|design>]\n`);
     console.log(`Pool interactive defaults:\n  axis-req --list = interactive pagination, default 10 items/page\n  axis-req --delete = choose an item interactively, then type yes to confirm\n  --yes is for scripts/CI; --json keeps machine-readable non-interactive output\n`);
 }
@@ -930,6 +930,60 @@ async function meCommand() {
     console.log(`role: ${user.role ?? '-'}`);
     console.log(`permissions: ${user.permissions && user.permissions.length > 0 ? user.permissions.join(', ') : '-'}`);
 }
+function planStatusLabel(status) {
+    if (status === 'active')
+        return '已开通';
+    if (status === 'trialing')
+        return '试用中';
+    if (status === 'paused')
+        return '已暂停';
+    return status ?? '-';
+}
+function jsonNumber(value, key) {
+    const raw = value[key];
+    if (typeof raw === 'number' && Number.isFinite(raw))
+        return raw;
+    if (typeof raw === 'string' && raw.trim() !== '' && Number.isFinite(Number(raw)))
+        return Number(raw);
+    return 0;
+}
+function nestedJson(value, key) {
+    const raw = value[key];
+    return isJson(raw) ? raw : {};
+}
+async function fetchAccountPlan(backendUrl, token) {
+    const payload = await fetchOrbitJson(backendUrl, '/api/account/plan', token);
+    if (!isJson(payload) || !isJson(payload.entitlement)) {
+        throw new Error('AxisNode backend response for /api/account/plan did not include entitlement data');
+    }
+    return payload;
+}
+function printAccountPlan(payload) {
+    const entitlement = nestedJson(payload, 'entitlement');
+    const accountPlan = nestedJson(entitlement, 'accountPlan');
+    const plan = nestedJson(entitlement, 'plan');
+    const limits = nestedJson(plan, 'limits');
+    const usage = nestedJson(entitlement, 'usage');
+    const period = nestedJson(entitlement, 'period');
+    const planName = safeString(plan.name) ?? safeString(accountPlan.planCode) ?? '-';
+    console.log(`方案: ${planName}`);
+    console.log(`状态: ${planStatusLabel(safeString(accountPlan.status))}`);
+    console.log(`周期: ${safeString(period.start) ?? '-'} -> ${safeString(period.end) ?? '-'}`);
+    console.log(`项目: ${jsonNumber(usage, 'projectCount')}/${jsonNumber(limits, 'maxProjects')}，剩余 ${jsonNumber(usage, 'remainingProjects')}`);
+    console.log(`员工: ${jsonNumber(usage, 'employeeCount')}/${jsonNumber(limits, 'maxEmployees')}，剩余 ${jsonNumber(usage, 'remainingEmployees')}`);
+    console.log(`员工团队: ${jsonNumber(usage, 'employeeTeamCount')}/${jsonNumber(limits, 'maxEmployeeTeams')}，剩余 ${jsonNumber(usage, 'remainingTeams')}`);
+    console.log(`WorkItem / 提交: ${jsonNumber(usage, 'monthlySubmissions')}/${jsonNumber(limits, 'monthlySubmissions')}，剩余 ${jsonNumber(usage, 'remainingSubmissions')}`);
+}
+async function planCommand() {
+    const backendUrl = getArg('--backend-url') ?? defaultBackendUrl();
+    const { login } = await requireCachedLoginSession(backendUrl);
+    const payload = await fetchAccountPlan(backendUrl, login.token);
+    if (hasFlag('--json')) {
+        console.log(JSON.stringify(payload, null, 2));
+        return;
+    }
+    printAccountPlan(payload);
+}
 function asProductLine(value) {
     if (!isJson(value))
         return null;
@@ -1006,6 +1060,35 @@ function visibleProductDetail(entry) {
         modules: entry.modules.filter((module) => !isHiddenCatalogRecord(module)),
     };
 }
+function orbitErrorDetailFromBody(body) {
+    const trimmed = body.trim();
+    if (!trimmed)
+        return null;
+    try {
+        const parsed = JSON.parse(trimmed);
+        if (isJson(parsed)) {
+            return safeString(parsed.error)
+                ?? safeString(parsed.message)
+                ?? safeString(parsed.reason)
+                ?? trimmed;
+        }
+    }
+    catch {
+        return trimmed;
+    }
+    return trimmed;
+}
+async function orbitHttpErrorFromResponse(response, url) {
+    let detail = null;
+    try {
+        detail = orbitErrorDetailFromBody(await response.text());
+    }
+    catch {
+        detail = null;
+    }
+    const suffix = detail ? `: ${detail}` : '';
+    return new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}${suffix}`);
+}
 async function fetchOrbitJson(backendUrl, routePath, token) {
     const url = `${normalizeBackendUrl(backendUrl)}${routePath}`;
     let response;
@@ -1023,7 +1106,7 @@ async function fetchOrbitJson(backendUrl, routePath, token) {
             throw new OrbitCliError(loginRequiredMessage(backendUrl));
         if (response.status === 403)
             throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
-        throw new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}`);
+        throw await orbitHttpErrorFromResponse(response, url);
     }
     try {
         return await response.json();
@@ -1055,7 +1138,7 @@ async function postOrbitJson(backendUrl, routePath, body, token) {
             throw new OrbitCliError(loginRequiredMessage(backendUrl));
         if (response.status === 403)
             throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
-        throw new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}`);
+        throw await orbitHttpErrorFromResponse(response, url);
     }
     try {
         return await response.json();
@@ -1087,7 +1170,7 @@ async function patchOrbitJson(backendUrl, routePath, body, token) {
             throw new OrbitCliError(loginRequiredMessage(backendUrl));
         if (response.status === 403)
             throw new OrbitCliError(insufficientPermissionMessage(backendUrl));
-        throw new OrbitHttpError(response.status, `AxisNode backend returned HTTP ${response.status} for ${url}`);
+        throw await orbitHttpErrorFromResponse(response, url);
     }
     try {
         return await response.json();
@@ -9145,6 +9228,10 @@ async function main() {
     }
     if (group === 'me' || group === 'whoami') {
         await meCommand();
+        return;
+    }
+    if (group === 'plan') {
+        await planCommand();
         return;
     }
     if (group === 'init' || group === 'setup') {

@@ -734,6 +734,36 @@ async function withProductServer(fn, options = {}) {
       }));
       return;
     }
+    if (req.method === 'GET' && req.url === '/api/account/plan') {
+      if (!requireAuth()) return;
+      res.end(JSON.stringify(options.planPayload ?? {
+        entitlement: {
+          accountPlan: { accountId: 'orbit-dev-user', planCode: 'personal', status: 'active', note: 'pilot' },
+          plan: {
+            code: 'personal',
+            name: '个人版',
+            priceLabel: '早期接入',
+            audience: '个人项目',
+            description: '多项目持续沉淀',
+            limits: { maxProjects: 5, maxEmployees: 3, maxEmployeeTeams: 1, monthlySubmissions: 200 },
+            features: { teamCollaboration: true, employeeWorkspace: true, cloudHistory: true },
+          },
+          usage: {
+            projectCount: 2,
+            employeeCount: 1,
+            employeeTeamCount: 0,
+            monthlySubmissions: 12,
+            remainingProjects: 3,
+            remainingEmployees: 2,
+            remainingTeams: 1,
+            remainingSubmissions: 188,
+          },
+          period: { start: '2026-06-01T00:00:00Z', end: '2026-07-01T00:00:00Z' },
+        },
+        plans: [],
+      }));
+      return;
+    }
     if (req.method === 'POST' && req.url === '/api/login') {
       state.loginCount++;
       let body = '';
@@ -1307,6 +1337,13 @@ async function withPoolServer(fn, options = {}) {
         state.teamIntakes++;
         state.lastTeamIntake = payload;
         state.teamIntakePayloads.push(payload);
+        if (options.teamIntakeError) {
+          res.statusCode = options.teamIntakeError.status ?? 402;
+          res.end(JSON.stringify(options.teamIntakeError.body ?? {
+            error: '免费版最多 20 次提交，请升级个人版或团队版。',
+          }));
+          return;
+        }
         res.statusCode = 201;
         res.end(JSON.stringify({
           intake: {
@@ -1451,7 +1488,7 @@ async function withPoolServer(fn, options = {}) {
   const legacyHelp = await runViaLinkedLegacyAlias(['--help']);
   assert.match(usage.stdout, /^axis\n/);
   assert.match(usage.stdout, /Aliases: axis-tools, orbit, orbit-tools/);
-  assert.match(usage.stdout, /Commands:\n  login\n  me\n  init\n  bind\n  pull\n/);
+  assert.match(usage.stdout, /Commands:\n  login\n  me\n  plan \[--backend-url <url>\] \[--json\]\n  init\n  bind\n  pull\n/);
   assert.match(usage.stdout, /axis start-work \[--agent <codex\|claude-code\|claude>\]/);
   assert.match(usage.stdout, /axis work-review \[--repo <path>\]/);
   assert.match(usage.stdout, /axis work-coding \[--repo <path>\]/);
@@ -2248,6 +2285,36 @@ await withTempDir(async (dir) => {
 });
 
 await withTempDir(async (dir) => {
+  await withProductServer(async (backendUrl, state) => {
+    const home = path.join(dir, 'home');
+    await mkdir(path.join(home, '.orbit'), { recursive: true });
+    await writeFile(path.join(home, '.orbit', 'config.json'), JSON.stringify({
+      sessions: {
+        [backendUrl]: {
+          backendUrl,
+          account: 'orbit-user',
+          token: 'orbit-dev-token',
+          key: 'orbit-dev-key',
+          user: { account: 'orbit-user' },
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+    }, null, 2));
+
+    const jsonResult = await run(['plan', '--backend-url', backendUrl, '--json'], { env: { HOME: home } });
+    const payload = JSON.parse(jsonResult.stdout);
+    assert.equal(payload.entitlement.plan.code, 'personal');
+    assert.equal(payload.entitlement.usage.monthlySubmissions, 12);
+    assert.ok(state.requests.some((entry) => entry.method === 'GET' && entry.url === '/api/account/plan'));
+
+    const human = await run(['plan', '--backend-url', backendUrl], { env: { HOME: home } });
+    assert.match(human.stdout, /方案: 个人版/);
+    assert.match(human.stdout, /WorkItem \/ 提交: 12\/200/);
+    assert.match(human.stdout, /剩余 188/);
+  });
+});
+
+await withTempDir(async (dir) => {
   await withProductServer(async (backendUrl) => {
     const home = path.join(dir, 'home');
 
@@ -2363,6 +2430,29 @@ await withTempDir(async (dir) => {
     assert.equal(state.lastTeamIntake.teamId, 'team_core');
     assert.equal(state.lastTeamIntake.source, 'axis-cli-submit');
     assert.equal(state.requests.some((entry) => entry.method === 'POST' && entry.url === '/api/projects/proj_1/team-intake' && entry.authorization === 'Bearer orbit-dev-token'), true);
+  });
+});
+
+await withTempDir(async (dir) => {
+  await withPoolServer(async (backendUrl, state) => {
+    const repo = path.join(dir, 'quota-bound-repo');
+    await writeProjectBinding(repo, backendUrl);
+
+    const result = await run(['submit', '需要继续新增需求', '--type', 'requirement', '--team-id', 'team_core', '--repo', repo, '--json']);
+    const payload = JSON.parse(result.stdout);
+
+    assert.equal(payload.ok, true);
+    assert.equal(payload.mode, 'local-seed');
+    assert.match(payload.warning, /免费版最多 20 次提交，请升级个人版或团队版。/);
+    assert.match(payload.warning, /HTTP 402/);
+    assert.ok(payload.savedPath.endsWith('.json'));
+    assert.equal(state.teamIntakes, 1);
+    assert.equal(state.lastTeamIntake.kind, 'requirement');
+  }, {
+    teamIntakeError: {
+      status: 402,
+      body: { error: '免费版最多 20 次提交，请升级个人版或团队版。' },
+    },
   });
 });
 
