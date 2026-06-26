@@ -121,6 +121,8 @@ type CreateEmployeeAgentChoice = 'codex' | 'claude-code';
 type CreateEmployeeLanguage = 'zh' | 'en';
 type EmployeeRole = 'development' | 'qa' | 'devops' | 'architecture' | 'product' | 'design';
 
+const DEFAULT_PACKAGED_SKILL = 'axis-ali-dashboard';
+
 interface WorkerProcessStatus {
   alive: boolean;
   verified: boolean;
@@ -698,7 +700,7 @@ function axisWorkspaceCatalogPath(workspaceRoot = axisHomeDir()): string {
   return path.join(workspaceRoot, 'catalog.json');
 }
 
-function stableOrbitSkillPath(skillName = 'orbit-workflow'): string {
+function stableOrbitSkillPath(skillName = DEFAULT_PACKAGED_SKILL): string {
   return path.join(homeDir(), '.orbit', 'skills', skillName, 'SKILL.md');
 }
 
@@ -706,11 +708,11 @@ function bundledSkillsDir(): string {
   return path.join(cliPackageRoot(), 'skills');
 }
 
-function bundledOrbitSkillPath(skillName = 'orbit-workflow'): string {
+function bundledOrbitSkillPath(skillName = DEFAULT_PACKAGED_SKILL): string {
   return path.join(bundledSkillsDir(), skillName, 'SKILL.md');
 }
 
-function agentSkillPath(agent: AgentChoice, skillName = 'orbit-workflow'): string | null {
+function agentSkillPath(agent: AgentChoice, skillName = DEFAULT_PACKAGED_SKILL): string | null {
   if (agent === 'codex') return path.join(homeDir(), '.codex', 'skills', skillName, 'SKILL.md');
   if (agent === 'claude-code') return path.join(homeDir(), '.claude', 'skills', skillName, 'SKILL.md');
   return null;
@@ -2220,19 +2222,6 @@ async function packagedSkillNames(): Promise<string[]> {
   return names.sort();
 }
 
-async function copySkillTextIfAllowed(sourceText: string, target: string, force: boolean): Promise<'copied' | 'identical'> {
-  ensureDir(path.dirname(target));
-  if (existsSync(target)) {
-    const targetText = await readFile(target, 'utf8');
-    if (targetText === sourceText) return 'identical';
-    if (!force) {
-      throw new Error(`Refusing to overwrite modified skill at ${target}. Re-run with --force to replace it.`);
-    }
-  }
-  await writeFile(target, sourceText, 'utf8');
-  return 'copied';
-}
-
 async function copySkillIfAllowed(source: string, target: string, force: boolean): Promise<'copied' | 'identical'> {
   ensureDir(path.dirname(target));
   const sourceText = await readFile(source, 'utf8');
@@ -2245,31 +2234,6 @@ async function copySkillIfAllowed(source: string, target: string, force: boolean
   }
   await copyFile(source, target);
   return 'copied';
-}
-
-async function gstackOfficeHoursDependencyText(): Promise<string> {
-  const source = hermesSkillPath('gstack-office-hours');
-  if (existsSync(source)) {
-    return readFile(source, 'utf8');
-  }
-
-  return `---
-name: gstack-office-hours
-description: Dependency skill for running gstack office-hours discussions used by Oribit Idea.
----
-
-# Gstack Office Hours
-
-Use this dependency skill when another skill asks for gstack's \`office-hours\` capability/skill.
-
-Run the office-hours discussion with:
-
-\`\`\`bash
-gstack office-hours
-\`\`\`
-
-The \`oribit-idea\` skill uses this dependency to incubate ideas through an office-hours discussion, then turns the resulting notes into AxisNode-ready artifacts.
-`;
 }
 
 function installAgentsForChoice(agent: InstallAgentChoice): AgentChoice[] {
@@ -2307,20 +2271,9 @@ async function installPackagedSkills(agent: AgentChoice | InstallAgentChoice, fo
     }
   }
 
-  const dependencyText = await gstackOfficeHoursDependencyText();
-  for (const selectedAgent of agents) {
-    const target = agentSkillPath(selectedAgent, 'gstack-office-hours');
-    if (!target) continue;
-    installed.push({
-      skill: 'gstack-office-hours',
-      target,
-      status: await copySkillTextIfAllowed(dependencyText, target, force),
-    });
-  }
-
   return {
-    skillPath: stableOrbitSkillPath('orbit-workflow'),
-    agentSkillPath: agent === 'none' || agent === 'all' ? null : agentSkillPath(agent, 'orbit-workflow'),
+    skillPath: stableOrbitSkillPath(DEFAULT_PACKAGED_SKILL),
+    agentSkillPath: agent === 'none' || agent === 'all' ? null : agentSkillPath(agent, DEFAULT_PACKAGED_SKILL),
     installed,
   };
 }

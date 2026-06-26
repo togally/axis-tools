@@ -2784,7 +2784,7 @@ await withTempDir(async (dir) => {
     ], '3\n', { env: { HOME: home } });
     assert.equal(state.loginCount, 1);
     await assert.rejects(readFile(path.join(repoOne, '.orbit', 'project.json'), 'utf8'));
-    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'), /AxisNode/);
+    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'axis-ali-dashboard', 'SKILL.md'), 'utf8'), /Axis Dashboard JSON/);
 
     await runInteractive([
       'init',
@@ -2807,22 +2807,14 @@ await withTempDir(async (dir) => {
 
 await withTempDir(async (dir) => {
   const home = path.join(dir, 'home');
-  const hermesDependency = path.join(home, '.hermes', 'skills', 'gstack-office-hours', 'SKILL.md');
-  const hermesDependencyText = '# Gstack Office Hours\n\nRun `gstack office-hours` for idea discussions.\n';
-  await mkdir(path.dirname(hermesDependency), { recursive: true });
-  await writeFile(hermesDependency, hermesDependencyText, 'utf8');
 
   const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
   const installJson = JSON.parse(install.stdout);
   assert.equal(installJson.ok, true);
-  assert.equal(installJson.installed.length, 17);
+  assert.equal(installJson.installed.length, 3);
 
   const expectedSkillHeadings = new Map([
-    ['orbit-bug', /# AxisNode Bug/i],
-    ['orbit-requirement', /# AxisNode Requirement/i],
-    ['orbit-suggestion', /# AxisNode Suggestion/i],
-    ['orbit-workflow', /# AxisNode Workflow/i],
-    ['oribit-idea', /# Oribit Idea/i],
+    ['axis-ali-dashboard', /# Axis Dashboard JSON/i],
   ]);
   for (const [skill, heading] of expectedSkillHeadings) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');
@@ -2833,12 +2825,7 @@ await withTempDir(async (dir) => {
     assert.equal(claudeSkill, orbitSkill);
   }
 
-  const codexDependency = await readFile(path.join(home, '.codex', 'skills', 'gstack-office-hours', 'SKILL.md'), 'utf8');
-  const claudeDependency = await readFile(path.join(home, '.claude', 'skills', 'gstack-office-hours', 'SKILL.md'), 'utf8');
-  assert.equal(codexDependency, hermesDependencyText);
-  assert.equal(claudeDependency, codexDependency);
-
-  const modified = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
+  const modified = path.join(home, '.codex', 'skills', 'axis-ali-dashboard', 'SKILL.md');
   await writeFile(modified, 'locally modified\n', 'utf8');
   await assert.rejects(
     run(['install', '--agent', 'codex'], { env: { HOME: home } }),
@@ -2848,17 +2835,6 @@ await withTempDir(async (dir) => {
 
   await run(['install', '--agent', 'codex', '--force'], { env: { HOME: home } });
   assert.notEqual(await readFile(modified, 'utf8'), 'locally modified\n');
-
-  const modifiedDependency = path.join(home, '.codex', 'skills', 'gstack-office-hours', 'SKILL.md');
-  await writeFile(modifiedDependency, 'locally modified dependency\n', 'utf8');
-  await assert.rejects(
-    run(['install', '--agent', 'codex'], { env: { HOME: home } }),
-    /Refusing to overwrite modified skill/,
-  );
-  assert.equal(await readFile(modifiedDependency, 'utf8'), 'locally modified dependency\n');
-
-  await run(['install', '--agent', 'codex', '--force'], { env: { HOME: home } });
-  assert.notEqual(await readFile(modifiedDependency, 'utf8'), 'locally modified dependency\n');
 });
 
 await withTempDir(async (dir) => {
@@ -2880,12 +2856,12 @@ await withTempDir(async (dir) => {
     assert.match(result.stdout, /Select agent/);
 
     await assert.rejects(readFile(path.join(repo, '.orbit', 'project.json'), 'utf8'));
-    const skillPath = path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md');
-    const agentSkillPath = path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md');
-    assert.match(await readFile(skillPath, 'utf8'), /AxisNode/);
-    assert.match(await readFile(agentSkillPath, 'utf8'), /AxisNode/);
-    assert.match(await readFile(path.join(home, '.orbit', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /AxisNode Requirement/);
-    assert.match(await readFile(path.join(home, '.codex', 'skills', 'orbit-requirement', 'SKILL.md'), 'utf8'), /AxisNode Requirement/);
+    const skillPath = path.join(home, '.orbit', 'skills', 'axis-ali-dashboard', 'SKILL.md');
+    const agentSkillPath = path.join(home, '.codex', 'skills', 'axis-ali-dashboard', 'SKILL.md');
+    assert.match(await readFile(skillPath, 'utf8'), /Axis Dashboard JSON/);
+    assert.match(await readFile(agentSkillPath, 'utf8'), /Axis Dashboard JSON/);
+    await assert.rejects(readFile(path.join(home, '.orbit', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'));
+    await assert.rejects(readFile(path.join(home, '.codex', 'skills', 'orbit-workflow', 'SKILL.md'), 'utf8'));
 
     const globalConfig = JSON.parse(await readFile(path.join(home, '.orbit', 'config.json'), 'utf8'));
     assert.equal(globalConfig.selectedAgent, 'codex');
@@ -2931,7 +2907,7 @@ await withTempDir(async (dir) => {
       backendUrl,
       '--owner',
       'product-owner',
-    ], '2\n2\n1\n3\n', { env: { HOME: home } });
+    ], '2\n2\n1\n3\n', { cwd: root, env: { HOME: home } });
 
     assert.match(result.stdout, /Select product line/);
     assert.doesNotMatch(result.stdout, /Orbit Check Product/);
@@ -5316,7 +5292,7 @@ await withTempDir(async (dir) => {
     assert.equal(state.lastPoolSeed.status, 'NEW');
     assert.equal(state.lastPoolSeed.source, 'CLI');
     assert.match(state.lastPoolSeed.sourceId, /^axis-ide:/);
-    assert.equal(state.lastPoolSeed.repo, repo);
+    assert.equal(await sameRealPath(state.lastPoolSeed.repo, repo), true);
 
     await runViaLinkedAxisPool('axis-ide', ['另一个想法', '--repo', repo, '--agent', 'codex', '--json']);
     assert.equal(state.poolSeedPayloads.length, 2);
@@ -5628,7 +5604,7 @@ await withTempDir(async (dir) => {
     const payload = JSON.parse(result.stdout);
     assert.equal(payload.ok, true);
     assert.equal(payload.mode, 'probe');
-    assert.equal(payload.repo, repo);
+    assert.equal(await sameRealPath(payload.repo, repo), true);
     assert.equal(payload.spawn, false);
     assert.equal(payload.lanes.refine.description, '整理 NEW/WAIT_REVIEW seeds and pool WorkItems into WAIT_USER_CONFIRM documents.');
     assert.deepEqual(payload.lanes.refine.methodologyByKind, {

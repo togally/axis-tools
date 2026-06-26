@@ -65,12 +65,11 @@ axis-tools/
 │   ├── sample-pretool.json
 │   └── sample-posttool.json
 ├── skills/
-│   ├── orbit-requirement/
-│   │   └── SKILL.md
-│   ├── orbit-workflow/
-│   │   └── SKILL.md
-│   └── oribit-idea/
-│       └── SKILL.md
+│   └── axis-ali-dashboard/
+│       ├── SKILL.md
+│       ├── agents/
+│       ├── references/
+│       └── scripts/
 ├── src/
 │   └── cli.ts
 ├── package.json
@@ -166,9 +165,7 @@ axis bind
 
 当前 packaged skills：
 
-- `orbit-workflow`: 通过 AxisNode MCP 处理 discussion、requirement、bug、improvement 池和 WorkItem 生命周期。
-- `orbit-requirement`: 把用户 seed 结合云端模板和项目上下文整理成 requirement 文档，并生成可入池 WorkItems。
-- `oribit-idea`: 保留现有拼写，把早期想法结合云端模板整理成 AxisNode-ready artifact。
+- `axis-ali-dashboard`: 生成、修复并校验阿里云 CloudMonitor/SLS 业务监控大屏 JSON，覆盖 Prometheus 汇总指标、SLS 明细表和 bizId/traceId 下钻配置。
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`。项目或产品线绑定由 `bind` 完成。
 
@@ -392,7 +389,7 @@ axis install --agent claude-code
 axis install --agent cc
 ```
 
-`axis install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。这个不覆盖规则同样适用于 `gstack-office-hours` 依赖技能。
+`axis install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。
 
 清理缓存登录：
 

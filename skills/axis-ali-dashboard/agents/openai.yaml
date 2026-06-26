@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Dashboard JSON"
+  short_description: "Generate validated Aliyun dashboard JSON"
+  default_prompt: "Use $axis-ali-dashboard to create or repair an Alibaba Cloud dashboard JSON with SLS drilldowns."
+
+policy:
+  allow_implicit_invocation: true
