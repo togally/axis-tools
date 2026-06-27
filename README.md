@@ -161,11 +161,20 @@ axis bind
 
 `login` 会提示 account 和隐藏输入的 password，调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
 
-`init` 只处理 packaged skill 安装。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*/SKILL.md` 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
+`init` 只处理 packaged skill 安装。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*` 的完整 skill bundle 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
 
 当前 packaged skills：
 
 - `axis-ali-dashboard`: 生成、修复并校验阿里云 CloudMonitor/SLS 业务监控大屏 JSON，覆盖 Prometheus 汇总指标、SLS 明细表和 bizId/traceId 下钻配置。
+
+沉淀或更新本机 Codex skill 到仓库：
+
+```bash
+node scripts/axis-skill-deposit.mjs --skill axis-ali-dashboard
+node scripts/axis-skill-deposit.mjs --skill axis-ali-dashboard --commit --push --branch main
+```
+
+脚本默认从 `~/.codex/skills/<skill>` 复制完整目录到本仓库 `skills/<skill>`，运行 `quick_validate.py`，更新 `skills/manifest.json`，并在 `--commit/--push` 时只暂存对应 skill 目录和 manifest。
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`。项目或产品线绑定由 `bind` 完成。
 
@@ -389,7 +398,7 @@ axis install --agent claude-code
 axis install --agent cc
 ```
 
-`axis install` 默认等同于 `--agent all`。如果目标文件已经存在且内容一致，会直接跳过；如果目标文件被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。
+`axis install` 默认等同于 `--agent all`。如果目标 skill 目录已经存在且内容一致，会直接跳过；如果目标目录被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。安装会复制完整 bundle，包括 `agents/`、`references/` 和 `scripts/`。
 
 清理缓存登录：
 

@@ -222,20 +222,30 @@ function axisWorkspaceCatalogPath(workspaceRoot = axisHomeDir()) {
     return path.join(workspaceRoot, 'catalog.json');
 }
 function stableOrbitSkillPath(skillName = DEFAULT_PACKAGED_SKILL) {
-    return path.join(homeDir(), '.orbit', 'skills', skillName, 'SKILL.md');
+    return path.join(stableOrbitSkillDir(skillName), 'SKILL.md');
+}
+function stableOrbitSkillDir(skillName = DEFAULT_PACKAGED_SKILL) {
+    return path.join(homeDir(), '.orbit', 'skills', skillName);
 }
 function bundledSkillsDir() {
     return path.join(cliPackageRoot(), 'skills');
 }
+function bundledSkillDir(skillName = DEFAULT_PACKAGED_SKILL) {
+    return path.join(bundledSkillsDir(), skillName);
+}
 function bundledOrbitSkillPath(skillName = DEFAULT_PACKAGED_SKILL) {
-    return path.join(bundledSkillsDir(), skillName, 'SKILL.md');
+    return path.join(bundledSkillDir(skillName), 'SKILL.md');
+}
+function agentSkillDir(agent, skillName = DEFAULT_PACKAGED_SKILL) {
+    if (agent === 'codex')
+        return path.join(homeDir(), '.codex', 'skills', skillName);
+    if (agent === 'claude-code')
+        return path.join(homeDir(), '.claude', 'skills', skillName);
+    return null;
 }
 function agentSkillPath(agent, skillName = DEFAULT_PACKAGED_SKILL) {
-    if (agent === 'codex')
-        return path.join(homeDir(), '.codex', 'skills', skillName, 'SKILL.md');
-    if (agent === 'claude-code')
-        return path.join(homeDir(), '.claude', 'skills', skillName, 'SKILL.md');
-    return null;
+    const dir = agentSkillDir(agent, skillName);
+    return dir ? path.join(dir, 'SKILL.md') : null;
 }
 function hermesSkillPath(skillName) {
     return path.join(homeDir(), '.hermes', 'skills', skillName, 'SKILL.md');
@@ -1659,6 +1669,56 @@ async function copySkillIfAllowed(source, target, force) {
     await copyFile(source, target);
     return 'copied';
 }
+async function collectRelativeFiles(root) {
+    const files = [];
+    async function visit(current) {
+        const entries = await readdir(current, { withFileTypes: true });
+        for (const entry of entries) {
+            const child = path.join(current, entry.name);
+            if (entry.isDirectory()) {
+                await visit(child);
+                continue;
+            }
+            if (entry.isFile()) {
+                files.push(path.relative(root, child));
+            }
+        }
+    }
+    await visit(root);
+    return files.sort();
+}
+async function skillDirectoriesIdentical(sourceDir, targetDir) {
+    if (!existsSync(targetDir))
+        return false;
+    const sourceFiles = await collectRelativeFiles(sourceDir);
+    const targetFiles = await collectRelativeFiles(targetDir);
+    if (sourceFiles.length !== targetFiles.length)
+        return false;
+    for (let i = 0; i < sourceFiles.length; i += 1) {
+        if (sourceFiles[i] !== targetFiles[i])
+            return false;
+        const [sourceText, targetText] = await Promise.all([
+            readFile(path.join(sourceDir, sourceFiles[i])),
+            readFile(path.join(targetDir, targetFiles[i])),
+        ]);
+        if (!sourceText.equals(targetText))
+            return false;
+    }
+    return true;
+}
+async function copySkillBundleIfAllowed(sourceDir, targetDir, force) {
+    ensureDir(path.dirname(targetDir));
+    if (existsSync(targetDir)) {
+        if (await skillDirectoriesIdentical(sourceDir, targetDir))
+            return 'identical';
+        if (!force) {
+            throw new Error(`Refusing to overwrite modified skill directory at ${targetDir}. Re-run with --force to replace it.`);
+        }
+        await rm(targetDir, { recursive: true, force: true });
+    }
+    await cp(sourceDir, targetDir, { recursive: true });
+    return 'copied';
+}
 function installAgentsForChoice(agent) {
     if (agent === 'all')
         return ['codex', 'claude-code'];
@@ -1681,14 +1741,14 @@ async function installPackagedSkills(agent, force) {
     const agents = agent === 'none' ? [] : installAgentsForChoice(agent);
     const installed = [];
     for (const skillName of skillNames) {
-        const source = bundledOrbitSkillPath(skillName);
-        const stableTarget = stableOrbitSkillPath(skillName);
-        installed.push({ skill: skillName, target: stableTarget, status: await copySkillIfAllowed(source, stableTarget, force) });
+        const source = bundledSkillDir(skillName);
+        const stableTarget = stableOrbitSkillDir(skillName);
+        installed.push({ skill: skillName, target: stableTarget, status: await copySkillBundleIfAllowed(source, stableTarget, force) });
         for (const selectedAgent of agents) {
-            const target = agentSkillPath(selectedAgent, skillName);
+            const target = agentSkillDir(selectedAgent, skillName);
             if (!target)
                 continue;
-            installed.push({ skill: skillName, target, status: await copySkillIfAllowed(source, target, force) });
+            installed.push({ skill: skillName, target, status: await copySkillBundleIfAllowed(source, target, force) });
         }
     }
     return {

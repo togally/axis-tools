@@ -11,6 +11,7 @@ The dashboard should answer business questions first:
 - How many ended abnormally?
 - What is the completion rate?
 - Which concrete `biz_id` or `trace_id` should I open in SLS to investigate?
+- If I selected multiple business domains, how many events belong to each domain?
 
 Do not make the dashboard audit-specific unless the user explicitly scopes it to audit. Use generic names such as `业务事件数`, `处理中事件`, `异常事件数`, `事件完结率`, `业务发起趋势`, and `业务实例明细（BizId 下钻）`.
 
@@ -48,6 +49,13 @@ Completion rate should be a percentage, not a decimal:
 ```
 
 Make all top panels use the same time-range population as the trend panel. Do not mix an instant current-state metric with a time-range event trend unless the UI explicitly labels the difference.
+
+If the `flow` or equivalent business-domain variable is multi-select, single-value top KPI cards must be paired with a nearby breakdown panel. The usual pattern is:
+
+- top row: total `业务事件数`, `处理中事件`, `异常事件数`, and `事件完结率`;
+- next row: `业务域数量拆分` using `sum by (flow)` and `legendFormat: "{{flow}}"`.
+
+Without that split, `All` or multi-select filters make the dashboard hide which selected business produced each count.
 
 ## Prometheus Query Guidelines
 
@@ -97,8 +105,10 @@ business_flow_stage and ${{biz_id}}
 For trace IDs, keep the display column named `trace_id` and drill down with the SLS field:
 
 ```text
-business_flow_stage and trace_id:${{trace_id}}
+${{trace_id}}
 ```
+
+Do not prefix full technical trace drilldowns with `business_flow_stage`. That index is useful for business-flow logs, but it narrows the jump to flow-node records and hides the rest of the TraceId log chain.
 
 ## Visual Guidelines
 
@@ -106,6 +116,7 @@ business_flow_stage and trace_id:${{trace_id}}
 - Use bar gauge or compact bar panels for top metrics grouped by business domain.
 - Keep bars thin enough for multiple business domains.
 - Show values on the bars when the platform supports it.
+- Place multi-select breakdown panels close to the aggregate KPI cards they explain.
 - Keep diagnostic red/green panels out of the final dashboard.
 - Keep explanatory markdown panels out of the final dashboard unless the user asks for documentation in the dashboard.
 

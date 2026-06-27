@@ -35,7 +35,7 @@ Use this shape:
 }
 ```
 
-For trace drilldown, use the SLS index field name, not the raw MDC/log text token:
+For full technical trace drilldown, use the trace value by itself so SLS can search the whole log set. Do not prefix it with `business_flow_stage`; that would restrict the jump to business-flow node logs only:
 
 ```json
 {
@@ -49,10 +49,12 @@ For trace drilldown, use the SLS index field name, not the raw MDC/log text toke
     "blank": false,
     "timeRange": -1,
     "filterInherit": true,
-    "searchFilter": "business_flow_stage and trace_id:${{trace_id}}"
+    "searchFilter": "${{trace_id}}"
   }
 }
 ```
+
+If the target is intentionally a business-flow-only table, `business_flow_stage and trace_id:${{trace_id}}` can be valid, but do not use that shape for a user request that asks for the complete technical trace.
 
 ## Why These Keys Matter
 
@@ -80,7 +82,8 @@ assert "query" not in settings
 For trace rows:
 
 ```python
-assert settings["searchFilter"] == "business_flow_stage and trace_id:${{trace_id}}"
+assert settings["searchFilter"] == "${{trace_id}}"
+assert "business_flow_stage" not in settings["searchFilter"]
 ```
 
 ## Debugging Imported Dashboards

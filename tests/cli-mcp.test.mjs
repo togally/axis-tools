@@ -141,6 +141,22 @@ async function withTempDir(fn) {
   }
 }
 
+await withTempDir(async (home) => {
+  const { stdout } = await run(['install', '--agent', 'codex', '--force'], {
+    env: {
+      HOME: home,
+      USERPROFILE: home,
+    },
+  });
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  const target = path.join(home, '.codex', 'skills', 'axis-ali-dashboard');
+  assert.equal(await readFile(path.join(target, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-ali-dashboard')), true);
+  assert.equal(await readFile(path.join(target, 'references', 'aliyun-sls-drilldown.md'), 'utf8').then((text) => text.includes('SLS Drilldown')), true);
+  assert.equal(await readFile(path.join(target, 'scripts', 'validate_dashboard_json.py'), 'utf8').then((text) => text.includes('validate_logstore_drilldowns')), true);
+  assert.equal(await readFile(path.join(target, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes('Axis Dashboard JSON')), true);
+});
+
 async function writeExecutable(filePath, text) {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, text, 'utf8');

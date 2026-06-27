@@ -35,6 +35,11 @@ def iter_chart_queries(dashboard: dict[str, Any]) -> list[dict[str, Any]]:
     return queries
 
 
+def iter_variables(dashboard: dict[str, Any]) -> list[dict[str, Any]]:
+    variables = dashboard.get("attribute", {}).get("variables", [])
+    return [variable for variable in variables if isinstance(variable, dict)]
+
+
 def iter_action_events(dashboard: dict[str, Any]) -> list[tuple[str, str, dict[str, Any]]]:
     events: list[tuple[str, str, dict[str, Any]]] = []
     for chart in dashboard.get("charts", []):
@@ -75,6 +80,8 @@ def validate_logstore_drilldowns(dashboard: dict[str, Any]) -> list[str]:
         search_filter = str(settings.get("searchFilter", ""))
         if matcher == "trace_id" and "traceId:" in search_filter:
             errors.append(f"{prefix}: use SLS field trace_id, not raw log token traceId")
+        if matcher == "trace_id" and "business_flow_stage" in search_filter:
+            errors.append(f"{prefix}: full trace drilldown should not be restricted to business_flow_stage")
     return errors
 
 
@@ -93,6 +100,48 @@ def validate_prometheus_cardinality(dashboard: dict[str, Any]) -> list[str]:
     return errors
 
 
+def validate_business_flow_multiselect_breakdown(dashboard: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    variables = iter_variables(dashboard)
+    has_multi_flow = any(
+        variable.get("name") == "flow" and variable.get("multi") is True
+        for variable in variables
+    )
+    if not has_multi_flow:
+        return errors
+
+    charts = dashboard.get("charts", [])
+    has_business_kpi = any(
+        chart.get("type") == "statpro"
+        and chart.get("display", {})
+        .get("options", {})
+        .get("basicOptions", {})
+        .get("displayName")
+        in {"业务事件数", "处理中事件", "异常事件数", "事件完结率"}
+        for chart in charts
+        if isinstance(chart, dict)
+    )
+    if not has_business_kpi:
+        return errors
+
+    for query in iter_chart_queries(dashboard):
+        datasource = query.get("datasource")
+        datasource_type = datasource.get("type") if isinstance(datasource, dict) else None
+        expr = str(query.get("expr", ""))
+        if (
+            datasource_type == "prometheus"
+            and query.get("legendFormat") == "{{flow}}"
+            and "sum by (flow)" in expr
+        ):
+            return errors
+
+    errors.append(
+        "business-flow dashboard has a multi-select flow variable and top KPI cards, "
+        "but no grouped Prometheus breakdown using sum by (flow) with legendFormat {{flow}}"
+    )
+    return errors
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate Aliyun dashboard JSON contracts")
     parser.add_argument("dashboard_json", type=Path)
@@ -107,6 +156,7 @@ def main() -> int:
     errors = []
     errors.extend(validate_logstore_drilldowns(dashboard))
     errors.extend(validate_prometheus_cardinality(dashboard))
+    errors.extend(validate_business_flow_multiselect_breakdown(dashboard))
 
     if errors:
         for error in errors:

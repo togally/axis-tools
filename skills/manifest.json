@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "description": "Axis packaged skill bundles captured by scripts/axis-skill-deposit.mjs",
+  "skills": [
+    {
+      "name": "axis-ali-dashboard",
+      "description": "Generate, repair, and validate Alibaba Cloud CloudMonitor/SLS dashboard JSON for business-facing observability dashboards. Use when a user asks to create or modify dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.",
+      "path": "skills/axis-ali-dashboard",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/aliyun-sls-drilldown.md",
+        "references/business-flow-dashboard-json.md",
+        "scripts/validate_dashboard_json.py"
+      ]
+    }
+  ]
+}
