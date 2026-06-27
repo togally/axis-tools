@@ -171,14 +171,19 @@ await withTempDir(async (tmp) => {
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), [
   'axis-ali-dashboard',
+  'axis-api-benchmark',
   'axis-create-skill',
   'axis-update',
 ]);
 
-for (const skillName of ['axis-update', 'axis-create-skill']) {
+const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-benchmark');
+assert.ok(apiBenchmark);
+assert.equal(apiBenchmark.files.includes('scripts/core_api_benchmark.py'), true);
+
+for (const skillName of ['axis-update', 'axis-create-skill', 'axis-api-benchmark']) {
   const skillDir = path.join(repoRoot, 'skills', skillName);
   const skillMd = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
   assert.match(skillMd, new RegExp(`name: ${skillName}`));
-  assert.match(skillMd, /Use when/);
+  assert.match(skillMd, /description: Use when/);
   assert.equal(await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes(`$${skillName}`)), true);
 }

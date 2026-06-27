@@ -2827,10 +2827,11 @@ await withTempDir(async (dir) => {
   const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
   const installJson = JSON.parse(install.stdout);
   assert.equal(installJson.ok, true);
-  assert.equal(installJson.installed.length, 9);
+  assert.equal(installJson.installed.length, 12);
 
   const expectedSkillHeadings = new Map([
     ['axis-ali-dashboard', /# Axis Dashboard JSON/i],
+    ['axis-api-benchmark', /# API Benchmark/i],
     ['axis-create-skill', /# Axis Create Skill/i],
     ['axis-update', /# Axis Skill Update/i],
   ]);
