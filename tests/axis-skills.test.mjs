@@ -1,0 +1,184 @@
+import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
+import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { promisify } from 'node:util';
+
+const execFileAsync = promisify(execFile);
+const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+const updateScript = path.join(repoRoot, 'scripts', 'axis-update-skills.mjs');
+const createScript = path.join(repoRoot, 'scripts', 'axis-create-skill.mjs');
+
+async function withTempDir(fn) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'axis-skills-'));
+  try {
+    return await fn(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function writeExecutable(filePath, text) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(filePath, text, 'utf8');
+  await chmod(filePath, 0o755);
+}
+
+async function writePackagedSkill(repo, name = 'axis-demo-skill') {
+  const skillDir = path.join(repo, 'skills', name);
+  await mkdir(path.join(skillDir, 'references'), { recursive: true });
+  await mkdir(path.join(skillDir, 'scripts'), { recursive: true });
+  await mkdir(path.join(skillDir, 'agents'), { recursive: true });
+  await writeFile(
+    path.join(skillDir, 'SKILL.md'),
+    ['---', `name: ${name}`, 'description: Use when testing packaged Axis skills', '---', '', '# Demo', ''].join('\n'),
+    'utf8',
+  );
+  await writeFile(path.join(skillDir, 'references', 'guide.md'), 'reference\n', 'utf8');
+  await writeFile(path.join(skillDir, 'scripts', 'helper.py'), 'print("ok")\n', 'utf8');
+  await writeFile(path.join(skillDir, 'agents', 'openai.yaml'), 'interface:\n  display_name: Demo\n', 'utf8');
+}
+
+async function writeFakeAxisCli(repo) {
+  await writeExecutable(path.join(repo, 'dist', 'cli.js'), `#!/usr/bin/env node
+import { cp, mkdir, readdir, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+
+const args = process.argv.slice(2);
+if (args[0] !== 'install') throw new Error('expected install');
+const agent = args[args.indexOf('--agent') + 1] || 'codex';
+const repo = process.cwd();
+const home = os.homedir();
+const installed = [];
+for (const entry of await readdir(path.join(repo, 'skills'), { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  const source = path.join(repo, 'skills', entry.name);
+  const target = path.join(home, agent === 'codex' ? '.codex' : '.claude', 'skills', entry.name);
+  await rm(target, { recursive: true, force: true });
+  await mkdir(path.dirname(target), { recursive: true });
+  await cp(source, target, { recursive: true });
+  installed.push({ skill: entry.name, target, status: 'copied' });
+}
+console.log(JSON.stringify({ ok: true, agent, installed }, null, 2));
+`);
+}
+
+await withTempDir(async (tmp) => {
+  const repo = path.join(tmp, 'axis-tools');
+  const home = path.join(tmp, 'home');
+  await mkdir(repo, { recursive: true });
+  await mkdir(home, { recursive: true });
+  await writePackagedSkill(repo);
+  await writeFakeAxisCli(repo);
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    updateScript,
+    '--repo',
+    repo,
+    '--agent',
+    'codex',
+    '--no-pull',
+    '--no-validate',
+    '--json',
+  ], {
+    env: {
+      ...process.env,
+      HOME: home,
+      USERPROFILE: home,
+    },
+  });
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.installed.some((item) => item.skill === 'axis-demo-skill'), true);
+  const localSkill = path.join(home, '.codex', 'skills', 'axis-demo-skill');
+  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-demo-skill')), true);
+  assert.equal(await readFile(path.join(localSkill, 'references', 'guide.md'), 'utf8'), 'reference\n');
+  assert.equal(await readFile(path.join(localSkill, 'scripts', 'helper.py'), 'utf8'), 'print("ok")\n');
+});
+
+await withTempDir(async (tmp) => {
+  const conversation = path.join(tmp, 'conversation.txt');
+  await writeFile(
+    conversation,
+    '我们以后每次排查阿里云大屏都应该复用一套流程，可以沉淀一个 axis-dashboard-review skill。',
+    'utf8',
+  );
+  const { stdout } = await execFileAsync(process.execPath, [
+    createScript,
+    '--scan-conversation',
+    conversation,
+    '--json',
+  ]);
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].name, 'axis-dashboard-review');
+  assert.match(result.candidates[0].reason, /沉淀|复用/);
+});
+
+await withTempDir(async (tmp) => {
+  const repo = path.join(tmp, 'axis-tools');
+  const sourceRoot = path.join(tmp, 'local-skills');
+  await mkdir(repo, { recursive: true });
+  await mkdir(sourceRoot, { recursive: true });
+  await execFileAsync('git', ['init'], { cwd: repo });
+  await execFileAsync('git', ['config', 'user.email', 'axis@example.test'], { cwd: repo });
+  await execFileAsync('git', ['config', 'user.name', 'Axis Test'], { cwd: repo });
+  await mkdir(path.join(repo, 'scripts'), { recursive: true });
+  await cp(path.join(repoRoot, 'scripts', 'axis-skill-deposit.mjs'), path.join(repo, 'scripts', 'axis-skill-deposit.mjs'), { recursive: true });
+
+  const { stdout } = await execFileAsync(process.execPath, [
+    createScript,
+    '--repo',
+    repo,
+    '--source-root',
+    sourceRoot,
+    '--name',
+    'axis-demo-created',
+    '--description',
+    'Use when testing Axis-created skills',
+    '--body',
+    '# Axis Demo Created\\n\\nUse this skill for the test workflow.\\n',
+    '--display-name',
+    'Axis Demo Created',
+    '--short-description',
+    'Create a demo Axis skill',
+    '--default-prompt',
+    'Use $axis-demo-created to run the demo workflow.',
+    '--no-validate',
+    '--deposit',
+    '--commit',
+    '--message',
+    'chore: add generated demo skill',
+  ]);
+
+  assert.match(stdout, /Created local skill axis-demo-created/);
+  assert.match(stdout, /Deposited axis-demo-created/);
+  const localSkill = path.join(sourceRoot, 'axis-demo-created');
+  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('Use when testing Axis-created skills')), true);
+  assert.equal(await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes('Axis Demo Created')), true);
+
+  const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
+  assert.equal(manifest.skills[0].name, 'axis-demo-created');
+  const { stdout: committed } = await execFileAsync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo });
+  assert.match(committed, /skills\/axis-demo-created\/SKILL.md/);
+  assert.match(committed, /skills\/manifest.json/);
+});
+
+const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
+assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), [
+  'axis-ali-dashboard',
+  'axis-create-skill',
+  'axis-update',
+]);
+
+for (const skillName of ['axis-update', 'axis-create-skill']) {
+  const skillDir = path.join(repoRoot, 'skills', skillName);
+  const skillMd = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
+  assert.match(skillMd, new RegExp(`name: ${skillName}`));
+  assert.match(skillMd, /Use when/);
+  assert.equal(await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes(`$${skillName}`)), true);
+}

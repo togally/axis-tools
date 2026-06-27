@@ -65,11 +65,13 @@ axis-tools/
 │   ├── sample-pretool.json
 │   └── sample-posttool.json
 ├── skills/
-│   └── axis-ali-dashboard/
-│       ├── SKILL.md
-│       ├── agents/
-│       ├── references/
-│       └── scripts/
+│   ├── axis-ali-dashboard/
+│   │   ├── SKILL.md
+│   │   ├── agents/
+│   │   ├── references/
+│   │   └── scripts/
+│   ├── axis-create-skill/
+│   └── axis-update/
 ├── src/
 │   └── cli.ts
 ├── package.json
@@ -166,6 +168,8 @@ axis bind
 当前 packaged skills：
 
 - `axis-ali-dashboard`: 生成、修复并校验阿里云 CloudMonitor/SLS 业务监控大屏 JSON，覆盖 Prometheus 汇总指标、SLS 明细表和 bizId/traceId 下钻配置。
+- `axis-create-skill`: 扫描当前对话中值得复用的 Axis 工作流，创建本地 Codex skill，并可沉淀、提交、推送到 `axis-tools` 仓库。
+- `axis-update`: 从 `axis-tools` 更新并重新安装本地 Axis packaged skills，确保安装完整 bundle 并运行校验。
 
 沉淀或更新本机 Codex skill 到仓库：
 
@@ -175,6 +179,25 @@ node scripts/axis-skill-deposit.mjs --skill axis-ali-dashboard --commit --push -
 ```
 
 脚本默认从 `~/.codex/skills/<skill>` 复制完整目录到本仓库 `skills/<skill>`，运行 `quick_validate.py`，更新 `skills/manifest.json`，并在 `--commit/--push` 时只暂存对应 skill 目录和 manifest。
+
+更新本机安装的 Axis packaged skills：
+
+```bash
+node scripts/axis-update-skills.mjs --repo ~/axis-tools --agent codex --json
+```
+
+从对话扫描并创建可沉淀的 Axis skill：
+
+```bash
+node scripts/axis-create-skill.mjs --scan-conversation /tmp/conversation.txt --json
+node scripts/axis-create-skill.mjs \
+  --repo ~/axis-tools \
+  --source-root ~/.codex/skills \
+  --name axis-example-skill \
+  --description "Use when ..." \
+  --body-file /tmp/axis-example-skill.md \
+  --deposit --commit --push --branch main
+```
 
 `init` 不会询问产品线/项目，也不会写当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`。项目或产品线绑定由 `bind` 完成。
 

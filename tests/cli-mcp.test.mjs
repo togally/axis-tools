@@ -2827,10 +2827,12 @@ await withTempDir(async (dir) => {
   const install = await run(['install', '--agent', 'all'], { env: { HOME: home } });
   const installJson = JSON.parse(install.stdout);
   assert.equal(installJson.ok, true);
-  assert.equal(installJson.installed.length, 3);
+  assert.equal(installJson.installed.length, 9);
 
   const expectedSkillHeadings = new Map([
     ['axis-ali-dashboard', /# Axis Dashboard JSON/i],
+    ['axis-create-skill', /# Axis Create Skill/i],
+    ['axis-update', /# Axis Skill Update/i],
   ]);
   for (const [skill, heading] of expectedSkillHeadings) {
     const orbitSkill = await readFile(path.join(home, '.orbit', 'skills', skill, 'SKILL.md'), 'utf8');

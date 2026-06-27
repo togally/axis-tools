@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Skill Update"
+  short_description: "Refresh local Axis packaged skills"
+  default_prompt: "Use $axis-update to refresh local Axis packaged skills from axis-tools."
+
+policy:
+  allow_implicit_invocation: true

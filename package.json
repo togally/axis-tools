@@ -20,9 +20,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "node --loader ts-node/esm src/cli.ts",
-    "test": "npm run test:mcp && npm run test:skill-deposit",
+    "test": "npm run test:mcp && npm run test:skill-deposit && npm run test:axis-skills",
     "test:mcp": "npm run build && node tests/cli-mcp.test.mjs",
     "test:skill-deposit": "node tests/skill-deposit.test.mjs",
+    "test:axis-skills": "node tests/axis-skills.test.mjs",
     "test:sample": "npm run build && node dist/cli.js codex-hook ingest --file examples/sample-pretool.json && node dist/cli.js codex-hook ingest --file examples/sample-posttool.json && node dist/cli.js codex-status current --repo /home/jasperWei/orbit/axis-hub --json && node dist/cli.js codex-status tail --repo /home/jasperWei/orbit/axis-hub --limit 5 && node dist/cli.js codex-status summary --repo /home/jasperWei/orbit/axis-hub"
   },
   "devDependencies": {

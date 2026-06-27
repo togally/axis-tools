@@ -13,6 +13,24 @@
         "references/business-flow-dashboard-json.md",
         "scripts/validate_dashboard_json.py"
       ]
+    },
+    {
+      "name": "axis-create-skill",
+      "description": "Use when the user asks to scan the current conversation for reusable skill opportunities, create a new Axis/Codex skill, install it locally, or push it to the axis-tools skill repository.",
+      "path": "skills/axis-create-skill",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-update",
+      "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.",
+      "path": "skills/axis-update",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
     }
   ]
 }

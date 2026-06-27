@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Create Skill"
+  short_description: "Create and deposit reusable Axis skills"
+  default_prompt: "Use $axis-create-skill to scan this conversation for reusable skills and deposit any good candidates."
+
+policy:
+  allow_implicit_invocation: true
