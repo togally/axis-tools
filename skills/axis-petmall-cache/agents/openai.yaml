@@ -1,0 +1,7 @@
+interface:
+  display_name: "PetMall Cache"
+  short_description: "PetMall Spring Cache/Redis workflow"
+  default_prompt: "Use -petmall-cache for PetMall backend cache work."
+
+policy:
+  allow_implicit_invocation: true

@@ -34,6 +34,15 @@
       ]
     },
     {
+      "name": "axis-petmall-cache",
+      "description": "Use when working in PetMallPlatform on backend cache design, Spring Cache/Redis query caching, cache eviction on writes, cache key/TTL rules, or explaining when cached data is created.",
+      "path": "skills/axis-petmall-cache",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-update",
       "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.",
       "path": "skills/axis-update",
