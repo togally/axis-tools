@@ -10,6 +10,7 @@ Use this skill to safely benchmark test-environment APIs and translate latency/Q
 ## When to Use
 
 - The user asks to `压测`, `压一下测试环境`, check API latency, QPS, concurrency, or how many users an API environment can support.
+- The user asks to benchmark only App-side PetMall APIs, for example `只压app端接口`.
 - The target has a discoverable API surface from OpenAPI, frontend service files, controller mappings, route tables, or an explicit endpoint list.
 - The target may be PetMall/PetMallPlatform, but it does not have to be.
 - The user asks for a business-facing interpretation such as "够多少人用".
@@ -34,6 +35,7 @@ Do not use for destructive load tests unless the user explicitly approves writes
    - backend controller or route mappings when docs and clients disagree.
    - a user-provided endpoint JSON file when the project has no docs.
 3. Classify endpoints into public, user/member, admin/operator, merchant/tenant, and write-risk groups. Run only safe read groups by default.
+   - For PetMall App-only capacity checks, use the built-in `--petmall-scope app` instead of hand-writing a temporary endpoint file. It keeps public/member App endpoints and excludes admin/backend endpoints and admin login.
 4. Obtain tokens from documented test accounts, existing seed scripts, or user-provided bearer tokens. For the built-in PetMall profile, typical test values are in `PetMallPlatform/scripts/seed_ugc_pet_demo_via_api.py` and `doc/mvp/deliverables/account-role-list.md`; verify live login before using them.
 5. Run smoke checks for each candidate endpoint. Drop endpoints that are not deployed, return permissions unrelated to the intended actor, or require unavailable merchant credentials.
 6. Run a per-endpoint baseline with small samples and low concurrency. Capture p50/p90/p95/p99/max and business error counts.
@@ -58,8 +60,21 @@ python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
   --duration 25
 ```
 
+For App-side PetMall APIs only:
+
+```bash
+python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
+  --base-url http://8.155.11.203/prod-api \
+  --profile petmall \
+  --petmall-scope app \
+  --steps 1,3,5,10,20,40 \
+  --duration 12 \
+  --no-auth-sample
+```
+
 Useful flags:
 
+- `--petmall-scope app`: benchmark only PetMall App-side read APIs and skip admin endpoints/login.
 - `--no-auth-sample`: skip isolated login sampling.
 - `--targeted`: run targeted slow-endpoint probes after the mixed test.
 - `--endpoint-file endpoints.json`: run a custom endpoint set instead of the built-in PetMall profile.

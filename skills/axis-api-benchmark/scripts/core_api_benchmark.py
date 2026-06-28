@@ -72,7 +72,29 @@ TARGETED_ENDPOINTS = [
     Endpoint("public_product_list", "public_app", "/mall/app/product/list", {"pageNum": 1, "pageSize": 10}),
 ]
 
+PETMALL_APP_GROUPS = {
+    "public_app",
+    "public_service",
+    "public_ugc",
+    "member",
+    "member_trade",
+    "member_service",
+    "member_ugc",
+}
+
 THREAD_LOCAL = threading.local()
+
+
+def select_builtin_endpoints(scope: str) -> list[Endpoint]:
+    if scope == "app":
+        return [endpoint for endpoint in ENDPOINTS if endpoint.group in PETMALL_APP_GROUPS]
+    return list(ENDPOINTS)
+
+
+def select_builtin_targeted_endpoints(scope: str) -> list[Endpoint]:
+    if scope == "app":
+        return [endpoint for endpoint in TARGETED_ENDPOINTS if endpoint.group in PETMALL_APP_GROUPS]
+    return list(TARGETED_ENDPOINTS)
 
 
 def endpoint_from_dict(item: dict[str, Any]) -> Endpoint:
@@ -187,7 +209,8 @@ class BenchmarkClient:
         response.raise_for_status()
         return response.json()
 
-    def login(self) -> None:
+    def login(self, required_auths: set[str] | None = None) -> None:
+        required_auths = required_auths or {"member", "admin"}
         self.headers = {
             "public": {"clientid": self.args.member_client_id},
         }
@@ -197,7 +220,7 @@ class BenchmarkClient:
             self.headers["admin"] = {"clientid": self.args.admin_client_id, "Authorization": f"Bearer {self.args.admin_token}"}
         if self.args.no_login:
             return
-        if "admin" not in self.headers:
+        if "admin" in required_auths and "admin" not in self.headers:
             admin_body = self.post_json(
                 "/auth/login",
                 {
@@ -210,7 +233,7 @@ class BenchmarkClient:
                 {"clientid": self.args.admin_client_id},
             )
             self.headers["admin"] = {"clientid": self.args.admin_client_id, "Authorization": f"Bearer {extract_token(admin_body)}"}
-        if "member" not in self.headers:
+        if "member" in required_auths and "member" not in self.headers:
             member_body = self.post_json(
                 "/app/auth/login",
                 {
@@ -306,7 +329,7 @@ def steps(max_concurrency: int, raw_steps: str | None) -> list[int]:
     return [value for value in values if value <= max_concurrency]
 
 
-def run_auth_sample(client: BenchmarkClient) -> None:
+def run_auth_sample(client: BenchmarkClient, required_auths: set[str]) -> None:
     print("\nAUTH_SAMPLE samples=12 concurrency=4")
 
     def auth_call(kind: str) -> dict[str, Any]:
@@ -335,7 +358,12 @@ def run_auth_sample(client: BenchmarkClient) -> None:
         except Exception as error:  # noqa: BLE001
             return {"name": kind, "group": "auth", "ms": (time.perf_counter() - started) * 1000, "success": False, "reason": type(error).__name__}
 
-    for kind in ("member_login", "admin_login"):
+    kinds = []
+    if "member" in required_auths:
+        kinds.append("member_login")
+    if "admin" in required_auths:
+        kinds.append("admin_login")
+    for kind in kinds:
         with ThreadPoolExecutor(max_workers=4) as executor:
             results = list(executor.map(lambda _: auth_call(kind), range(12)))
         print(f"auth            {kind:24s} {format_summary(summarize(results))}")
@@ -345,6 +373,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Safely benchmark core read APIs.")
     parser.add_argument("--base-url", default="http://8.155.11.203/prod-api")
     parser.add_argument("--profile", default="petmall", choices=("petmall",), help="Built-in endpoint profile to use when --endpoint-file is omitted.")
+    parser.add_argument("--petmall-scope", default="all", choices=("all", "app"), help="Built-in PetMall endpoint scope: all core APIs or App-side APIs only.")
     parser.add_argument("--endpoint-file", default=None, help="JSON list of endpoints or object with endpoints list.")
     parser.add_argument("--member-token", default=None, help="Pre-issued bearer token for endpoints with auth=member.")
     parser.add_argument("--admin-token", default=None, help="Pre-issued bearer token for endpoints with auth=admin.")
@@ -367,15 +396,18 @@ def main() -> None:
     parser.add_argument("--targeted", action="store_true")
     args = parser.parse_args()
 
-    endpoints = load_custom_endpoints(args.endpoint_file) if args.endpoint_file else list(ENDPOINTS)
-    targeted_endpoints = [] if args.endpoint_file else list(TARGETED_ENDPOINTS)
+    endpoints = load_custom_endpoints(args.endpoint_file) if args.endpoint_file else select_builtin_endpoints(args.petmall_scope)
+    targeted_endpoints = [] if args.endpoint_file else select_builtin_targeted_endpoints(args.petmall_scope)
+    required_auths = ({endpoint.auth for endpoint in endpoints} | ({endpoint.auth for endpoint in targeted_endpoints} if args.targeted else set())) - {"public"}
     client = BenchmarkClient(args)
-    client.login()
+    client.login(required_auths)
     missing_auth = sorted({endpoint.auth for endpoint in endpoints} - set(client.headers))
     if missing_auth:
         raise SystemExit(f"missing auth headers for: {', '.join(missing_auth)}. Provide tokens or omit --no-login.")
     print(f"TARGET {client.base_url}")
     print(f"PROFILE {'custom' if args.endpoint_file else args.profile}")
+    if not args.endpoint_file:
+        print(f"PETMALL_SCOPE {args.petmall_scope}")
     print(f"SCOPE read-only core APIs: {len(endpoints)} endpoints")
     print("AUTH headers prepared")
 
@@ -391,8 +423,8 @@ def main() -> None:
         if args.no_login or args.endpoint_file:
             print("\nAUTH_SAMPLE skipped for custom/no-login mode")
         else:
-            run_auth_sample(client)
-            client.login()
+            run_auth_sample(client, required_auths)
+            client.login(required_auths)
             print("\nTOKENS refreshed after auth sample")
 
     print(f"\nMIXED_READ_STEPS duration={args.duration:g}s stop_if(err>5% or p95>5000ms)")
