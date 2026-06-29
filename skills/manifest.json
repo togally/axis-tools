@@ -34,6 +34,15 @@
       ]
     },
     {
+      "name": "axis-tech-design-doc",
+      "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention, especially when business and technical design must be separated from current implementation notes.",
+      "path": "skills/axis-tech-design-doc",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-update",
       "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.",
       "path": "skills/axis-update",
