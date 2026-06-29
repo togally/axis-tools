@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-AXIS_TOOLS_DIR="${AXIS_TOOLS_DIR:-${ORBIT_TOOLS_DIR:-$HOME/axis-tools}}"
-AXIS_TOOLS_REPO="${AXIS_TOOLS_REPO:-${ORBIT_TOOLS_REPO:-https://github.com/togally/axis-tools.git}}"
-AXIS_TOOLS_BRANCH="${AXIS_TOOLS_BRANCH:-${ORBIT_TOOLS_BRANCH:-main}}"
-AXIS_TOOLS_FORCE="${AXIS_TOOLS_FORCE:-${ORBIT_TOOLS_FORCE:-0}}"
-AXIS_TOOLS_VERIFY_COMPAT="${AXIS_TOOLS_VERIFY_COMPAT:-${ORBIT_TOOLS_VERIFY_COMPAT:-1}}"
-AXIS_TOOLS_BINS="axis axis-tools axis-ide axis-req axis-bug axis-sug orbit orbit-tools orbit-ide orbit-req orbit-bug orbit-sug"
+AXIS_TOOLS_DIR="${AXIS_TOOLS_DIR:-$HOME/axis-tools}"
+AXIS_TOOLS_REPO="${AXIS_TOOLS_REPO:-https://github.com/togally/axis-tools.git}"
+AXIS_TOOLS_BRANCH="${AXIS_TOOLS_BRANCH:-main}"
+AXIS_TOOLS_FORCE="${AXIS_TOOLS_FORCE:-0}"
+AXIS_TOOLS_BINS="axis axis-tools"
 
 log() {
   printf '[axis-tools] %s\n' "$*"
@@ -133,9 +132,6 @@ install_cli() {
   log "Building Axis CLI"
   (cd "$AXIS_TOOLS_DIR" && npm run build)
 
-  log "Removing old global orbit-tools link if present"
-  npm unlink -g orbit-tools >/dev/null 2>&1 || true
-
   log "Linking global axis command"
   (cd "$AXIS_TOOLS_DIR" && npm link --force)
 
@@ -241,10 +237,6 @@ verify_cli() {
   verify_available_command axis "primary command" "$npm_bin/axis"
   verify_available_command axis-tools "primary alias" "$npm_bin/axis-tools"
 
-  if [ "$AXIS_TOOLS_VERIFY_COMPAT" = "1" ]; then
-    verify_compat_command orbit "$npm_bin/orbit"
-    verify_compat_command orbit-tools "$npm_bin/orbit-tools"
-  fi
 }
 
 main() {

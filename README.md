@@ -1,25 +1,34 @@
-# axis-tools / Axis 工具仓
+# axis-tools / Axis 技能工具仓
 
-`axis-tools` 是 Axis 的公共工具仓，当前重点维护本地 CLI 工具和可复用的 packaged skills。这个仓库的核心目标是：让公共安全的 Axis/Codex 技能可以安装、校验、更新，并在使用后持续沉淀改进。
+`axis-tools` 是 Axis 的公共 packaged skills 仓库。当前仓库只保留最近这套技能工作流：安装、刷新、创建、校验和沉淀公共安全的 Axis/Codex skills。
 
-`axis-tools` is the public toolkit repository for Axis local CLI utilities and reusable packaged skills. Its current focus is to keep public-safe Axis/Codex skills installable, validatable, refreshable, and easy to improve after real use.
+`axis-tools` is the public packaged-skills repository for Axis. It now keeps only the current skill workflow: install, refresh, create, validate, and deposit public-safe Axis/Codex skills.
 
-主命令是 `axis`。`axis-tools` 是同入口别名，旧的 `orbit*` 命令仍作为兼容别名保留。
+主命令只保留：
 
-The main command is `axis`. `axis-tools` is an alias, and older `orbit*` commands remain available for compatibility.
+Only these command entries are exposed:
+
+```text
+axis
+axis-tools
+```
 
 ## 仓库内容 / Repository Contents
 
 ```text
 axis-tools/
-├── scripts/                 # 技能安装、更新、沉淀和启动脚本 / skill helper scripts
-├── skills/                  # 公共 packaged skills / public packaged skills
+├── scripts/
+│   ├── axis-create-skill.mjs
+│   ├── axis-skill-deposit.mjs
+│   ├── axis-update-skills.mjs
+│   └── install-axis-tools.sh
+├── skills/
 │   ├── axis-ali-dashboard/
 │   ├── axis-api-benchmark/
 │   ├── axis-create-skill/
 │   └── axis-update/
-├── src/cli.ts               # Axis CLI 实现 / Axis CLI implementation
-├── tests/                   # CLI 和技能打包测试 / CLI and skill packaging tests
+├── src/cli.ts
+├── tests/
 ├── package.json
 └── README.md
 ```
@@ -47,10 +56,6 @@ This repository is public-oriented. Do not add product-private, customer-specifi
 
 Public skills should use generic workflows, examples, and placeholders. Private project knowledge belongs in private memory, notes, or private skills, not in this repository.
 
-`axis-create-skill` 和测试套件会约束这个方向：生成的技能会自动带上沉淀逻辑，疑似私有项目的候选默认不会被创建为公共技能。
-
-`axis-create-skill` and the test suite enforce this direction: generated skills automatically include deposition guidance, and private-looking candidates are rejected by default for public packaged skills.
-
 ## 安装 / Install
 
 推荐使用一键安装脚本：
@@ -61,18 +66,9 @@ Recommended bootstrap:
 curl -fsSL https://raw.githubusercontent.com/togally/axis-tools/main/scripts/install-axis-tools.sh | bash
 ```
 
-脚本会 clone 或更新 `~/axis-tools`，安装依赖，构建 CLI，并链接全局命令：
+脚本会 clone 或更新 `~/axis-tools`，安装依赖，构建 CLI，并链接 `axis` / `axis-tools`。
 
-The installer clones or updates `~/axis-tools`, installs dependencies, builds the CLI, and links global commands:
-
-```text
-axis
-axis-tools
-axis-ide
-axis-req
-axis-bug
-axis-sug
-```
+The installer clones or updates `~/axis-tools`, installs dependencies, builds the CLI, and links `axis` / `axis-tools`.
 
 手动安装：
 
@@ -108,17 +104,35 @@ Install only for Codex:
 axis install --agent codex
 ```
 
-从仓库刷新并校验本机技能包：
+只为 Claude Code 安装：
 
-Refresh from the repository and validate installed bundles:
+Install only for Claude Code:
 
 ```bash
-node scripts/axis-update-skills.mjs --repo ~/axis-tools --agent codex --json
+axis install --agent claude-code
 ```
 
 安装会复制完整 skill bundle，包括 `SKILL.md`、`agents/`、`references/` 和 `scripts/` 等目录。
 
 Installed skill bundles are copied as full directories, including `SKILL.md`, `agents/`, `references/`, and `scripts/` where present.
+
+## 技能刷新 / Refresh Skills
+
+从仓库拉取最新版本、安装到本机并校验：
+
+Pull the latest repository version, install locally, and validate:
+
+```bash
+node scripts/axis-update-skills.mjs --repo ~/axis-tools --agent codex --json
+```
+
+不拉远程，只刷新当前 checkout：
+
+Refresh the current checkout without pulling:
+
+```bash
+node scripts/axis-update-skills.mjs --repo ~/axis-tools --agent codex --no-pull --json
+```
 
 ## 技能创建与沉淀 / Skill Creation And Deposition
 
@@ -161,72 +175,11 @@ node scripts/axis-skill-deposit.mjs --skill axis-example-skill --commit --push -
 
 The deposit script copies the complete bundle, validates it with Codex's `quick_validate.py` when available, and updates `skills/manifest.json`.
 
-## CLI 概览 / CLI Overview
-
-CLI 仍包含一些运营类命令。README 只记录稳定的顶层用途；完整命令列表请运行 `axis --help`。
-
-The CLI still includes several operational commands. This README documents the stable top-level intent; run `axis --help` for the full current command list.
-
-常用本地工具命令：
-
-Common local utility commands:
-
-```bash
-axis install --agent all
-axis codex-status current --repo /path/to/repo
-axis codex-status tail --repo /path/to/repo --limit 20
-axis codex-status summary --repo /path/to/repo
-```
-
-Codex hook 事件写入：
-
-Codex hook ingestion:
-
-```bash
-axis codex-hook ingest --file examples/sample-pretool.json
-axis codex-hook ingest --file examples/sample-posttool.json
-```
-
-如果环境使用 Axis backend，也可以继续使用 Axis Hub 相关命令：
-
-Optional Axis Hub commands remain available for environments that use Axis backend integration:
-
-```bash
-axis login
-axis me
-axis init
-axis bind
-axis pull
-axis submit "describe work here" --type requirement --json
-axis start-work --agent codex
-```
-
-需求池快捷命令仍作为兼容和提效入口保留：
-
-Pool shortcuts remain as compatibility and productivity commands:
-
-```bash
-axis-req "new requirement"
-axis-bug "bug report"
-axis-sug "improvement suggestion"
-axis-ide "new idea"
-```
-
-当后端暴露 Axis MCP endpoint 时，可以安装 MCP：
-
-MCP installation is available when a backend exposes an Axis MCP endpoint:
-
-```bash
-axis mcp install \
-  --backend-url https://example.com \
-  --mcp-url https://example.com/api/mcp
-```
-
 ## API 压测 endpoint 文件 / API Benchmark Endpoint Files
 
-`axis-api-benchmark` 不再内置任何私有项目 profile。真实压测时，请创建本地 endpoint 文件并传给脚本。
+`axis-api-benchmark` 不内置私有项目 profile。真实压测时，请创建本地 endpoint 文件并传给脚本。
 
-`axis-api-benchmark` no longer embeds a private project profile. For real benchmarks, create a local endpoint file and pass it to the bundled script.
+`axis-api-benchmark` does not embed a private project profile. For real benchmarks, create a local endpoint file and pass it to the bundled script.
 
 ```json
 {
@@ -283,7 +236,7 @@ npm test
 Focused tests:
 
 ```bash
-npm run test:mcp
+npm run test:cli
 npm run test:skill-deposit
 npm run test:axis-skills
 ```
@@ -305,12 +258,6 @@ npm run test:axis-skills
 git diff --check
 ```
 
-如果修改了更广泛的 CLI 行为，请运行 `npm test`。
+如果修改了 CLI 或安装脚本，请运行 `npm test`。
 
-For broader CLI changes, run `npm test`.
-
-## 兼容说明 / Compatibility Notes
-
-- `orbit`、`orbit-tools`、`orbit-req`、`orbit-bug`、`orbit-sug` 和 `orbit-ide` 仍保留为旧工作流别名。<br>`orbit`, `orbit-tools`, `orbit-req`, `orbit-bug`, `orbit-sug`, and `orbit-ide` remain aliases for older local workflows.
-- `scripts/install-orbit-tools.sh` 仍保留为 Axis installer 的兼容 wrapper。<br>`scripts/install-orbit-tools.sh` remains as a compatibility wrapper around the Axis installer.
-- 旧 README 曾把大量 backend 和 worker 细节写在仓库首页。相关命令在 CLI 中仍按实现保留，但当前 README 聚焦公共工具仓和 packaged skill 工作流。<br>The old README described many backend and worker details inline. Those commands still exist in the CLI where implemented, but this README now focuses on the public toolkit and packaged skill workflow.
+For CLI or installer changes, run `npm test`.
