@@ -1,195 +1,140 @@
-# axis-tools
+# axis-tools / Axis 工具仓
 
-AxisNode 的本地工具仓库，覆盖 **Codex progress monitor CLI** 和 AxisNode MCP / 项目绑定配置。
+`axis-tools` 是 Axis 的公共工具仓，当前重点维护本地 CLI 工具和可复用的 packaged skills。这个仓库的核心目标是：让公共安全的 Axis/Codex 技能可以安装、校验、更新，并在使用后持续沉淀改进。
 
-公共 CLI 主命令是 `axis`。`axis-tools` 是同入口别名，`orbit` 和 `orbit-tools` 仍作为兼容别名保留；仓库名和 npm package 名是 `axis-tools`。
+`axis-tools` is the public toolkit repository for Axis local CLI utilities and reusable packaged skills. Its current focus is to keep public-safe Axis/Codex skills installable, validatable, refreshable, and easy to improve after real use.
 
-## 当前能力
+主命令是 `axis`。`axis-tools` 是同入口别名，旧的 `orbit*` 命令仍作为兼容别名保留。
 
-- `axis codex-hook ingest`
-  - 从 Codex 官方 hook stdin JSON 读取事件
-  - 写入 `<repo>/.codex-status/latest.json`
-  - 追加 `<repo>/.codex-status/events.jsonl`
-- `axis codex-status current`
-  - 查看当前状态
-- `axis codex-status tail`
-  - 查看最近事件流
-- `axis codex-status summary`
-  - 输出简版摘要
-- `axis mcp install`
-  - 把 AxisNode HTTP MCP 写入 Hermes 配置
-  - 同步保存 `~/.orbit/config.json`
-- `axis login`
-  - 提示账号和隐藏密码，登录共享 AxisNode backend，缓存 bearer token/session
-- `axis me`
-  - 调用 `/api/me` 查看当前账号、显示名、角色和权限
-- `axis init`
-  - 选择 Agent，并安装 packaged skills
-  - 不选择产品线/项目，也不写 `.axis/project.json (or legacy .orbit/project.json)`
-- `axis bind`
-  - 绑定单个项目 repo，或绑定一个产品线根目录及其直接子目录
-  - 写入 `.axis/project.json (or legacy .orbit/project.json)` / `.axis/product-line.json (or legacy .orbit/product-line.json)`
-- `axis pull`
-  - 从 AxisNode 拉取产品线/项目结构，只为可 clone 的维护仓库创建本地目录
-  - 项目维护了 clone URL 时会 clone；已有 git repo 时会安全 fetch/pull
-- `axis init-product-line`
-  - 兼容旧入口；新文档推荐使用 `axis bind`
-- `axis install`
-  - 安装本包 `skills/*/SKILL.md` 到 `~/.orbit/skills`，并按 `--agent` 同步到 Codex / Claude Code skill 目录
-- `axis logout`
-  - 清理 `~/.orbit/config.json` 中缓存的登录 token/session
-- `axis project bind`
-  - 高级非交互式绑定命令，保留给自动化脚本使用
-- `axis project show`
-  - 查看当前 repo 的 AxisNode 绑定
-- `axis start-work`
-  - 新的员工执行 worker；默认后台启动所有 active 员工，已在本机运行的员工会跳过
-  - 启动前把员工云端 `employee.role` + `soul.md` / `skill.md` / `memory.md` 同步到独立工作空间，并生成 `AGENTS.md` / `CLAUDE.md` 引导 Agent 先读这些上下文
-  - 发送 heartbeat，并按员工职责选择对应队列：产品扫 `NEW`/`WAIT_REVIEW`，架构/美工扫 review+coding，开发/测试/运维扫 `WAIT_CODE`，再只领取所选任务执行
-  - 支持 `--agent codex` 和 `--agent claude-code`；用 `--employee-id` 或 `--foreground` 做单员工调试
-- `axis sync-employee`
-  - 将单个员工的云端 `soul.md` / `skill.md` / `memory.md` 拉到 `$AXIS_HOME/employees/<id>/`，同时写入 `AGENTS.md` / `CLAUDE.md`
-  - `--push` 会先把本地工作空间内的员工上下文文件推回 Hub，再重新拉取云端版本
-- `axis work-review` / `axis work-coding`
-  - 默认使用 `AXIS_HOME` 或 `~/.axis` 作为用户级 workspace，同步当前登录账号可访问的项目，并轮询所有有权限的项目队列
-  - `work-review` 持续运行 review/refine worker，把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems
-  - `work-coding` 是旧 coding probe 兼容入口；新开发执行请使用 `axis start-work`
-  - `--repo <path>` 是显式窄模式，只处理该路径下已绑定的单个 repo/project
+The main command is `axis`. `axis-tools` is an alias, and older `orbit*` commands remain available for compatibility.
 
-## 仓库结构
+## 仓库内容 / Repository Contents
 
 ```text
 axis-tools/
-├── examples/
-│   ├── hooks.json
-│   ├── sample-pretool.json
-│   └── sample-posttool.json
-├── skills/
+├── scripts/                 # 技能安装、更新、沉淀和启动脚本 / skill helper scripts
+├── skills/                  # 公共 packaged skills / public packaged skills
 │   ├── axis-ali-dashboard/
-│   │   ├── SKILL.md
-│   │   ├── agents/
-│   │   ├── references/
-│   │   └── scripts/
+│   ├── axis-api-benchmark/
 │   ├── axis-create-skill/
 │   └── axis-update/
-├── src/
-│   └── cli.ts
+├── src/cli.ts               # Axis CLI 实现 / Axis CLI implementation
+├── tests/                   # CLI 和技能打包测试 / CLI and skill packaging tests
 ├── package.json
-└── tsconfig.json
+└── README.md
 ```
 
-## 安装
+## 当前技能 / Current Packaged Skills
 
-新电脑推荐一键安装 / 更新（macOS 和 Linux）：
+| 技能 / Skill | 用途 / Purpose |
+| --- | --- |
+| `axis-ali-dashboard` | 生成、修复并校验阿里云 CloudMonitor/SLS 大屏 JSON，包含 SLS 下钻和业务流大屏模式。<br>Create, repair, and validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, including SLS drilldowns and business-flow dashboard patterns. |
+| `axis-api-benchmark` | 对测试环境 API 做保守压测，比较接口延迟，并把 QPS/并发转换成业务容量口径。项目接口应通过本地 endpoint JSON 提供。<br>Run conservative API benchmarks, compare endpoint latency, and translate QPS/concurrency into business-facing capacity estimates. Project endpoints should be supplied through a local endpoint JSON file. |
+| `axis-create-skill` | 扫描对话中是否存在可复用、适合公开仓沉淀的技能机会，并先判断是否应该创建。<br>Scan conversations for reusable, public-safe skill opportunities and decide whether a skill belongs in this public repository before creating one. |
+| `axis-update` | 从本仓库刷新并校验本机安装的 Axis packaged skills。<br>Refresh and validate locally installed Axis packaged skills from this repository. |
+
+每个 packaged skill 都应包含 `After Use Deposition` 章节。技能使用后，如果产生了可复用的修正、示例、校验命令或边界情况，应回写到对应技能包，完成校验、本地刷新，并在有权限时推送远程。
+
+Every packaged skill should include an `After Use Deposition` section. After a skill is used, reusable corrections, examples, validation commands, or edge cases should be folded back into the skill bundle, validated, refreshed locally, and pushed when permissions allow.
+
+## 公共仓规则 / Public Repository Rule
+
+这个仓库面向公共复用。不要把产品私有、客户专用、包含凭据、绑定私有主机，或只适用于某个闭源仓库的技能加入 `skills/`。
+
+This repository is public-oriented. Do not add product-private, customer-specific, credential-bearing, host-specific, or closed-repo-only skills to `skills/`.
+
+公共技能应使用泛化流程、示例和占位值。私有项目知识应放在私有 memory、notes 或私有技能中，而不是沉淀到本仓库。
+
+Public skills should use generic workflows, examples, and placeholders. Private project knowledge belongs in private memory, notes, or private skills, not in this repository.
+
+`axis-create-skill` 和测试套件会约束这个方向：生成的技能会自动带上沉淀逻辑，疑似私有项目的候选默认不会被创建为公共技能。
+
+`axis-create-skill` and the test suite enforce this direction: generated skills automatically include deposition guidance, and private-looking candidates are rejected by default for public packaged skills.
+
+## 安装 / Install
+
+推荐使用一键安装脚本：
+
+Recommended bootstrap:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/togally/axis-tools/main/scripts/install-axis-tools.sh | bash
 ```
 
-脚本默认把仓库安装到 `~/axis-tools`，如果目录不存在会 clone；如果目录已经是 `https://github.com/togally/axis-tools.git` 的 git repo，会安全更新到 `origin/main`，然后自动执行：
+脚本会 clone 或更新 `~/axis-tools`，安装依赖，构建 CLI，并链接全局命令：
 
-```bash
-npm install
-npm run build
-npm link
-```
+The installer clones or updates `~/axis-tools`, installs dependencies, builds the CLI, and links global commands:
 
-如果 `npm link` 的全局 bin 目录不在 `PATH` 里，安装脚本会把 Axis 命令链接到 `~/.local/bin`。如果安装后当前 shell 仍找不到 `axis`，把 `~/.local/bin` 加到 `PATH` 后重新打开 shell，或运行：
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-本地已有脚本时也可以直接运行：
-
-```bash
-bash scripts/install-axis-tools.sh
-```
-
-可选环境变量：
-
-```bash
-AXIS_TOOLS_DIR="$HOME/axis-tools" \
-AXIS_TOOLS_REPO="https://github.com/togally/axis-tools.git" \
-AXIS_TOOLS_BRANCH="main" \
-bash scripts/install-axis-tools.sh
-```
-
-`AXIS_TOOLS_REPO` 默认使用预期的新仓库 `https://github.com/togally/axis-tools.git`。如果当前 checkout 仍托管在旧地址或私有 fork，请显式覆盖 `AXIS_TOOLS_REPO`。旧的 `ORBIT_TOOLS_*` 环境变量仍作为兼容 fallback 生效，`scripts/install-orbit-tools.sh` 也保留为调用 Axis installer 的兼容入口。
-
-默认不会覆盖本地修改。如果本地 repo 有未提交修改、未跟踪文件、本地提交或分叉历史，脚本会停止并提示先 commit/stash。确认要丢弃本地变更时，可以显式使用：
-
-```bash
-AXIS_TOOLS_FORCE=1 bash scripts/install-axis-tools.sh
+```text
+axis
+axis-tools
+axis-ide
+axis-req
+axis-bug
+axis-sug
 ```
 
 手动安装：
 
-```bash
-cd /home/jasperWei/orbit/axis-tools
-npm install
-npm run build
-bash scripts/install-codex-hook.sh
-```
-
-如果你只想安装 CLI 而不立刻接 hook：
+Manual install:
 
 ```bash
-cd /home/jasperWei/orbit/axis-tools
+git clone https://github.com/togally/axis-tools.git ~/axis-tools
+cd ~/axis-tools
 npm install
 npm run build
 npm link
 ```
 
-安装后可直接用：
+如果全局 npm bin 目录不在 `PATH` 中，请把 `~/.local/bin` 或 npm 全局 bin 路径加入 shell profile。安装脚本在需要时也会尝试把命令暴露到 `~/.local/bin`。
+
+If your global npm bin directory is not on `PATH`, add `~/.local/bin` or the npm global bin path to your shell profile. The installer also tries to expose links in `~/.local/bin` when needed.
+
+## 本地安装技能 / Install Skills Locally
+
+为 Codex 和 Claude Code 安装全部 packaged skills：
+
+Install all packaged skills for Codex and Claude Code:
 
 ```bash
-axis codex-status current --repo /home/jasperWei/orbit/axis-hub
+axis install --agent all
 ```
 
-旧命令 `orbit`、`orbit-tools`、`orbit-req`、`orbit-bug`、`orbit-sug`、`orbit-ide` 仅作为兼容别名保留；新文档和脚本应优先使用 `axis` / `axis-tools` / `axis-*`。
+只为 Codex 安装：
 
-## AxisNode 登录、初始化、绑定与 Pull
-
-推荐新流程：
+Install only for Codex:
 
 ```bash
-axis login
-axis init
-axis bind
+axis install --agent codex
 ```
 
-账号创建只在 AxisNode Web UI 完成；CLI 不提供注册命令。
+从仓库刷新并校验本机技能包：
 
-`login` 会提示 account 和隐藏输入的 password，调用 `/api/login`，把同一 backend 的 bearer token/session 缓存在 `~/.orbit/config.json`。`me` 会调用 `/api/me`，输出当前 account、displayName、role 和 permissions。
-
-`init` 只处理 packaged skill 安装。它会提示选择 Agent：`Codex`、`Claude Code/cc` 或 `None`，并把本包 `skills/*` 的完整 skill bundle 安装到 `~/.orbit/skills`，必要时同步到对应 Agent skill 目录。
-
-当前 packaged skills：
-
-- `axis-ali-dashboard`: 生成、修复并校验阿里云 CloudMonitor/SLS 业务监控大屏 JSON，覆盖 Prometheus 汇总指标、SLS 明细表和 bizId/traceId 下钻配置。
-- `axis-create-skill`: 扫描当前对话中值得复用的 Axis 工作流，创建本地 Codex skill，并可沉淀、提交、推送到 `axis-tools` 仓库。
-- `axis-update`: 从 `axis-tools` 更新并重新安装本地 Axis packaged skills，确保安装完整 bundle 并运行校验。
-
-沉淀或更新本机 Codex skill 到仓库：
-
-```bash
-node scripts/axis-skill-deposit.mjs --skill axis-ali-dashboard
-node scripts/axis-skill-deposit.mjs --skill axis-ali-dashboard --commit --push --branch main
-```
-
-脚本默认从 `~/.codex/skills/<skill>` 复制完整目录到本仓库 `skills/<skill>`，运行 `quick_validate.py`，更新 `skills/manifest.json`，并在 `--commit/--push` 时只暂存对应 skill 目录和 manifest。
-
-更新本机安装的 Axis packaged skills：
+Refresh from the repository and validate installed bundles:
 
 ```bash
 node scripts/axis-update-skills.mjs --repo ~/axis-tools --agent codex --json
 ```
 
-从对话扫描并创建可沉淀的 Axis skill：
+安装会复制完整 skill bundle，包括 `SKILL.md`、`agents/`、`references/` 和 `scripts/` 等目录。
+
+Installed skill bundles are copied as full directories, including `SKILL.md`, `agents/`, `references/`, and `scripts/` where present.
+
+## 技能创建与沉淀 / Skill Creation And Deposition
+
+扫描对话 transcript，判断是否存在适合公开沉淀的技能候选：
+
+Scan a conversation transcript for public-safe skill candidates:
 
 ```bash
 node scripts/axis-create-skill.mjs --scan-conversation /tmp/conversation.txt --json
+```
+
+创建已确认适合公开仓的技能，并沉淀到本仓库：
+
+Create a confirmed public-safe skill and deposit it into the repo:
+
+```bash
 node scripts/axis-create-skill.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
@@ -199,394 +144,173 @@ node scripts/axis-create-skill.mjs \
   --deposit --commit --push --branch main
 ```
 
-`init` 不会询问产品线/项目，也不会写当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`。项目或产品线绑定由 `bind` 完成。
+生成的 `SKILL.md` 会自动包含 `After Use Deposition`。
 
-### Pool CLI
+The generated `SKILL.md` automatically includes `After Use Deposition`.
 
-四个池命令是业务入口。最终用户只需要输入一句 seed；CLI 会读取 repo 绑定和登录 token，优先提交到 AxisNode Hub 的 `/api/projects/{projectId}/pool-seeds`，状态为 `NEW`，然后立即返回。默认不会提示选择 Agent，也不会启动 Codex / Claude Code。
+把已有本地 Codex skill 沉淀到本仓库：
 
-```bash
-axis-req "商品评价支持图片"
-axis-bug "登录失败"
-axis-sug "优化按钮文案"
-axis-ide "AI宠物健康顾问"
-```
-
-默认输出会包含 `kind`、`title`、`mode=hub-seed`、`id`、`status` 和 `url`；`--json` 输出机器可读 JSON。没有绑定、没有登录 token 或 Hub 不可用时，CLI 会把 seed 保存到本地 `.axis/pool-seeds/`，并明确输出 `mode=local-seed` 和 “seed saved locally” 类 warning。
-
-通用查询/删除形态：
+Deposit an existing local Codex skill into this repository:
 
 ```bash
-axis-req --list
-axis-bug --delete
+node scripts/axis-skill-deposit.mjs --skill axis-example-skill
+node scripts/axis-skill-deposit.mjs --skill axis-example-skill --commit --push --branch main
 ```
 
-普通用户直接运行 `--list` 会进入交互分页，默认每页 10 条，可输入 `n`/`p` 翻页、`d` 删除某条、`q` 退出。直接运行 `--delete` 会先列出当前池子条目供选择；`--delete <id>` 会展示目标并要求输入 `yes` 才会删除，默认不删除。`--yes` 只用于脚本/CI 的非交互删除确认。
+沉淀脚本会复制完整 bundle，使用 Codex 的 `quick_validate.py` 校验，并更新 `skills/manifest.json`。
 
-机器模式保留 `--json`：
+The deposit script copies the complete bundle, validates it with Codex's `quick_validate.py` when available, and updates `skills/manifest.json`.
 
-```bash
-axis-req --list --page 1 --page-size 20 --json
-axis-bug --delete bug-1 --yes --json
-```
+## CLI 概览 / CLI Overview
 
-兼容 artifact 流程仍保留给老脚本或调试场景，但不再作为产品入口推广。`run` 只接受 `--agent none/current` 这类不启动外部 Agent 的模式；需要 Agent review/refine 时使用 `axis work-review`。
+CLI 仍包含一些运营类命令。README 只记录稳定的顶层用途；完整命令列表请运行 `axis --help`。
 
-兼容 `run` / `import` 会先尝试 AxisNode：
+The CLI still includes several operational commands. This README documents the stable top-level intent; run `axis --help` for the full current command list.
 
-- 模板：`GET /api/projects/{projectId}/pool-templates?kind=requirement|idea|bug|suggestion`，失败时使用 CLI 内置中文 fallback 模板。
-- 上传：优先 `POST /api/projects/{projectId}/pool-documents`；老 Hub 对 requirement 返回 404 时 fallback 到 `POST /api/projects/{projectId}/requirements`。
-- 缓存：Hub 上传成功后默认保存一份 `source: hub-cache` 到 `docs/requirements`、`docs/ideas`、`docs/bugs` 或 `docs/suggestions`；`--no-doc` 跳过缓存。
+常用本地工具命令：
 
-默认 seed 提交流程中 `--local`/`--save-local` 强制只保存本地 seed，`--save` 作为旧别名保留。兼容 artifact 流程中 `--local`/`--save-local` 强制只保存本地 artifact，`--dry-run` 只生成 artifact，不提交也不保存。
-
-### Work CLI
-
-`axis start-work` 是新的员工执行 worker。它默认从后台为当前 backend 上所有 active 员工启动本地 worker session；如果某员工已经有覆盖当前请求 scope 的本地 worker，会跳过该员工，单项目 worker 不会阻止同员工再启动产品线/工作区 worker。返回结果会列出 started / skipped 的员工、session id、pid 和日志路径。每个 worker 会持续向 Axis Hub 发送 heartbeat。用 `--employee-id <id>` 可以显式只启动一个员工；用 `--foreground` 可以在当前终端跑单员工 debug。解析到 employee id 后，worker 会先执行员工工作空间同步：从 Hub 拉取该员工远程 `employee.role`、`soul.md` / `skill.md` / `memory.md` 到 `$AXIS_HOME/employees/<id>/`，并生成 `AGENTS.md` / `agents.md`、`CLAUDE.md` / `claude.md`，要求 Agent 工作前先读取这些同步文件。随后 worker 再按结构化岗位选择候选队列：产品读取 `NEW` / `WAIT_REVIEW` / legacy `pending-confirmation`；架构/美工读取 review + coding；开发/测试/运维读取 `WAIT_CODE` / legacy `ready`。之后 Agent 只在该候选池内按职责匹配并领取所选 WorkItem。Hub project agent-context 只作为 Project Context 补充；本地员工工作空间是云端上下文的同步副本，云端仍是运行权威来源。
-
-新电脑或新环境的最短路径：
-
-```bash
-axis login
-axis pull
-axis sync-employee --employee-id <id>
-axis start-work --agent codex
-```
-
-需要把本地修改过的员工 soul / skill / memory 推回 Hub 时：
-
-```bash
-axis sync-employee --employee-id <id> --push
-```
-
-Claude Code 运行方式：
-
-```bash
-axis start-work --agent claude-code
-```
-
-后台 worker 日志和状态写在：
-
-```text
-~/.axis/workers/<sessionId>/worker.log
-~/.axis/workers/<sessionId>/config.json
-~/.axis/workers/<sessionId>/state.json
-~/.axis/workers/<sessionId>/last-heartbeat.json
-```
-
-查看本机 worker：
-
-```bash
-axis work-status
-axis work-status --json
-```
-
-需要 debug/test 时用前台和 bounded flags。前台模式会把 progress 打到终端；`--json` 时 stdout 只输出最终 JSON，progress/Agent stderr 走 stderr。
-
-```bash
-axis start-work --foreground --agent codex
-axis start-work --foreground --agent codex --iterations 1 --json
-axis start-work --foreground --agent claude-code --heartbeat-interval 30
-axis start-work --repo /path/to/repo --agent codex
-axis start-work --project-id <id> --product-line-id <id>
-```
-
-`axis start-work` 支持：
-
-- `--agent <codex|claude-code|claude>`：选择 Agent runtime；未传时沿用项目/全局 `selectedAgent`，再自动检测本机 `codex` 或 `claude`。
-- `--employee-id <id>`：显式只启动这个员工；未传且非前台模式时默认启动所有 active 员工。`AXIS_EMPLOYEE_ID` 仍可用于脚本化单员工启动。
-- `--foreground`：不 fork 后台进程，在当前终端运行和输出日志；用于单员工调试。
-- `--interval <seconds>`：`WAIT_CODE` 队列轮询间隔；默认 10 秒。
-- `--heartbeat-interval <seconds>`：发往 Hub 的 worker heartbeat 间隔；默认 30 秒，失败只记录 warning 并继续重试。
-- `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定。
-- `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
-- `--product-line-id <id>` / `--product-line-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问产品线。
-- `--json`：返回机器可读输出；默认后台启动会包含 `workers[]`、`skipped[]`、`workerCount` 和 `skippedCount`，单员工后台启动会包含 `sessionId`、`pid`、`agent`、`heartbeatIntervalSeconds`、`scope`、`logPath`，前台执行会额外包含 `iterations[]`、`summary` 和 `stopReason`。
-
-`start-work` 的执行语义：
-
-- 解析到 employee id 后会同步员工工作空间 `$AXIS_HOME/employees/<id>/`：拉取 Hub employee document，写入 `soul.md` / `skill.md` / `memory.md`，并生成 `AGENTS.md` / `CLAUDE.md` 指引 Codex / Claude Code 工作前读取同步上下文。
-- 根据员工结构化角色选择候选池：产品员工消费需求/想法等 review 阶段 WorkItems（`NEW` / `WAIT_REVIEW`，兼容 `pending-confirmation`）；架构/美工员工可同时看到 review + coding；开发/测试/运维员工消费 coding execution queue（`WAIT_CODE`，兼容 `ready`）。新写入仍使用 canonical lifecycle status。
-- 领取前会先把角色匹配后的候选 WorkItem 摘要交给 Agent 选择。解析到 employee id 时，选择 prompt 的 Employee Context 来自 Hub `/api/employees/{employeeId}` 返回的结构化 `employee.role` 和远程 `documents.soul` / `documents.skill` / `documents.memory`，Project Context 单独标注为补充；候选摘要包含 id/title/type/pool/status/notes/sourceArtifactId。员工应按自己的岗位职责挑任务，而不是固定拿第一条；职责模型使用 broad categories：开发/development、测试/QA、运维/DevOps、架构/architecture、产品/product、美工/design/visual。
-- 如果远程 Employee Context 不可用，或 Agent 选择 `null`、输出不可用且 fallback 也找不到职责匹配，worker 会 idle/skip 并记录原因，不会静默领取无关任务，也不会把本地员工文件当作权威替代。
-- 选择后才调用 Hub claim lease API；遇到 `409` 会跳过本轮所选 WorkItem，等待下一轮重新按职责选择，避免两个 worker 同时执行同一条。
-- 执行 Agent prompt 包含远程 Hub Employee Context、可用的 Project Context、项目绑定摘要和完整 WorkItem JSON。
-- 执行后会尽力写回 notes/result，并调用 WorkItem `complete` lifecycle；如果 Agent 或写回失败，会明确记录 failed/blocker，不会静默假装完成。
-
-`axis work-review` 和 `axis work-coding` 仍保留为兼容入口。`work-review` 继续负责 review/refine：把 `NEW` / `WAIT_REVIEW` seed 和 WorkItem 池条目整理成 `WAIT_USER_CONFIRM` 文档 / WorkItems。`work-coding` 是旧 coding probe，不再作为开发执行入口推广。
-
-旧 worker 默认从 `AXIS_HOME`（未设置时为 `~/.axis`）读取/同步当前登录账号可访问的产品线、项目和工作队列，并持续轮询所有有权限的项目。可以在未绑定 repo 或任意目录运行；当前 cwd 没有 `.axis/project.json` 不再是默认 worker 的停止条件。
-
-兼容旧命令：
-
-```bash
-axis work-review
-axis work-review --iterations 1 --json
-axis work-review --max-iterations 3 --interval 30
-axis work-review --once --json
-axis work-coding --once --json
-axis work-review --repo /path/to/repo
-axis work-coding --repo /path/to/repo --once --json
-```
-
-旧 worker 代码和输出里固定建模两条 lane：
-
-- `refine`: 读取 `NEW` / `WAIT_REVIEW` 的 pool seeds，以及 WorkItem 池 UI 中可见的 `NEW` / `WAIT_REVIEW` 想法/需求/BUG/建议优化条目；`axis work-review` 会启动 review worker，把它们转成 `WAIT_USER_CONFIRM` pool document / WorkItems。旧 `pending-confirmation` 会按兼容输入读取，但新写入不再使用它。
-- `execute`: 读取 `WAIT_CODE` requirements 或 work-items；`axis work-coding` 会探测 `WAIT_CODE` WorkItems。旧 `ready` 会按兼容输入读取，但新开发执行使用 `axis start-work`。
-
-兼容入口仍保留但已废弃：`axis work-once`、`axis work-loop`、`axis work once`、`axis work loop` 都映射到 review worker。`axis work once` 默认仍只做队列 probe，`axis work once --spawn` 运行单次 review worker。`work-review` / `work-coding` help 中会继续保留参数，但新执行流优先看 `axis start-work --help`。
-
-`axis work-review` 和 `axis work-coding` 支持：
-
-- `--iterations <n>` / `--max-iterations <n>`：bounded 迭代次数；不传时为 infinite/continuous loop。
-- `--once`：等价于 `--iterations 1`。
-- `--interval <seconds>` / `--sleep <seconds>`：轮询之间的等待时间；默认 10 秒。测试可设置 `AXIS_WORK_LOOP_SKIP_SLEEP=1` 跳过真实 sleep。
-- `--repo <path>`：显式切到单 repo/project 窄模式，沿用该 repo 的 `.axis/project.json (or legacy .orbit/project.json)` 绑定；未传时使用用户 workspace。
-- `--project-id <id>` / `--project-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问项目。
-- `--product-line-id <id>` / `--product-line-uuid <uuid>`：在默认 workspace 模式中只轮询一个可访问产品线。
-- `--agent <codex|claude-code|none>`：选择 review worker Agent；未传时沿用项目绑定或本机可用 Agent。`work-coding` 当前只 probe，不启动 Agent。
-- `--json`：stdout 只输出 JSON；progress 和 Agent stderr 走 stderr 或被抑制。输出包含 `mode: "work-review"` / `mode: "work-coding"`、`workerType`、`bounded`、`infinite`、`maxIterations`、`intervalSeconds`、`iterations[]`、`sleeps[]`、`summary`、`warning` 和 `stopReason`。review lane 还会暴露 `lanes.refine.sourceCounts`、候选 `candidateSource` / `candidateType`，以及 `summary.pendingBySource` / `summary.candidatesByType`。
-
-pool document 采用四个内部生命周期状态：`NEW` 表示 raw seed 新提交，`WAIT_REVIEW` 表示用户要求继续讨论/重新整理，`WAIT_USER_CONFIRM` 表示 review worker 已生成文档、等待用户在 Hub UI 确认，`WAIT_CODE` 表示用户已确认、等待开发。旧 `pending-confirmation` raw seed document 会按 `NEW` / `WAIT_REVIEW` 兼容读取，并按 `sourceArtifactId` / document id 去重。
-
-默认 workspace 模式需要已登录 session；未登录会提示先执行 `axis login`，不会用 `no-project-binding` 误导。没有可访问项目、没有 `NEW` / `WAIT_REVIEW` review seeds / WorkItems 或没有 `WAIT_CODE` coding WorkItems 不是错误：infinite 模式会输出 idle、sleep 后继续轮询；bounded 模式会跑完请求的迭代数并以 `max-iterations` 停止。没有可用 review Agent 或 worker 转换失败会停止并报告对应 stop reason。`--repo <path>` 窄模式仍要求该 repo 有可用项目绑定；缺失绑定时保持单 repo 的 clean stop 行为。
-
-review worker 会把 seed kind 映射到方法论技能，并把本机 `SKILL.md` 内容直接注入传给 Agent 的 prompt/context，而不是只写一个技能名：
-
-- idea / `axis-ide`: `plan-ceo-review`；如果 Hermes 中存在 `gstack-plan-ceo-review` 目录，则使用 `gstack-plan-ceo-review`。
-- requirement / `axis-req`: `superpowers:brainstorm`。
-- bug / `axis-bug`: `superpowers:systematic-debugging`。
-- suggestion / `axis-sug`: `superpowers:brainstorm`。
-
-idea 方法论内容按顺序查找：`~/.hermes/skills/gstack-plan-ceo-review/SKILL.md`、`~/.hermes/skills/plan-ceo-review/SKILL.md`、`~/gstack/.hermes/skills/*/SKILL.md` 和 gstack checkout 生成路径。Superpowers 方法论优先使用 `~/.codex/skills/superpowers/{brainstorming,systematic-debugging}/SKILL.md`，找不到时再查 Codex plugin cache 或 `AXIS_CODEX_SUPERPOWERS_SOURCE`。注入内容会做长度上限保护、二进制跳过和明显密钥片段 redaction；`axis work-review --json` 的每个 review result 会返回 `methodologySkill`、`methodologySource`、`methodologyPath`、`methodologyInjected`、`methodologyWarning` 和 `methodologyTruncated`。
-
-worker prompt 会把交互式方法论改成一次性自动输出：Agent 不得向用户提问或停下来等确认；如果方法论原本要提问，必须把问题写进 artifact markdown 的 structured Decision block，列出 options、明确 recommended option 和 rationale，然后在同一轮里按 recommended option 继续生成并上传。多个可行路径会被追加/更新到 `可选方案 / 推荐方案` 章节，并标出推荐方案。Hub seed/context 里如果带有已有 document、sourceArtifact、artifact、markdown、selectedOption、feedback 等字段，worker 会把它当成用户编辑反馈来重新 review/refine；用户已经改写或选择的方案优先保留，仍有歧义时继续给出可选方案并选一个推荐默认值。
-
-启动 review worker 前会检查本机前置条件：gstack/Hermes skill docs、Codex Superpowers skills。缺失时 CLI 会做 best-effort 用户本地安装/修复：更新或 clone `~/gstack`，执行 `bun install` 和 `bun run gen:skill-docs --host hermes`，复制 `~/gstack/.hermes/skills` 到 `~/.hermes/skills`，把 `bin`/`browse`/`ETHOS.md` 链到 `gstack*` skill 目录，并把 Codex Superpowers plugin cache 中的 skills 链接或复制到 `~/.codex/skills/superpowers`。网络命令会继承代理环境，并在未设置时使用 NAS 默认代理 `HTTP_PROXY/HTTPS_PROXY=http://127.0.0.1:7890`、`ALL_PROXY=socks5://127.0.0.1:7891`。这些修复只在 `axis work-review` 或废弃 review aliases 且存在待 review seeds / WorkItems 时发生；普通 `axis-ide` / `axis-req` / `axis-bug` / `axis-sug` 的 `"text"` 入口仍然只提交 raw seed，不启动 Agent。
-
-### 绑定本地目录
-
-```bash
-axis bind
-```
-
-`bind` 需要已经登录；如果本地没有 session，或 cached token 被 AxisNode 返回 401/403 拒绝，CLI 会提示重新执行 `axis login` 或联系 owner/admin 授权。
-
-`bind` 会先确认绑定目标：
-
-- 单个项目 repo：选择产品线，再选择项目，写入当前 repo 的 `.axis/project.json (or legacy .orbit/project.json)`
-- 产品线根目录：选择产品线，写入根目录 `.axis/product-line.json (or legacy .orbit/product-line.json)`，扫描直接子目录并逐个绑定或跳过
-
-绑定 JSON 会写入 `backendUrl`、登录/session 信息、产品线/项目 id/name、`repo`、`owner` 和更新时间。`mcpUrl` 默认不再写入；只有显式传 `--mcp-url`，或已有绑定里本来有 `mcpUrl` 时才会保留。
-
-旧的 `axis init-product-line` 仍作为兼容入口保留，行为等同于产品线根目录绑定；新使用方式请优先用 `axis bind`。
-
-### Pull 云端结构
-
-```bash
-axis pull
-```
-
-`pull` 需要已经登录；它会复用并校验 cached session，选择拉取全部产品线或某一个产品线，然后默认在 `AXIS_HOME` 或 `~/.axis` 下用安全 slug 创建产品线和项目目录。也可以用 `--root <path>` 显式指定目录。只有项目维护了 clone URL 时才会创建本地项目 repo 目录：`repositoryAddress`、`repositoryUrl`、`gitUrl`、`remoteUrl`、`githubRepo` 或 `sourceRepo`。仅有旧机器上的绝对 `repoPath` 不会被当成可 clone 地址。
-
-- 目标目录不存在或为空：执行 `git clone`
-- 目标目录已经是 git repo：执行 `git fetch --all --prune` 和 `git pull --ff-only`
-- 目标目录非空且不是 git repo：不覆盖，不写入绑定配置，并在 summary 中标记跳过 clone
-- 项目没有 clone URL：标记为 `skipped-no-repo`，不创建项目目录或 `.axis/project.json (or legacy .orbit/project.json)`
-
-`pull` 只会在该产品线至少有一个项目成功 clone/pull 后写产品线目录的 `.axis/product-line.json (or legacy .orbit/product-line.json)`，并只为成功 clone/pull 的项目写 `.axis/project.json (or legacy .orbit/project.json)`。owner 默认使用当前登录账号；`mcpUrl` 同样只在显式传入时写入。
-
-### AxisNode MCP
-
-安装 AxisNode HTTP MCP 到 Hermes：
-
-```bash
-axis mcp install \
-  --backend-url http://117.72.14.134:18081 \
-  --mcp-url http://117.72.14.134:18081/api/mcp
-```
-
-默认写入 `~/.hermes/config.yaml` 的 `mcp_servers.orbit`，并把 `backendUrl`、`mcpUrl`、`hermesConfigPath`、`mcpServerName` 同步保存到 `~/.orbit/config.json`。测试或临时环境可以用 `--config <path>` 指向独立 Hermes 配置文件。
-
-MCP install 是独立步骤，仍允许使用显式 `--mcp-url`，未传时会用 `<backend-url>/api/mcp` 安装 Hermes MCP。这个默认值只用于 `mcp install`，不会让 `init`、`bind` 或 `pull` 默认写入绑定 JSON。
-
-### 单独安装技能
-
-也可以单独安装技能：
+Common local utility commands:
 
 ```bash
 axis install --agent all
-axis install --agent codex
-axis install --agent claude-code
-axis install --agent cc
+axis codex-status current --repo /path/to/repo
+axis codex-status tail --repo /path/to/repo --limit 20
+axis codex-status summary --repo /path/to/repo
 ```
 
-`axis install` 默认等同于 `--agent all`。如果目标 skill 目录已经存在且内容一致，会直接跳过；如果目标目录被本地修改过，默认拒绝覆盖，传 `--force` 才会替换。安装会复制完整 bundle，包括 `agents/`、`references/` 和 `scripts/`。
+Codex hook 事件写入：
 
-清理缓存登录：
+Codex hook ingestion:
 
 ```bash
+axis codex-hook ingest --file examples/sample-pretool.json
+axis codex-hook ingest --file examples/sample-posttool.json
+```
+
+如果环境使用 Axis backend，也可以继续使用 Axis Hub 相关命令：
+
+Optional Axis Hub commands remain available for environments that use Axis backend integration:
+
+```bash
+axis login
 axis me
-axis logout
-axis logout --backend-url http://117.72.14.134:18081
+axis init
+axis bind
+axis pull
+axis submit "describe work here" --type requirement --json
+axis start-work --agent codex
 ```
 
-可选高级用法：自动化脚本仍可直接传 UUID 绑定，不进入交互提示。
+需求池快捷命令仍作为兼容和提效入口保留：
+
+Pool shortcuts remain as compatibility and productivity commands:
 
 ```bash
-axis project bind \
-  --repo /path/to/repo \
-  --product-line-uuid <product-line-uuid> \
-  --project-uuid <project-uuid> \
-  --owner <owner>
+axis-req "new requirement"
+axis-bug "bug report"
+axis-sug "improvement suggestion"
+axis-ide "new idea"
 ```
 
-绑定会写入 `/path/to/repo/.axis/project.json (or legacy .orbit/project.json)`。字段包括 `backendUrl`、登录/session 信息、`account`、`user`、`productLineUuid`、`productLineId`、`productLineName`、`projectUuid`、`projectId`、`projectName`、`repo`、`owner`、可选 repo 地址、可选 skill 路径和 `updatedAt`。`mcpUrl` 只有显式传入或已有绑定中存在时才会写入。高级 `project bind` 会继续写入 UUID 和兼容 ID 字段；如果已有配置里存在旧字段 `productLineId` / `projectId`，重新绑定时会保留这些字段用于兼容旧工具。
+当后端暴露 Axis MCP endpoint 时，可以安装 MCP：
 
-产品线和项目元数据只写入当前目录的 `.axis/product-line.json (or legacy .orbit/product-line.json)` / `.axis/project.json (or legacy .orbit/project.json)`；`~/.orbit/config.json` 只保存登录、后端地址、MCP 和默认 agent/skill 等全局 CLI 配置。
-
-高级 UUID 示例：
+MCP installation is available when a backend exposes an Axis MCP endpoint:
 
 ```bash
-axis project bind \
-  --repo /home/jasperWei/orbit/axis-tools \
-  --backend-url http://117.72.14.134:18081 \
-  --product-line-uuid 8f938fdc-f2be-44d6-8c48-91bc9156836d \
-  --project-uuid 71533d74-80e3-4e7e-adbb-69c42a25db0c \
-  --owner jasper
+axis mcp install \
+  --backend-url https://example.com \
+  --mcp-url https://example.com/api/mcp
 ```
 
-本地开发示例：
+## API 压测 endpoint 文件 / API Benchmark Endpoint Files
 
-```bash
-axis login \
-  --backend-url http://127.0.0.1:18081
+`axis-api-benchmark` 不再内置任何私有项目 profile。真实压测时，请创建本地 endpoint 文件并传给脚本。
 
-axis init \
-  --repo /home/jasperWei/orbit/axis-tools \
-  --backend-url http://127.0.0.1:18081
-
-cd /home/team/orbit/product-line-root
-axis bind \
-  --root /home/team/orbit/product-line-root \
-  --backend-url http://127.0.0.1:18081 \
-  --owner jasper
-```
-
-查看绑定：
-
-```bash
-axis project show --repo /path/to/repo
-axis project show --repo /path/to/repo --json
-```
-
-## WorkItem 生命周期
-
-`axis` CLI 目前只负责本地 CLI、Hermes MCP 配置和 repo 绑定；没有实现 `claim/start/complete` 这类生命周期 CLI 子命令。模型或 CLI 侧应通过已配置的 AxisNode MCP server 调用 AxisNode 工具，或直接调用 AxisNode backend API。
-
-MCP 工具：
-
-- `orbit_work_items_list`: 列出项目池。参数：`{ "projectId": "<projectUuid>", "pool": "requirement|bug|improvement" }`
-- `orbit_work_item_lifecycle`: 更新 WorkItem 生命周期。参数：`{ "workItemId": "<workItemId>", "action": "claim|assign|start|complete", "owner": "<owner>" }`
-
-推荐流程：
-
-1. 列池：分别调用 `orbit_work_items_list`，pool 为 `requirement`、`bug`、`improvement`。
-2. 认领：对选中的 WorkItem 调用 `orbit_work_item_lifecycle`，`action: "claim"`。
-3. 开发：开始需求/改进开发时调用 `orbit_work_item_lifecycle`，`action: "start"`。
-4. 修复：BUG 池同样先 `claim` 再 `start`，并在说明里保留复现与修复证据。
-5. 完成：验证通过后调用 `orbit_work_item_lifecycle`，`action: "complete"`。
-6. 回写：在完成备注或关联记录里写回 branch/commit、验证命令和结果；当前 `orbit_work_item_lifecycle` 工具负责状态流转，详细 notes/writeback 能力以 AxisNode 当前 MCP/API 暴露为准。
-
-对应 backend API：
-
-```bash
-curl -sS 'http://117.72.14.134:18081/api/projects/<projectUuid>/work-items?pool=bug'
-
-curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/claim' \
-  -H 'content-type: application/json' \
-  -d '{"owner":"codex-agent"}'
-
-curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/start' \
-  -H 'content-type: application/json' \
-  -d '{"owner":"codex-agent"}'
-
-curl -sS -X POST 'http://117.72.14.134:18081/api/work-items/<workItemId>/complete' \
-  -H 'content-type: application/json' \
-  -d '{"owner":"codex-agent"}'
-```
-
-## 本地自测
-
-```bash
-cd /home/jasperWei/orbit/axis-tools
-npm run test:mcp
-npm run test:sample
-```
-
-预期：
-- `test:mcp` 会在临时目录验证 Hermes JSON/YAML 配置写入和 `.axis/project.json (or legacy .orbit/project.json)` 绑定
-- `/home/jasperWei/orbit/axis-hub/.codex-status/latest.json` 被写入
-- `/home/jasperWei/orbit/axis-hub/.codex-status/events.jsonl` 被追加
-- current / tail / summary 都能读取 `--repo /home/jasperWei/orbit/axis-hub`
-
-## 接入 Codex hook
-
-### 方式一：一键安装脚本（推荐）
-
-```bash
-cd /home/jasperWei/orbit/axis-tools
-bash scripts/install-codex-hook.sh
-```
-
-卸载：
-
-```bash
-cd /home/jasperWei/orbit/axis-tools
-bash scripts/uninstall-codex-hook.sh
-```
-
-### 方式二：在你的 Codex 插件里声明 hooks.json
-把 `examples/hooks.json` 的内容放进你的插件目录，并让 `plugin.json` 指向：
+`axis-api-benchmark` no longer embeds a private project profile. For real benchmarks, create a local endpoint file and pass it to the bundled script.
 
 ```json
 {
-  "hooks": "./hooks.json"
+  "endpoints": [
+    {
+      "name": "public_list",
+      "group": "public_read",
+      "path": "/api/items",
+      "params": { "pageNum": 1, "pageSize": 10 },
+      "auth": "public",
+      "weight": 3
+    }
+  ]
 }
 ```
 
-### 方式二：把命令改成绝对路径，减少 PATH 依赖
-如果担心 Codex hook 环境拿不到 `axis`，把 `examples/hooks.json` 里的 command 改成：
+运行：
+
+Run:
 
 ```bash
-node /home/jasperWei/orbit/axis-tools/dist/cli.js codex-hook ingest
+python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
+  --base-url https://test.example.com \
+  --endpoint-file endpoints.json \
+  --steps 1,3,5,10,20 \
+  --duration 15 \
+  --no-auth-sample
 ```
+
+只有在用户明确批准测试数据污染时，才压测写接口。
+
+Use write endpoints only when the user explicitly approves test-data pollution.
+
+## 开发 / Development
+
+构建：
+
+Build:
+
+```bash
+npm run build
 ```
 
-这样不依赖 `npm link`。
+运行全量测试：
 
-## 当前 phase 推导规则
+Run the full test suite:
 
-- `SessionStart` -> `starting`
-- `UserPromptSubmit` -> `waiting_prompt`
-- `PermissionRequest` -> `waiting_permission`
-- `PreCompact` / `PostCompact` -> `compacting`
-- `Stop` -> `stopped`
-- `Read/Grep/Glob/Search` -> `reading`
-- `Write/Edit/Patch` -> `editing`
-- `pytest/test/jest/vitest/mocha` -> `testing`
-- `Bash/Shell/Command/npm/pnpm/yarn/node` -> `executing`
+```bash
+npm test
+```
 
-## 已知边界
+聚焦测试：
 
-- 这是 **粗粒度进度监控**，不是完整任务 telemetry。
-- 目前没有统一文件级变更追踪；如需精确文件列表，要再解析 `tool_input/tool_response` 或补 `git diff`。
-- `Stop` 只能表示一次停止/结束检查，不等于官方专门的任务完成事件。
+Focused tests:
 
-## 下一步建议
+```bash
+npm run test:mcp
+npm run test:skill-deposit
+npm run test:axis-skills
+```
 
-- 加 `session` 子目录做多会话聚合
-- 加 `watch` 命令持续刷状态
-- 加 `--repo auto` 智能回落
-- 加 Claude Code adapter
-- 让 AxisNode 直接读取 `.codex-status/latest.json`
+直接校验某个技能包：
+
+Validate a skill bundle directly:
+
+```bash
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-create-skill
+```
+
+提交技能变更前，至少运行：
+
+Before committing skill changes, run at least:
+
+```bash
+npm run test:axis-skills
+git diff --check
+```
+
+如果修改了更广泛的 CLI 行为，请运行 `npm test`。
+
+For broader CLI changes, run `npm test`.
+
+## 兼容说明 / Compatibility Notes
+
+- `orbit`、`orbit-tools`、`orbit-req`、`orbit-bug`、`orbit-sug` 和 `orbit-ide` 仍保留为旧工作流别名。<br>`orbit`, `orbit-tools`, `orbit-req`, `orbit-bug`, `orbit-sug`, and `orbit-ide` remain aliases for older local workflows.
+- `scripts/install-orbit-tools.sh` 仍保留为 Axis installer 的兼容 wrapper。<br>`scripts/install-orbit-tools.sh` remains as a compatibility wrapper around the Axis installer.
+- 旧 README 曾把大量 backend 和 worker 细节写在仓库首页。相关命令在 CLI 中仍按实现保留，但当前 README 聚焦公共工具仓和 packaged skill 工作流。<br>The old README described many backend and worker details inline. Those commands still exist in the CLI where implemented, but this README now focuses on the public toolkit and packaged skill workflow.
