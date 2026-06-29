@@ -26,3 +26,7 @@ node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
 - The update must install the full skill bundle, including `agents/`, `references/`, and `scripts/`.
 - The command should leave unrelated product repos untouched.
 - If `git pull --ff-only` fails because of local changes, stop and report the dirty checkout instead of overwriting it.
+
+## After Use Deposition
+
+After using this skill, check whether the update exposed reusable installer, validation, or refresh behavior that should be captured. If yes, update this skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.

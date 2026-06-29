@@ -9,6 +9,13 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
+const publicRepoSensitivePattern =
+  /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|codeup\.aliyun|aliyuncs\.com)\b/i;
+const afterUseDepositionSection = `
+## After Use Deposition
+
+After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+`;
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -44,6 +51,13 @@ function normalizeBody(body) {
   return `${text}\n`;
 }
 
+function withAfterUseDeposition(body) {
+  if (/^## After Use Deposition\b/m.test(body)) {
+    return body;
+  }
+  return `${body.trimEnd()}\n\n${afterUseDepositionSection.trim()}\n`;
+}
+
 function createSkillMarkdown({ name, description, body }) {
   return [
     '---',
@@ -51,9 +65,20 @@ function createSkillMarkdown({ name, description, body }) {
     `description: ${description}`,
     '---',
     '',
-    normalizeBody(body).trimEnd(),
+    normalizeBody(withAfterUseDeposition(body)).trimEnd(),
     '',
   ].join('\n');
+}
+
+function ensurePublicSafeSkill({ name, description, body }) {
+  if (hasFlag('--private-ok')) return;
+  const haystack = [name, description, body].join('\n');
+  if (publicRepoSensitivePattern.test(haystack)) {
+    throw new Error(
+      'Skill content appears project-specific or sensitive for the public axis-tools repo. ' +
+      'Use a generic public workflow or pass --private-ok for a private/local-only skill.',
+    );
+  }
 }
 
 function createOpenAiYaml({ name, displayName, shortDescription, defaultPrompt }) {
@@ -89,6 +114,7 @@ function scanConversation(text) {
     const reason = sentenceAround(text, match.index, match.index + match[0].length);
     const localContext = reason || text.slice(Math.max(0, match.index - 80), match.index + 120);
     if (!/(skill|技能|沉淀|复用|固化|流程|方法|模板)/i.test(localContext)) continue;
+    if (!hasFlag('--private-ok') && publicRepoSensitivePattern.test(`${name}\n${localContext}`)) continue;
     seen.add(name);
     candidates.push({
       name,
@@ -125,6 +151,7 @@ async function createLocalSkill() {
   const shortDescription = argValue('--short-description') || description.slice(0, 78);
   const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this Axis workflow.`;
   const validator = path.resolve(argValue('--validator') || defaultValidator());
+  ensurePublicSafeSkill({ name, description, body });
 
   if (existsSync(skillDir) && !hasFlag('--force')) {
     throw new Error(`Local skill already exists: ${skillDir}. Pass --force to overwrite.`);

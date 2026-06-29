@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -65,6 +65,20 @@ console.log(JSON.stringify({ ok: true, agent, installed }, null, 2));
 `);
 }
 
+async function readTreeFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const filePath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await readTreeFiles(filePath));
+    } else if (entry.isFile()) {
+      files.push(filePath);
+    }
+  }
+  return files;
+}
+
 await withTempDir(async (tmp) => {
   const repo = path.join(tmp, 'axis-tools');
   const home = path.join(tmp, 'home');
@@ -120,6 +134,24 @@ await withTempDir(async (tmp) => {
 });
 
 await withTempDir(async (tmp) => {
+  const conversation = path.join(tmp, 'conversation.txt');
+  await writeFile(
+    conversation,
+    '这个 PetMall 专用流程以后也许可以沉淀一个 axis-petmall-cache skill。',
+    'utf8',
+  );
+  const { stdout } = await execFileAsync(process.execPath, [
+    createScript,
+    '--scan-conversation',
+    conversation,
+    '--json',
+  ]);
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.candidates.length, 0);
+});
+
+await withTempDir(async (tmp) => {
   const repo = path.join(tmp, 'axis-tools');
   const sourceRoot = path.join(tmp, 'local-skills');
   await mkdir(repo, { recursive: true });
@@ -159,6 +191,8 @@ await withTempDir(async (tmp) => {
   assert.match(stdout, /Deposited axis-demo-created/);
   const localSkill = path.join(sourceRoot, 'axis-demo-created');
   assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('Use when testing Axis-created skills')), true);
+  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('After Use Deposition')), true);
+  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('push to the remote repository when permissions allow')), true);
   assert.equal(await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes('Axis Demo Created')), true);
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
@@ -169,6 +203,7 @@ await withTempDir(async (tmp) => {
 });
 
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
+assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), [
   'axis-ali-dashboard',
   'axis-api-benchmark',
@@ -180,10 +215,20 @@ const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-be
 assert.ok(apiBenchmark);
 assert.equal(apiBenchmark.files.includes('scripts/core_api_benchmark.py'), true);
 
-for (const skillName of ['axis-update', 'axis-create-skill', 'axis-api-benchmark']) {
+const publicSkillText = (await Promise.all(
+  (await readTreeFiles(path.join(repoRoot, 'skills'))).map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
+)).join('\n');
+assert.doesNotMatch(publicSkillText, /PetMall|petmall|PETMALL|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup/);
+
+for (const skillName of ['axis-ali-dashboard', 'axis-update', 'axis-create-skill', 'axis-api-benchmark']) {
   const skillDir = path.join(repoRoot, 'skills', skillName);
   const skillMd = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
   assert.match(skillMd, new RegExp(`name: ${skillName}`));
   assert.match(skillMd, /description: Use when/);
+  assert.match(skillMd, /## After Use Deposition/);
   assert.equal(await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes(`$${skillName}`)), true);
 }
+
+const createSkillMd = await readFile(path.join(repoRoot, 'skills', 'axis-create-skill', 'SKILL.md'), 'utf8');
+assert.match(createSkillMd, /scan.+whether/i);
+assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);

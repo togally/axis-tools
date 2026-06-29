@@ -18,7 +18,7 @@ except ImportError as error:  # pragma: no cover
 
 
 DEFAULT_MEMBER_CLIENT = "member-app"
-DEFAULT_ADMIN_CLIENT = "9f51b346ef87bee0998ba2b1c132084e"
+DEFAULT_ADMIN_CLIENT = "admin-web"
 
 
 @dataclass(frozen=True)
@@ -32,68 +32,38 @@ class Endpoint:
 
 
 ENDPOINTS = [
-    Endpoint("app_category", "public_app", "/app/mall/category", weight=3),
-    Endpoint("product_list", "public_app", "/mall/app/product/list", {"pageNum": 1, "pageSize": 10}, weight=5),
-    Endpoint("home_header", "public_app", "/app/mall/home/header", weight=2),
-    Endpoint("home_recommend", "public_app", "/app/mall/home/recommend/page", {"pageNum": 1, "pageSize": 10}, weight=3),
-    Endpoint("search_suggest", "public_app", "/app/mall/search/suggest", {"keyword": "cat"}, weight=2),
-    Endpoint("search_aggregate", "public_app", "/app/search/aggregate", {"keyword": "cat", "pageNum": 1, "pageSize": 10}, weight=2),
-    Endpoint("grooming_shop_page", "public_service", "/app/grooming/shops/page", {"pageNum": 1, "pageSize": 10}, weight=2),
-    Endpoint("health_shop_page", "public_service", "/app/health/shops/page", {"pageNum": 1, "pageSize": 10}, weight=2),
-    Endpoint("ugc_recommend", "public_ugc", "/app/ugc/feed/recommend", {"pageNum": 1, "pageSize": 10}, weight=3),
-    Endpoint("me", "member", "/app/me", auth="member", weight=3),
-    Endpoint("pet_list", "member", "/mall/app/pet/list", auth="member", weight=3),
-    Endpoint("pet_cards", "member", "/mall/app/pet/cards", auth="member", weight=3),
-    Endpoint("cart_list", "member", "/mall/app/cart/list", auth="member", weight=2),
-    Endpoint("address_list", "member", "/mall/app/address/list", auth="member", weight=2),
-    Endpoint("trade_list", "member_trade", "/mall/app/trade/list", {"pageNum": 1, "pageSize": 10}, auth="member", weight=2),
-    Endpoint("health_queue_my", "member_service", "/app/health/queue/my", auth="member", weight=1),
-    Endpoint("grooming_booking_page", "member_service", "/app/grooming/booking/page", {"pageNum": 1, "pageSize": 10}, auth="member", weight=1),
-    Endpoint("coupon_page", "member_service", "/app/marketing/coupon/page", {"pageNum": 1, "pageSize": 10}, auth="member", weight=1),
-    Endpoint("ugc_following", "member_ugc", "/app/ugc/feed/following", {"pageNum": 1, "pageSize": 10}, auth="member", weight=1),
-    Endpoint("circle_my", "member_ugc", "/app/pet-friend-circles/my", {"pageNum": 1, "pageSize": 10}, auth="member", weight=1),
-    Endpoint("admin_brand_list", "admin", "/mall/admin/brand/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=1),
-    Endpoint("admin_category_list", "admin", "/mall/admin/category/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=1),
-    Endpoint("admin_product_list", "admin", "/mall/admin/product/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=2),
-    Endpoint("admin_order_list", "admin_trade", "/mall/admin/order/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=2),
-    Endpoint("admin_trade_list", "admin_trade", "/mall/admin/trade/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=1),
-    Endpoint("admin_after_sale_list", "admin_trade", "/mall/admin/after-sale/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=1),
-    Endpoint("admin_merchant_list", "admin", "/mall/admin/merchant/list", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=1),
-    Endpoint("admin_member_list", "admin_member", "/admin-api/member/list", {"pageNum": 1, "pageSize": 10, "status": "0"}, auth="admin", weight=1),
+    Endpoint("health", "public", "/actuator/health", weight=3),
+    Endpoint("openapi", "public", "/v3/api-docs", weight=1),
+    Endpoint("public_list", "public_read", "/api/example/items", {"pageNum": 1, "pageSize": 10}, weight=3),
+    Endpoint("public_search", "public_read", "/api/example/search", {"keyword": "demo", "pageNum": 1, "pageSize": 10}, weight=2),
+    Endpoint("member_profile", "member_read", "/api/member/profile", auth="member", weight=2),
+    Endpoint("member_orders", "member_read", "/api/member/orders", {"pageNum": 1, "pageSize": 10}, auth="member", weight=2),
+    Endpoint("admin_items", "admin_read", "/api/admin/items", {"pageNum": 1, "pageSize": 10}, auth="admin", weight=1),
 ]
 
 TARGETED_ENDPOINTS = [
-    Endpoint("member_trade_list", "member_trade", "/mall/app/trade/list", {"pageNum": 1, "pageSize": 10}, auth="member"),
-    Endpoint("member_pet_cards", "member", "/mall/app/pet/cards", auth="member"),
-    Endpoint("member_me", "member", "/app/me", auth="member"),
-    Endpoint("admin_product_list", "admin", "/mall/admin/product/list", {"pageNum": 1, "pageSize": 10}, auth="admin"),
-    Endpoint("admin_after_sale_list", "admin_trade", "/mall/admin/after-sale/list", {"pageNum": 1, "pageSize": 10}, auth="admin"),
-    Endpoint("public_search_aggregate", "public_app", "/app/search/aggregate", {"keyword": "cat", "pageNum": 1, "pageSize": 10}),
-    Endpoint("public_product_list", "public_app", "/mall/app/product/list", {"pageNum": 1, "pageSize": 10}),
+    Endpoint("public_list", "public_read", "/api/example/items", {"pageNum": 1, "pageSize": 10}),
+    Endpoint("member_orders", "member_read", "/api/member/orders", {"pageNum": 1, "pageSize": 10}, auth="member"),
+    Endpoint("admin_items", "admin_read", "/api/admin/items", {"pageNum": 1, "pageSize": 10}, auth="admin"),
 ]
 
-PETMALL_APP_GROUPS = {
-    "public_app",
-    "public_service",
-    "public_ugc",
-    "member",
-    "member_trade",
-    "member_service",
-    "member_ugc",
+PUBLIC_GROUPS = {
+    "public",
+    "public_read",
 }
 
 THREAD_LOCAL = threading.local()
 
 
 def select_builtin_endpoints(scope: str) -> list[Endpoint]:
-    if scope == "app":
-        return [endpoint for endpoint in ENDPOINTS if endpoint.group in PETMALL_APP_GROUPS]
+    if scope == "public":
+        return [endpoint for endpoint in ENDPOINTS if endpoint.group in PUBLIC_GROUPS]
     return list(ENDPOINTS)
 
 
 def select_builtin_targeted_endpoints(scope: str) -> list[Endpoint]:
-    if scope == "app":
-        return [endpoint for endpoint in TARGETED_ENDPOINTS if endpoint.group in PETMALL_APP_GROUPS]
+    if scope == "public":
+        return [endpoint for endpoint in TARGETED_ENDPOINTS if endpoint.group in PUBLIC_GROUPS]
     return list(TARGETED_ENDPOINTS)
 
 
@@ -128,7 +98,7 @@ def session() -> requests.Session:
         adapter = requests.adapters.HTTPAdapter(pool_connections=160, pool_maxsize=160, max_retries=0)
         current.mount("http://", adapter)
         current.mount("https://", adapter)
-        current.headers.update({"User-Agent": "PetMall-Core-API-Benchmark/1.0", "Accept": "application/json"})
+        current.headers.update({"User-Agent": "Axis-Core-API-Benchmark/1.0", "Accept": "application/json"})
         THREAD_LOCAL.session = current
     return current
 
@@ -371,9 +341,9 @@ def run_auth_sample(client: BenchmarkClient, required_auths: set[str]) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Safely benchmark core read APIs.")
-    parser.add_argument("--base-url", default="http://8.155.11.203/prod-api")
-    parser.add_argument("--profile", default="petmall", choices=("petmall",), help="Built-in endpoint profile to use when --endpoint-file is omitted.")
-    parser.add_argument("--petmall-scope", default="all", choices=("all", "app"), help="Built-in PetMall endpoint scope: all core APIs or App-side APIs only.")
+    parser.add_argument("--base-url", default="http://127.0.0.1:8080")
+    parser.add_argument("--profile", default="sample", choices=("sample",), help="Built-in generic endpoint profile to use when --endpoint-file is omitted.")
+    parser.add_argument("--scope", default="all", choices=("all", "public"), help="Built-in endpoint scope: all sample APIs or public-only sample APIs.")
     parser.add_argument("--endpoint-file", default=None, help="JSON list of endpoints or object with endpoints list.")
     parser.add_argument("--member-token", default=None, help="Pre-issued bearer token for endpoints with auth=member.")
     parser.add_argument("--admin-token", default=None, help="Pre-issued bearer token for endpoints with auth=admin.")
@@ -396,8 +366,8 @@ def main() -> None:
     parser.add_argument("--targeted", action="store_true")
     args = parser.parse_args()
 
-    endpoints = load_custom_endpoints(args.endpoint_file) if args.endpoint_file else select_builtin_endpoints(args.petmall_scope)
-    targeted_endpoints = [] if args.endpoint_file else select_builtin_targeted_endpoints(args.petmall_scope)
+    endpoints = load_custom_endpoints(args.endpoint_file) if args.endpoint_file else select_builtin_endpoints(args.scope)
+    targeted_endpoints = [] if args.endpoint_file else select_builtin_targeted_endpoints(args.scope)
     required_auths = ({endpoint.auth for endpoint in endpoints} | ({endpoint.auth for endpoint in targeted_endpoints} if args.targeted else set())) - {"public"}
     client = BenchmarkClient(args)
     client.login(required_auths)
@@ -407,7 +377,7 @@ def main() -> None:
     print(f"TARGET {client.base_url}")
     print(f"PROFILE {'custom' if args.endpoint_file else args.profile}")
     if not args.endpoint_file:
-        print(f"PETMALL_SCOPE {args.petmall_scope}")
+        print(f"SAMPLE_SCOPE {args.scope}")
     print(f"SCOPE read-only core APIs: {len(endpoints)} endpoints")
     print("AUTH headers prepared")
 

@@ -23,8 +23,8 @@ Use this shape:
   "type": "logstore",
   "label": "按 BizId 打开 SLS",
   "settings": {
-    "project": "owh-test",
-    "logstore": "platform-admin",
+    "project": "example-sls-project",
+    "logstore": "example-logstore",
     "title": "按 BizId 打开 SLS",
     "type": "logstore",
     "blank": false,
@@ -42,8 +42,8 @@ For full technical trace drilldown, use the trace value by itself so SLS can sea
   "type": "logstore",
   "label": "按 TraceId 打开 SLS",
   "settings": {
-    "project": "owh-test",
-    "logstore": "platform-admin",
+    "project": "example-sls-project",
+    "logstore": "example-logstore",
     "title": "按 TraceId 打开 SLS",
     "type": "logstore",
     "blank": false,

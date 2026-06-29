@@ -5,14 +5,13 @@ description: Use when the user asks to load test or benchmark test-environment A
 
 # API Benchmark
 
-Use this skill to safely benchmark test-environment APIs and translate latency/QPS results into a business concurrency estimate. It includes a built-in PetMall profile, but the workflow applies to other projects when endpoints and tokens are supplied.
+Use this skill to safely benchmark test-environment APIs and translate latency/QPS results into a business concurrency estimate. It is public-repo safe: project-specific endpoint sets should be supplied as local JSON files instead of being embedded in the skill.
 
 ## When to Use
 
 - The user asks to `压测`, `压一下测试环境`, check API latency, QPS, concurrency, or how many users an API environment can support.
-- The user asks to benchmark only App-side PetMall APIs, for example `只压app端接口`.
+- The user asks to benchmark only client/App-side APIs, for example `只压app端接口`.
 - The target has a discoverable API surface from OpenAPI, frontend service files, controller mappings, route tables, or an explicit endpoint list.
-- The target may be PetMall/PetMallPlatform, but it does not have to be.
 - The user asks for a business-facing interpretation such as "够多少人用".
 
 Do not use for destructive load tests unless the user explicitly approves writes and test-data pollution.
@@ -35,8 +34,8 @@ Do not use for destructive load tests unless the user explicitly approves writes
    - backend controller or route mappings when docs and clients disagree.
    - a user-provided endpoint JSON file when the project has no docs.
 3. Classify endpoints into public, user/member, admin/operator, merchant/tenant, and write-risk groups. Run only safe read groups by default.
-   - For PetMall App-only capacity checks, use the built-in `--petmall-scope app` instead of hand-writing a temporary endpoint file. It keeps public/member App endpoints and excludes admin/backend endpoints and admin login.
-4. Obtain tokens from documented test accounts, existing seed scripts, or user-provided bearer tokens. For the built-in PetMall profile, typical test values are in `PetMallPlatform/scripts/seed_ugc_pet_demo_via_api.py` and `doc/mvp/deliverables/account-role-list.md`; verify live login before using them.
+   - For client/App-only capacity checks, build a local endpoint JSON file from frontend service files and exclude admin/backend endpoints and login unless the user asks for them.
+4. Obtain tokens from documented test accounts, existing seed scripts, or user-provided bearer tokens. Verify live login before using them.
 5. Run smoke checks for each candidate endpoint. Drop endpoints that are not deployed, return permissions unrelated to the intended actor, or require unavailable merchant credentials.
 6. Run a per-endpoint baseline with small samples and low concurrency. Capture p50/p90/p95/p99/max and business error counts.
 7. Run conservative mixed-read steps, for example 5, 10, 20, 40, 60 concurrency, fixed 15-30 second windows, and stop at the thresholds above.
@@ -54,19 +53,19 @@ Prefer the bundled script when available:
 
 ```bash
 python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
-  --base-url http://8.155.11.203/prod-api \
-  --profile petmall \
+  --base-url https://test.example.com/api \
+  --endpoint-file endpoints.json \
   --max-concurrency 60 \
   --duration 25
 ```
 
-For App-side PetMall APIs only:
+For public-only smoke capacity checks with the generic sample profile:
 
 ```bash
 python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
-  --base-url http://8.155.11.203/prod-api \
-  --profile petmall \
-  --petmall-scope app \
+  --base-url https://test.example.com/api \
+  --profile sample \
+  --scope public \
   --steps 1,3,5,10,20,40 \
   --duration 12 \
   --no-auth-sample
@@ -74,11 +73,11 @@ python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
 
 Useful flags:
 
-- `--petmall-scope app`: benchmark only PetMall App-side read APIs and skip admin endpoints/login.
+- `--scope public`: benchmark only generic public sample endpoints when no endpoint file is supplied.
 - `--no-auth-sample`: skip isolated login sampling.
 - `--targeted`: run targeted slow-endpoint probes after the mixed test.
-- `--endpoint-file endpoints.json`: run a custom endpoint set instead of the built-in PetMall profile.
-- `--member-token`, `--admin-token`, `--no-login`: use pre-issued tokens or public-only endpoints for non-PetMall projects.
+- `--endpoint-file endpoints.json`: run a custom endpoint set instead of the generic sample profile.
+- `--member-token`, `--admin-token`, `--no-login`: use pre-issued tokens or public-only endpoints.
 - `--member-phone`, `--member-password`, `--admin-phone`, `--admin-password`: override test credentials.
 
 If the script is missing or incompatible, write a temporary runner with the same safeguards instead of using a generic HTTP benchmark that ignores JSON business codes.
@@ -125,3 +124,7 @@ Also explain that registered users or DAU are much larger than simultaneous acti
 - Running auth samples before mixed traffic and then reusing stale tokens.
 - Reporting "并发数等于人数".
 - Polluting test data with submit/order/payment/audit/write endpoints during a quick capacity check.
+
+## After Use Deposition
+
+After using this skill, check whether the benchmark produced reusable endpoint discovery rules, safety thresholds, output formats, or script fixes. If yes, update this skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.

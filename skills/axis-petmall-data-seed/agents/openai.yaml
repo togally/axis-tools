@@ -1,7 +1,0 @@
-interface:
-  display_name: "PetMall Data Seed"
-  short_description: "PetMall benchmark data and ES sync workflow"
-  default_prompt: "Use $axis-petmall-data-seed for PetMall data seeding and ES rebuild work."
-
-policy:
-  allow_implicit_invocation: true

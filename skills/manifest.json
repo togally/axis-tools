@@ -4,7 +4,7 @@
   "skills": [
     {
       "name": "axis-ali-dashboard",
-      "description": "Generate, repair, and validate Alibaba Cloud CloudMonitor/SLS dashboard JSON for business-facing observability dashboards. Use when a user asks to create or modify dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.",
+      "description": "Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.",
       "path": "skills/axis-ali-dashboard",
       "files": [
         "SKILL.md",
@@ -26,26 +26,8 @@
     },
     {
       "name": "axis-create-skill",
-      "description": "Use when the user asks to scan the current conversation for reusable skill opportunities, create a new Axis/Codex skill, install it locally, or push it to the axis-tools skill repository.",
+      "description": "Use when the user asks to scan the current conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created.",
       "path": "skills/axis-create-skill",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
-      ]
-    },
-    {
-      "name": "axis-petmall-cache",
-      "description": "Use when working in PetMallPlatform on backend cache design, Spring Cache/Redis query caching, cache eviction on writes, cache key/TTL rules, or explaining when cached data is created.",
-      "path": "skills/axis-petmall-cache",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
-      ]
-    },
-    {
-      "name": "axis-petmall-data-seed",
-      "description": "Use when preparing PetMallPlatform test or benchmark data, seeding large users/orders/products/UGC/pets/merchants, rebuilding App Elasticsearch indices, or diagnosing MySQL and ES count mismatches.",
-      "path": "skills/axis-petmall-data-seed",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"

@@ -1,6 +1,6 @@
 ---
 name: axis-ali-dashboard
-description: Generate, repair, and validate Alibaba Cloud CloudMonitor/SLS dashboard JSON for business-facing observability dashboards. Use when a user asks to create or modify dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.
+description: Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.
 ---
 
 # Axis Dashboard JSON
@@ -52,3 +52,7 @@ For business-flow dashboards, also add or run project-local tests that assert:
 - detail table columns keep identifiers as strings;
 - SLS drilldown conditions carry `biz_id` and `trace_id` correctly.
 - multi-select business-domain filters have a grouped breakdown panel so totals remain explainable when `All` or multiple values are selected.
+
+## After Use Deposition
+
+After using this skill, check whether the session produced reusable dashboard JSON rules, validation checks, Aliyun console quirks, or script fixes. If yes, update this skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
