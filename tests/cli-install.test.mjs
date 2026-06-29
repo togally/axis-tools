@@ -8,6 +8,8 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+const manifest = JSON.parse(await readFile(new URL('../skills/manifest.json', import.meta.url), 'utf8'));
+const packagedSkillNames = manifest.skills.map((skill) => skill.name).sort();
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), 'axis-cli-install-'));
@@ -58,7 +60,8 @@ await withTempDir(async (home) => {
   const result = JSON.parse(stdout);
   assert.equal(result.ok, true);
   assert.equal(result.agent, 'codex');
-  assert.equal(result.installed.length, 4);
+  assert.equal(result.installed.length, packagedSkillNames.length);
+  assert.deepEqual(result.installed.map((item) => item.skill).sort(), packagedSkillNames);
   assert.equal(result.installed.every((item) => item.target.includes(path.join(home, '.codex', 'skills'))), true);
 
   const dashboard = path.join(home, '.codex', 'skills', 'axis-ali-dashboard');
@@ -77,7 +80,7 @@ await withTempDir(async (home) => {
   const result = JSON.parse(stdout);
   assert.equal(result.ok, true);
   assert.equal(result.agent, 'all');
-  assert.equal(result.installed.length, 8);
+  assert.equal(result.installed.length, packagedSkillNames.length * 2);
   assert.equal(result.installed.some((item) => item.target.includes(path.join(home, '.codex', 'skills'))), true);
   assert.equal(result.installed.some((item) => item.target.includes(path.join(home, '.claude', 'skills'))), true);
 });

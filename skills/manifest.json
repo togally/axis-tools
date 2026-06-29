@@ -43,6 +43,15 @@
       ]
     },
     {
+      "name": "axis-test-driven-development",
+      "description": "Use when implementing any feature, bugfix, refactor, or behavior change before writing production code.",
+      "path": "skills/axis-test-driven-development",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-update",
       "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.",
       "path": "skills/axis-update",

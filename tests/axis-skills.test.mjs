@@ -203,13 +203,16 @@ await withTempDir(async (tmp) => {
 });
 
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
-assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
-assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), [
+const packagedSkillNames = [
   'axis-ali-dashboard',
   'axis-api-benchmark',
   'axis-create-skill',
+  'axis-tech-design-doc',
+  'axis-test-driven-development',
   'axis-update',
-]);
+];
+assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
+assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
 
 const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-benchmark');
 assert.ok(apiBenchmark);
@@ -220,7 +223,7 @@ const publicSkillText = (await Promise.all(
 )).join('\n');
 assert.doesNotMatch(publicSkillText, /PetMall|petmall|PETMALL|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup/);
 
-for (const skillName of ['axis-ali-dashboard', 'axis-update', 'axis-create-skill', 'axis-api-benchmark']) {
+for (const skillName of packagedSkillNames) {
   const skillDir = path.join(repoRoot, 'skills', skillName);
   const skillMd = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
   assert.match(skillMd, new RegExp(`name: ${skillName}`));

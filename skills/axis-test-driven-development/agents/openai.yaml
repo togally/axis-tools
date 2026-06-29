@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-test-driven-development"
+  short_description: "Run RED, GREEN, REFACTOR before production code changes."
+  default_prompt: "Use $axis-test-driven-development to run this Axis workflow."
+
+policy:
+  allow_implicit_invocation: true
