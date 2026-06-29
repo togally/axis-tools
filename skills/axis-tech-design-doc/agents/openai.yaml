@@ -1,7 +1,7 @@
 interface:
   display_name: "Technical Design Doc"
   short_description: "Write final technical design docs"
-  default_prompt: "Use -tech-design-doc to write or refine a final technical design document."
+  default_prompt: "Use $axis-tech-design-doc to write or refine a final technical design document."
 
 policy:
   allow_implicit_invocation: true

@@ -27,6 +27,8 @@ node scripts/axis-create-skill.mjs \
 
 The helper injects an `After Use Deposition` section into generated skills so each skill reminds future agents to update, validate, and push its own reusable improvements when permissions allow.
 
+When passing prompts that contain a `$skill-name`, wrap that argument in single quotes so the shell does not expand `$skill` as an environment variable. For example, use `--default-prompt 'Use $axis-example-skill to ...'`, or omit `--default-prompt` and let the helper generate the default.
+
 6. Keep the skill bundle complete. At minimum include `SKILL.md` and `agents/openai.yaml`; include `references/`, `scripts/`, or `assets/` when the workflow needs them.
 7. Install or refresh local packaged skills after pushing when the user expects immediate local use:
 
