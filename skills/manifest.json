@@ -79,6 +79,15 @@
       ]
     },
     {
+      "name": "axis-testing",
+      "description": "Use when testing backend actions that trigger real external side effects, device or service state changes, broker messages, asynchronous progress, or cleanup-sensitive operations.",
+      "path": "skills/axis-testing",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-update",
       "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.",
       "path": "skills/axis-update",

@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Testing"
+  short_description: "Test real side-effecting actions with state and cleanup proof."
+  default_prompt: "Use $axis-testing to test this real side-effecting action."
+
+policy:
+  allow_implicit_invocation: true

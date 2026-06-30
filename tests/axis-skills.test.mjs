@@ -212,6 +212,7 @@ const packagedSkillNames = [
   'axis-db-design-doc',
   'axis-tech-design-doc',
   'axis-test-driven-development',
+  'axis-testing',
   'axis-update',
 ];
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
@@ -231,6 +232,17 @@ assert.match(architectureOptimizationBody, /contract tests/i);
 assert.match(architectureOptimizationBody, /migration/i);
 assert.doesNotMatch(architectureOptimizationBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 assert.equal(apiBenchmark.files.includes('scripts/core_api_benchmark.py'), true);
+
+const axisTesting = manifest.skills.find((skill) => skill.name === 'axis-testing');
+assert.ok(axisTesting);
+assert.equal(axisTesting.files.includes('SKILL.md'), true);
+assert.equal(axisTesting.files.includes('agents/openai.yaml'), true);
+const axisTestingBody = await readFile(path.join(repoRoot, 'skills', 'axis-testing', 'SKILL.md'), 'utf8');
+assert.match(axisTestingBody, /real side effects/i);
+assert.match(axisTestingBody, /precondition/i);
+assert.match(axisTestingBody, /status boundary/i);
+assert.match(axisTestingBody, /progress/i);
+assert.match(axisTestingBody, /cleanup/i);
 
 const publicSkillText = (await Promise.all(
   (await readTreeFiles(path.join(repoRoot, 'skills'))).map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
