@@ -208,6 +208,7 @@ const packagedSkillNames = [
   'axis-api-benchmark',
   'axis-api-performance-tuning',
   'axis-create-skill',
+  'axis-db-design-doc',
   'axis-tech-design-doc',
   'axis-test-driven-development',
   'axis-update',
