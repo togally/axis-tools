@@ -34,6 +34,15 @@
       ]
     },
     {
+      "name": "axis-arch-optimize",
+      "description": "Use when implementation work starts as method-level fixes but should become a shared architecture capability, middleware component, adapter, annotation, wrapper, or cross-cutting module.",
+      "path": "skills/axis-arch-optimize",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-create-skill",
       "description": "Use when the user asks to scan the current conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created.",
       "path": "skills/axis-create-skill",

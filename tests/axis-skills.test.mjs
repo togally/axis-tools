@@ -207,6 +207,7 @@ const packagedSkillNames = [
   'axis-ali-dashboard',
   'axis-api-benchmark',
   'axis-api-performance-tuning',
+  'axis-arch-optimize',
   'axis-create-skill',
   'axis-db-design-doc',
   'axis-tech-design-doc',
@@ -218,6 +219,17 @@ assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkil
 
 const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-benchmark');
 assert.ok(apiBenchmark);
+
+const architectureOptimization = manifest.skills.find((skill) => skill.name === 'axis-arch-optimize');
+assert.ok(architectureOptimization);
+assert.equal(architectureOptimization.files.includes('SKILL.md'), true);
+assert.equal(architectureOptimization.files.includes('agents/openai.yaml'), true);
+const architectureOptimizationBody = await readFile(path.join(repoRoot, 'skills', 'axis-arch-optimize', 'SKILL.md'), 'utf8');
+assert.match(architectureOptimizationBody, /architecture boundary/i);
+assert.match(architectureOptimizationBody, /cross-cutting/i);
+assert.match(architectureOptimizationBody, /contract tests/i);
+assert.match(architectureOptimizationBody, /migration/i);
+assert.doesNotMatch(architectureOptimizationBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 assert.equal(apiBenchmark.files.includes('scripts/core_api_benchmark.py'), true);
 
 const publicSkillText = (await Promise.all(

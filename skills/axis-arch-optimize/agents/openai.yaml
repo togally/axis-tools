@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Arch Optimize"
+  short_description: "Lift repeated method fixes into shared architecture"
+  default_prompt: "Use $axis-arch-optimize to guide this architecture-level code optimization."
+
+policy:
+  allow_implicit_invocation: true
