@@ -55,5 +55,6 @@ After using this skill, check whether this scan found a reusable improvement to 
 - Skill frontmatter must include `name` and a `description` beginning with `Use when`.
 - The generated `agents/openai.yaml` should include a `$skill-name` default prompt.
 - Validate with `quick_validate.py` unless running a fake-home unit test.
+- After deposit, run the repo's available test suite when present (for example `npm test`) and update any packaged-skill manifest or explicit skill-list tests that must include the new skill.
 - Commit and push only the skill bundle, manifest, docs, and tests related to the skill change.
 - Public `axis-tools` skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
