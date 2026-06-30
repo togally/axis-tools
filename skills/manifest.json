@@ -43,6 +43,15 @@
       ]
     },
     {
+      "name": "axis-db-design-doc",
+      "description": "Use when the user asks for a database design document, data dictionary, schema design, ER/table structure documentation, or a Word DBDD using a formal or industry-standard template.",
+      "path": "skills/axis-db-design-doc",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-tech-design-doc",
       "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention, especially when business and technical design must be separated from current implementation notes.",
       "path": "skills/axis-tech-design-doc",

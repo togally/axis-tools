@@ -1,0 +1,7 @@
+interface:
+  display_name: "Database Design Doc"
+  short_description: "Generate standard database design Word docs"
+  default_prompt: "Use $axis-db-design-doc to create a database design document from schema/code evidence."
+
+policy:
+  allow_implicit_invocation: true
