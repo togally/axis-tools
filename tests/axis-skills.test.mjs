@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import http from 'node:http';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -220,6 +221,7 @@ assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkil
 
 const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-benchmark');
 assert.ok(apiBenchmark);
+const apiBenchmarkScript = path.join(repoRoot, 'skills', 'axis-api-benchmark', 'scripts', 'core_api_benchmark.py');
 const apiPerformanceTuning = manifest.skills.find((skill) => skill.name === 'axis-api-performance-tuning');
 assert.ok(apiPerformanceTuning);
 const apiPerformanceTuningBody = await readFile(
@@ -243,6 +245,44 @@ assert.match(architectureOptimizationBody, /contract tests/i);
 assert.match(architectureOptimizationBody, /migration/i);
 assert.doesNotMatch(architectureOptimizationBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 assert.equal(apiBenchmark.files.includes('scripts/core_api_benchmark.py'), true);
+
+await withTempDir(async (tmp) => {
+  let authCalls = 0;
+  const server = http.createServer((request, response) => {
+    if (request.url === '/auth/login' || request.url === '/app/auth/login') {
+      authCalls += 1;
+      response.writeHead(500, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ code: 500, msg: 'auth should not be called' }));
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ code: 200, data: { ok: true } }));
+  });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const address = server.address();
+    assert.equal(typeof address, 'object');
+    const endpointFile = path.join(tmp, 'public-endpoints.json');
+    await writeFile(endpointFile, JSON.stringify({ endpoints: [{ name: 'health', path: '/health', auth: 'public' }] }), 'utf8');
+    const { stdout } = await execFileAsync('python3', [
+      apiBenchmarkScript,
+      '--base-url',
+      `http://127.0.0.1:${address.port}`,
+      '--endpoint-file',
+      endpointFile,
+      '--steps',
+      '1',
+      '--duration',
+      '0.2',
+      '--no-baseline',
+      '--no-auth-sample',
+    ]);
+    assert.match(stdout, /PROFILE custom/);
+    assert.equal(authCalls, 0);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
 
 const axisTesting = manifest.skills.find((skill) => skill.name === 'axis-testing');
 assert.ok(axisTesting);

@@ -180,7 +180,8 @@ class BenchmarkClient:
         return response.json()
 
     def login(self, required_auths: set[str] | None = None) -> None:
-        required_auths = required_auths or {"member", "admin"}
+        if required_auths is None:
+            required_auths = {"member", "admin"}
         self.headers = {
             "public": {"clientid": self.args.member_client_id},
         }
