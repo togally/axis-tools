@@ -220,6 +220,17 @@ assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkil
 
 const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-benchmark');
 assert.ok(apiBenchmark);
+const apiPerformanceTuning = manifest.skills.find((skill) => skill.name === 'axis-api-performance-tuning');
+assert.ok(apiPerformanceTuning);
+const apiPerformanceTuningBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-api-performance-tuning', 'SKILL.md'),
+  'utf8',
+);
+assert.match(apiPerformanceTuningBody, /Plan Confirmation Gate/i);
+assert.match(apiPerformanceTuningBody, /Do not write RED tests, edit code, change schema, or run implementation benchmarks/i);
+assert.match(apiPerformanceTuningBody, /only after implementation and verification/i);
+assert.match(apiPerformanceTuningBody, /update the relevant skill bundle/i);
+assert.doesNotMatch(apiPerformanceTuningBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 
 const architectureOptimization = manifest.skills.find((skill) => skill.name === 'axis-arch-optimize');
 assert.ok(architectureOptimization);
