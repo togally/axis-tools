@@ -25,6 +25,15 @@
       ]
     },
     {
+      "name": "axis-api-performance-tuning",
+      "description": "Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness.",
+      "path": "skills/axis-api-performance-tuning",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-create-skill",
       "description": "Use when the user asks to scan the current conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created.",
       "path": "skills/axis-create-skill",

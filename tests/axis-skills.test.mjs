@@ -206,6 +206,7 @@ const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manife
 const packagedSkillNames = [
   'axis-ali-dashboard',
   'axis-api-benchmark',
+  'axis-api-performance-tuning',
   'axis-create-skill',
   'axis-tech-design-doc',
   'axis-test-driven-development',
