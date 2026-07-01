@@ -1,0 +1,7 @@
+interface:
+  display_name: "Benchmark"
+  short_description: "Benchmark APIs and modules safely / 安全压测 API 与模块"
+  default_prompt: "Use $axis-benchmark to safely benchmark APIs or modules, clarify scope, and explain capacity."
+
+policy:
+  allow_implicit_invocation: true

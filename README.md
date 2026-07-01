@@ -24,7 +24,7 @@ axis-tools/
 │   └── install-axis-tools.sh
 ├── skills/
 │   ├── axis-ali-dashboard/
-│   ├── axis-api-benchmark/
+│   ├── axis-benchmark/
 │   ├── axis-create-skill/
 │   └── axis-update/
 ├── src/cli.ts
@@ -38,7 +38,7 @@ axis-tools/
 | 技能 / Skill | 用途 / Purpose |
 | --- | --- |
 | `axis-ali-dashboard` | 生成、修复并校验阿里云 CloudMonitor/SLS 大屏 JSON，包含 SLS 下钻和业务流大屏模式。<br>Create, repair, and validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, including SLS drilldowns and business-flow dashboard patterns. |
-| `axis-api-benchmark` | 对测试环境 API 做保守压测，比较接口延迟，并把 QPS/并发转换成业务容量口径。项目接口应通过本地 endpoint JSON 提供。<br>Run conservative API benchmarks, compare endpoint latency, and translate QPS/concurrency into business-facing capacity estimates. Project endpoints should be supplied through a local endpoint JSON file. |
+| `axis-benchmark` | 对 API、本地模块或依赖链路做保守压测，比较延迟/吞吐，并把 QPS/并发转换成明确口径的容量说明。项目接口或模块 runner 应通过本地文件提供。<br>Run conservative API, local-module, or dependency-path benchmarks, compare latency/throughput, and translate QPS/concurrency into clearly scoped capacity estimates. Project endpoints or module runners should be supplied through local files. |
 | `axis-create-skill` | 扫描对话中是否存在可复用、适合公开仓沉淀的技能机会，并先判断是否应该创建。<br>Scan conversations for reusable, public-safe skill opportunities and decide whether a skill belongs in this public repository before creating one. |
 | `axis-update` | 从本仓库刷新并校验本机安装的 Axis packaged skills。<br>Refresh and validate locally installed Axis packaged skills from this repository. |
 
@@ -175,11 +175,11 @@ node scripts/axis-skill-deposit.mjs --skill axis-example-skill --commit --push -
 
 The deposit script copies the complete bundle, validates it with Codex's `quick_validate.py` when available, and updates `skills/manifest.json`.
 
-## API 压测 endpoint 文件 / API Benchmark Endpoint Files
+## 压测口径 / Benchmark Scope
 
-`axis-api-benchmark` 不内置私有项目 profile。真实压测时，请创建本地 endpoint 文件并传给脚本。
+`axis-benchmark` 不内置私有项目 profile。真实 API 压测时，请创建本地 endpoint 文件并传给脚本。
 
-`axis-api-benchmark` does not embed a private project profile. For real benchmarks, create a local endpoint file and pass it to the bundled script.
+`axis-benchmark` does not embed a private project profile. For real API benchmarks, create a local endpoint file and pass it to the bundled script.
 
 ```json
 {
@@ -201,7 +201,7 @@ The deposit script copies the complete bundle, validates it with Codex's `quick_
 Run:
 
 ```bash
-python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
+python3 ~/.codex/skills/axis-benchmark/scripts/core_api_benchmark.py \
   --base-url https://test.example.com \
   --endpoint-file endpoints.json \
   --steps 1,3,5,10,20 \
@@ -212,6 +212,10 @@ python3 ~/.codex/skills/axis-api-benchmark/scripts/core_api_benchmark.py \
 只有在用户明确批准测试数据污染时，才压测写接口。
 
 Use write endpoints only when the user explicitly approves test-data pollution.
+
+模块压测不走 HTTP API 时，应使用项目本地 runner，并在报告中明确执行链路，例如 `local module -> remote dependency`、`deployed module -> cache` 或 `command -> database`。模块压测结果不能直接当作完整 API 或服务器容量，除非 runner 就是在目标服务器上执行，或另有端到端 API 压测佐证。
+
+For module benchmarks that do not use HTTP APIs, use a project-local runner and make the execution path explicit, such as `local module -> remote dependency`, `deployed module -> cache`, or `command -> database`. A module result is not full API or server capacity unless the runner executes on the target server or is backed by an end-to-end API benchmark.
 
 ## 开发 / Development
 

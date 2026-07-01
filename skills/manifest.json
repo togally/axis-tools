@@ -15,16 +15,6 @@
       ]
     },
     {
-      "name": "axis-api-benchmark",
-      "description": "Use when the user asks to load test or benchmark APIs, estimate concurrency or active users, compare latency, or identify slow interfaces. / 用于压测或基准测试 API、估算并发或活跃用户、对比延迟并识别慢接口。",
-      "path": "skills/axis-api-benchmark",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "scripts/core_api_benchmark.py"
-      ]
-    },
-    {
       "name": "axis-api-performance-tuning",
       "description": "Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness. / 用于压测发现读接口慢且需要在保证正确性的前提下优化响应性能。",
       "path": "skills/axis-api-performance-tuning",
@@ -40,6 +30,16 @@
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-benchmark",
+      "description": "Use when the user asks to benchmark APIs, local modules, service dependencies, throughput, latency, concurrency, or capacity. / 用于对 API、本地模块、服务依赖链路、吞吐、延迟、并发或容量进行基准测试。",
+      "path": "skills/axis-benchmark",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "scripts/core_api_benchmark.py"
       ]
     },
     {

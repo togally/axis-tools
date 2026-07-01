@@ -233,9 +233,9 @@ await withTempDir(async (tmp) => {
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const packagedSkillNames = [
   'axis-ali-dashboard',
-  'axis-api-benchmark',
   'axis-api-performance-tuning',
   'axis-arch-optimize',
+  'axis-benchmark',
   'axis-bugfix',
   'axis-create-skill',
   'axis-db-design-doc',
@@ -248,9 +248,17 @@ const packagedSkillNames = [
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
 
-const apiBenchmark = manifest.skills.find((skill) => skill.name === 'axis-api-benchmark');
-assert.ok(apiBenchmark);
-const apiBenchmarkScript = path.join(repoRoot, 'skills', 'axis-api-benchmark', 'scripts', 'core_api_benchmark.py');
+const benchmarkSkill = manifest.skills.find((skill) => skill.name === 'axis-benchmark');
+assert.ok(benchmarkSkill);
+const benchmarkScript = path.join(repoRoot, 'skills', 'axis-benchmark', 'scripts', 'core_api_benchmark.py');
+const benchmarkBody = await readFile(path.join(repoRoot, 'skills', 'axis-benchmark', 'SKILL.md'), 'utf8');
+assert.match(benchmarkBody, /Three-Step Work Contract/);
+assert.match(benchmarkBody, /Scope Clarification Gate/);
+assert.match(benchmarkBody, /Module Benchmark Workflow/);
+assert.match(benchmarkBody, /local module -> remote dependency/i);
+assert.match(benchmarkBody, /Process Failure Guard/);
+assert.match(benchmarkBody, /Deposition Gate/i);
+assert.match(benchmarkBody, /Do not treat "the benchmark finished" as complete/i);
 const apiPerformanceTuning = manifest.skills.find((skill) => skill.name === 'axis-api-performance-tuning');
 assert.ok(apiPerformanceTuning);
 const apiPerformanceTuningBody = await readFile(
@@ -287,7 +295,7 @@ assert.match(architectureOptimizationBody, /cross-cutting/i);
 assert.match(architectureOptimizationBody, /contract tests/i);
 assert.match(architectureOptimizationBody, /migration/i);
 assert.doesNotMatch(architectureOptimizationBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
-assert.equal(apiBenchmark.files.includes('scripts/core_api_benchmark.py'), true);
+assert.equal(benchmarkSkill.files.includes('scripts/core_api_benchmark.py'), true);
 
 await withTempDir(async (tmp) => {
   let authCalls = 0;
@@ -308,7 +316,7 @@ await withTempDir(async (tmp) => {
     const endpointFile = path.join(tmp, 'public-endpoints.json');
     await writeFile(endpointFile, JSON.stringify({ endpoints: [{ name: 'health', path: '/health', auth: 'public' }] }), 'utf8');
     const { stdout } = await execFileAsync('python3', [
-      apiBenchmarkScript,
+      benchmarkScript,
       '--base-url',
       `http://127.0.0.1:${address.port}`,
       '--endpoint-file',
@@ -396,6 +404,7 @@ assert.match(developmentDocMd, /Light Adversarial Review/);
 
 for (const skillName of [
   'axis-api-performance-tuning',
+  'axis-benchmark',
   'axis-arch-optimize',
   'axis-bugfix',
   'axis-create-skill',
