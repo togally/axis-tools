@@ -1,6 +1,6 @@
 ---
 name: axis-api-performance-tuning
-description: Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness.
+description: Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness. / 用于压测发现读接口慢且需要在保证正确性的前提下优化响应性能。
 ---
 
 # API Performance Tuning
@@ -18,6 +18,17 @@ Do not use this as a replacement for the benchmark skill. Use the benchmark skil
 ## Core Rule
 
 Treat every performance optimization as a behavior change. First prove the slow path and the intended safety property, then make the smallest change that improves latency without stale, leaked, or inconsistent data.
+
+## Three-Step Work Contract
+
+1. Co-create the optimization target with the user.
+   Clarify which benchmark, endpoint group, data volume, deployment environment, correctness boundary, and acceptance metric matter. Preserve the user's priority, then challenge only the risky parts: stale data, unsafe caching, missing invalidation, bad endpoint-to-code mapping, or benchmark results from code that is not deployed.
+2. Execute the optimization result.
+   After explicit confirmation, write RED checks where code behavior changes, implement the narrow optimization, and keep the change inside the agreed scope.
+3. Verify the result.
+   Run focused GREEN tests, adjacent regressions, whitespace checks, and eligible same-environment benchmarks. Report the measured result and clearly label anything not deployed or not benchmarked.
+
+Keep light adversarial review under 30% of the interaction. Use more in the proposal when safety is unclear, and less once the user has confirmed execution and the code path is proven.
 
 Performance tuning has two phases:
 

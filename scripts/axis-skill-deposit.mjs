@@ -35,6 +35,16 @@ function ensureSkillName(name) {
   return name;
 }
 
+function ensureBilingualDescription(description) {
+  if (!/^Use when\b/.test(description)) {
+    throw new Error('Skill description must start with "Use when".');
+  }
+  if (!/[A-Za-z]/.test(description) || !/[\u3400-\u9FFF]/.test(description)) {
+    throw new Error('Skill description must be bilingual English and Chinese.');
+  }
+  return description;
+}
+
 async function parseSkillMetadata(skillDir) {
   const skillMd = path.join(skillDir, 'SKILL.md');
   const text = await readFile(skillMd, 'utf8');
@@ -56,7 +66,7 @@ async function parseSkillMetadata(skillDir) {
   if (!name) throw new Error(`${skillMd} frontmatter must include name`);
   if (!description) throw new Error(`${skillMd} frontmatter must include description`);
   ensureSkillName(name);
-  return { name, description };
+  return { name, description: ensureBilingualDescription(description) };
 }
 
 async function collectFiles(root) {

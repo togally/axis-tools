@@ -11,10 +11,28 @@ const execFileAsync = promisify(execFile);
 const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
 const publicRepoSensitivePattern =
   /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|codeup\.aliyun|aliyuncs\.com)\b/i;
+const codingDesignSkillPattern =
+  /\b(api|architecture|architectural|benchmark|bugfix|code|coding|database|dbdd|design|document|implementation|implementing|optimization|optimise|optimize|performance|refactor|schema|sql|tdd|test|testing|technical)\b/i;
 const afterUseDepositionSection = `
 ## After Use Deposition
 
 After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+`;
+const threeStepWorkContractSection = `
+## Three-Step Work Contract
+
+For coding and design work, run the workflow in three steps:
+
+1. Co-create with the user: clarify what they want, preserve their exact business wording, identify acceptance criteria, and gather the code, schema, logs, docs, credentials, endpoints, or environment details needed to execute the next step.
+2. Execute the result: implement the code change, write the design, or produce the requested artifact using the agreed scope and the repository's existing patterns.
+3. Verify the result: run focused tests, validators, benchmarks, document checks, or review passes that prove the result matches the request, then report what passed and what remains unverified.
+
+Keep light adversarial review to no more than 30% of the interaction. Calibrate it to the risk: challenge missing evidence, unsafe shortcuts, or unclear ownership, but do not let critique replace execution once the next step is sufficiently specified.
+`;
+const lightAdversarialReviewSection = `
+## Light Adversarial Review
+
+For coding, architecture, optimization, testing, database, or design-document workflows, use a lightly adversarial stance: verify the user's goal against code or evidence, surface hidden assumptions, name correctness and risk trade-offs, and challenge unsafe shortcuts before implementing or finalizing. Keep it constructive and below 30% of the interaction: preserve the user's explicit business wording, avoid debate for its own sake, and become decisive once evidence is sufficient.
 `;
 
 function argValue(name) {
@@ -42,6 +60,16 @@ function ensureSkillName(name) {
   return name;
 }
 
+function ensureBilingualDescription(description) {
+  if (!/^Use when\b/.test(description)) {
+    throw new Error('Skill description must start with "Use when".');
+  }
+  if (!/[A-Za-z]/.test(description) || !/[\u3400-\u9FFF]/.test(description)) {
+    throw new Error('Skill description must be bilingual English and Chinese.');
+  }
+  return description;
+}
+
 function yamlString(value) {
   return JSON.stringify(String(value));
 }
@@ -58,14 +86,34 @@ function withAfterUseDeposition(body) {
   return `${body.trimEnd()}\n\n${afterUseDepositionSection.trim()}\n`;
 }
 
+function isCodingDesignSkill({ name, description, body }) {
+  return codingDesignSkillPattern.test([name, description, body].join('\n'));
+}
+
+function withThreeStepWorkContract(body, context) {
+  if (!isCodingDesignSkill({ ...context, body }) || /^## Three-Step Work Contract\b/m.test(body)) {
+    return body;
+  }
+  return `${body.trimEnd()}\n\n${threeStepWorkContractSection.trim()}\n`;
+}
+
+function withLightAdversarialReview(body, context) {
+  if (!isCodingDesignSkill({ ...context, body }) || /^## Light Adversarial Review\b/m.test(body)) {
+    return body;
+  }
+  return `${body.trimEnd()}\n\n${lightAdversarialReviewSection.trim()}\n`;
+}
+
 function createSkillMarkdown({ name, description, body }) {
+  const threeStepBody = withThreeStepWorkContract(body, { name, description });
+  const enrichedBody = withLightAdversarialReview(threeStepBody, { name, description });
   return [
     '---',
     `name: ${name}`,
     `description: ${description}`,
     '---',
     '',
-    normalizeBody(withAfterUseDeposition(body)).trimEnd(),
+    normalizeBody(withAfterUseDeposition(enrichedBody)).trimEnd(),
     '',
   ].join('\n');
 }
@@ -140,7 +188,9 @@ async function validateSkill(skillDir, validator) {
 
 async function createLocalSkill() {
   const name = ensureSkillName(argValue('--name') || '');
-  const description = argValue('--description') || `Use when the user asks for the ${name} Axis workflow.`;
+  const description = ensureBilingualDescription(
+    argValue('--description') || `Use when the user asks for the ${name} Axis workflow. / 用于处理 ${name} 对应的 Axis 工作流。`,
+  );
   const bodyArg = argValue('--body');
   const bodyFile = argValue('--body-file');
   const body = bodyArg ?? (bodyFile ? await readFile(path.resolve(bodyFile), 'utf8') : `# ${name}\n\nUse this skill for the Axis workflow.\n`);

@@ -1,6 +1,6 @@
 ---
 name: axis-update
-description: Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.
+description: Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装或修复本地 Axis/Codex 打包技能。
 ---
 
 # Axis Skill Update

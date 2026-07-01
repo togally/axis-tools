@@ -1,6 +1,6 @@
 ---
 name: axis-test-driven-development
-description: Use when implementing any feature, bugfix, refactor, or behavior change before writing production code.
+description: Use when implementing a feature, bugfix, refactor, or behavior change before writing production code. / 用于在实现功能、修复缺陷、重构或行为变更前先进行测试驱动开发。
 ---
 
 # Axis Test-Driven Development
@@ -27,6 +27,17 @@ NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
 
 Code written before a failing test must be deleted and restarted from the test. Do not keep it as reference, adapt it, or treat tests-after as equivalent.
+
+## Three-Step Work Contract
+
+1. Co-create the behavior target with the user.
+   Clarify the exact behavior, acceptance criteria, existing code path, and the smallest testable slice. Use light adversarial review to challenge ambiguity, missing edge cases, or unsafe "tests after" pressure.
+2. Execute the result.
+   Start execution by writing and running the RED test, then implement the smallest production change that makes it pass. This preserves the iron law while still treating execution as the second step.
+3. Verify the result.
+   Run the focused GREEN command, nearby regressions, and any requested smoke checks; report the RED and GREEN evidence.
+
+Keep light adversarial review under 30% of the interaction. It should sharpen the behavior and test boundary, not replace implementation.
 
 ## Workflow
 

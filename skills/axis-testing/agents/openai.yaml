@@ -1,6 +1,6 @@
 interface:
   display_name: "Axis Testing"
-  short_description: "Test real side-effecting actions with state and cleanup proof."
+  short_description: "Test side-effecting actions / 测试有副作用的后端行为"
   default_prompt: "Use $axis-testing to test this real side-effecting action."
 
 policy:

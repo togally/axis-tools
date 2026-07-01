@@ -1,6 +1,6 @@
 ---
 name: axis-ali-dashboard
-description: Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.
+description: Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON or SLS drilldowns. / 用于创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和监控面板。
 ---
 
 # Axis Dashboard JSON

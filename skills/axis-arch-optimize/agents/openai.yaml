@@ -1,6 +1,6 @@
 interface:
   display_name: "Axis Arch Optimize"
-  short_description: "Lift repeated method fixes into shared architecture"
+  short_description: "Lift fixes into shared architecture / 提炼共享架构能力"
   default_prompt: "Use $axis-arch-optimize to guide this architecture-level code optimization."
 
 policy:

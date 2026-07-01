@@ -1,6 +1,6 @@
 ---
 name: axis-arch-optimize
-description: Use when implementation work starts as method-level fixes but should become a shared architecture capability, middleware component, adapter, annotation, wrapper, or cross-cutting module.
+description: Use when implementation work starts as method-level fixes but should become a shared architecture capability or cross-cutting module. / 用于把局部方法修复提升为共享架构能力、中间件组件、适配器或横切模块。
 ---
 
 # Axis Arch Optimize
@@ -8,6 +8,17 @@ description: Use when implementation work starts as method-level fixes but shoul
 ## Purpose
 
 Use this skill when an implementation request starts as a local method-level fix but the shape of the problem says it should become an architecture-level capability. The goal is to move repeated, cross-cutting behavior into the right shared boundary while preserving existing contracts and proving the change with focused checks.
+
+## Three-Step Work Contract
+
+1. Co-create the architecture target with the user.
+   Clarify the desired capability, affected call sites, ownership boundary, acceptance criteria, and enough code/schema/runtime context to safely choose the shared layer. Use light adversarial review to challenge boundary leaks, private-business coupling, missing rollback, or unclear migration cost.
+2. Execute the architecture result.
+   Build or refactor the smallest shared capability that fits the repository style, migrate representative call sites, and keep business-specific rules in the business module.
+3. Verify the result.
+   Run focused contract, boundary, migration, and regression tests; report what moved, what stayed local, and any residual rollout risk.
+
+Keep light adversarial review under 30% of the interaction. Spend it where architectural ownership or correctness is unclear, then move decisively once the boundary is sufficiently specified.
 
 ## Use When
 

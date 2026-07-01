@@ -1,6 +1,6 @@
 interface:
   display_name: "API Benchmark"
-  short_description: "Benchmark test APIs safely"
+  short_description: "Benchmark APIs safely / 安全压测 API"
   default_prompt: "Use $axis-api-benchmark to safely benchmark test-environment APIs and explain capacity."
 
 policy:

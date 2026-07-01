@@ -1,6 +1,6 @@
 ---
 name: axis-bugfix
-description: Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs/screenshots and wants a root-cause fix rather than a guess.
+description: Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs and wants a root-cause fix. / 用于排查并修复缺陷、生产错误、压测失败、偶发问题或日志截图中的根因问题。
 ---
 
 # Axis Bugfix
@@ -8,6 +8,17 @@ description: Use when a user reports a bug, production error, failed benchmark, 
 ## Overview
 
 Evidence first, fix second. A bugfix is not done until the failing symptom is tied to a concrete code path or external dependency, a regression check exists, and the verification result matches the original failure mode.
+
+## Three-Step Work Contract
+
+1. Co-create the fix target with the user.
+   Preserve the pasted evidence, clarify the environment and expected behavior, map enough code or dependency context to separate likely causes, and ask only for missing information that blocks a safe next step.
+2. Execute the fix result.
+   Write or define the reproducing RED check, implement the smallest safe fix, and avoid unrelated cleanup.
+3. Verify the result.
+   Run the focused GREEN check, adjacent regression or smoke commands, and reread the original evidence to confirm the same symptom is addressed.
+
+Keep light adversarial review under 30% of the interaction. Use it to challenge unproven root causes, retry-heavy shortcuts, and infrastructure guesses; once evidence points to a fix, execute.
 
 ## When To Use
 

@@ -1,6 +1,6 @@
 ---
 name: axis-tech-design-doc
-description: Use when the user asks to write, refine, or finalize a technical design document or solution design for retention, especially when business and technical design must be separated from current implementation notes.
+description: Use when the user asks to write, refine, or finalize a technical design document or solution design for retention. / 用于撰写、优化或定稿可留档的技术设计文档和方案设计，尤其适合区分业务设计与技术设计。
 ---
 
 # Technical Design Document
@@ -22,6 +22,19 @@ Do not use this skill for simple README updates, API reference extraction, chang
 ## Core Principle
 
 Write the final design the team should build, not a diary of how the team arrived there.
+
+Use a lightly adversarial design-review stance before finalizing: verify the design against the user's latest correction and available evidence, surface hidden assumptions, name boundary and consistency risks, and challenge shortcuts that would make the retained design unsafe or misleading. Keep this constructive, bounded, and under 30% of the interaction; once the final intent is clear, write the design decisively instead of turning the document into a debate log.
+
+## Three-Step Work Contract
+
+1. Co-create the design target with the user.
+   Clarify the final business intent, audience, scope, source of truth, acceptance criteria, and the evidence needed to write the document. Preserve the user's corrected wording exactly where it defines the business rule.
+2. Execute the design result.
+   Write or revise the retained design document around the agreed final target, separating business design from technical design when relevant.
+3. Verify the result.
+   Check the document against the acceptance list, final-only wording rules, latest user correction, and any repo/code evidence used. Report what was checked and what remains an assumption.
+
+Keep light adversarial review under 30% of the interaction. Use it to surface unsafe assumptions and boundary risks, not to keep the design in permanent discussion.
 
 If the user says the document is for final retention, avoid sections such as:
 
@@ -51,6 +64,19 @@ Extract:
 - which terms the user used and wants preserved.
 
 When the user corrects the design, rewrite the document around that correction instead of adding a small note at the bottom.
+
+### 1.5. Light Adversarial Review
+
+Before writing the retained document, pressure-test the design lightly:
+
+- Is the source of truth explicit?
+- Are business terms and user-visible behavior preserved exactly as the user corrected them?
+- Are module boundaries, ownership, and dependencies clean?
+- Are consistency, idempotency, concurrency, rollback, and failure rules believable?
+- Are there hidden operational costs, high-frequency paths, or external dependency risks?
+- Is the document accidentally describing today's implementation instead of the final target?
+
+If a risk changes the design, incorporate the safer design directly. If it does not block the requested design, mention it as a bounded risk or test requirement rather than derailing the document.
 
 ### 2. Separate Business Design and Technical Design
 
@@ -318,6 +344,7 @@ Before finishing, verify:
 8. Data model, constraints, and service responsibilities are specific enough for implementation.
 9. Observability, rollout, rollback, and tests are included for non-trivial designs.
 10. If final-only was requested, old/current/background/source-tracing sections are absent.
+11. Hidden assumptions, unsafe shortcuts, and boundary risks were challenged before final wording.
 
 ## Common Mistakes
 
@@ -328,6 +355,7 @@ Before finishing, verify:
 - Describing user behavior without enough technical constraints to implement safely.
 - Forgetting failure paths, callbacks, duplicate requests, timeout, or compensation.
 - Adding a "current problems" section to a final retention document after the user asked for final-only wording.
+- Treating the user's first draft as settled when later corrections changed ownership, source of truth, or module boundaries.
 
 ## After Use Deposition
 

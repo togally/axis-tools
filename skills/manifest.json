@@ -4,7 +4,7 @@
   "skills": [
     {
       "name": "axis-ali-dashboard",
-      "description": "Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, fix Aliyun SLS drilldown actions, add bizId/traceId drilldowns, align Prometheus aggregate panels with SLS detail tables, or troubleshoot imported dashboard JSON whose filters, time range, labels, or drilldowns do not work.",
+      "description": "Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON or SLS drilldowns. / 用于创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和监控面板。",
       "path": "skills/axis-ali-dashboard",
       "files": [
         "SKILL.md",
@@ -16,7 +16,7 @@
     },
     {
       "name": "axis-api-benchmark",
-      "description": "Use when the user asks to load test or benchmark test-environment APIs, estimate concurrency or active users, compare endpoint latency, or identify slow business interfaces.",
+      "description": "Use when the user asks to load test or benchmark APIs, estimate concurrency or active users, compare latency, or identify slow interfaces. / 用于压测或基准测试 API、估算并发或活跃用户、对比延迟并识别慢接口。",
       "path": "skills/axis-api-benchmark",
       "files": [
         "SKILL.md",
@@ -26,7 +26,7 @@
     },
     {
       "name": "axis-api-performance-tuning",
-      "description": "Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness.",
+      "description": "Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness. / 用于压测发现读接口慢且需要在保证正确性的前提下优化响应性能。",
       "path": "skills/axis-api-performance-tuning",
       "files": [
         "SKILL.md",
@@ -35,7 +35,7 @@
     },
     {
       "name": "axis-arch-optimize",
-      "description": "Use when implementation work starts as method-level fixes but should become a shared architecture capability, middleware component, adapter, annotation, wrapper, or cross-cutting module.",
+      "description": "Use when implementation work starts as method-level fixes but should become a shared architecture capability or cross-cutting module. / 用于把局部方法修复提升为共享架构能力、中间件组件、适配器或横切模块。",
       "path": "skills/axis-arch-optimize",
       "files": [
         "SKILL.md",
@@ -44,7 +44,7 @@
     },
     {
       "name": "axis-bugfix",
-      "description": "Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs/screenshots and wants a root-cause fix rather than a guess.",
+      "description": "Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs and wants a root-cause fix. / 用于排查并修复缺陷、生产错误、压测失败、偶发问题或日志截图中的根因问题。",
       "path": "skills/axis-bugfix",
       "files": [
         "SKILL.md",
@@ -53,7 +53,7 @@
     },
     {
       "name": "axis-create-skill",
-      "description": "Use when the user asks to scan the current conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created.",
+      "description": "Use when the user asks to scan the conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created. / 用于扫描对话中的可复用技能机会并判断是否应创建公开安全的 Axis/Codex 技能。",
       "path": "skills/axis-create-skill",
       "files": [
         "SKILL.md",
@@ -62,7 +62,7 @@
     },
     {
       "name": "axis-db-design-doc",
-      "description": "Use when the user asks for a database design document, data dictionary, schema design, ER/table structure documentation, or a Word DBDD using a formal or industry-standard template.",
+      "description": "Use when the user asks for a database design document, data dictionary, schema design, ER/table documentation, or a Word DBDD. / 用于生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。",
       "path": "skills/axis-db-design-doc",
       "files": [
         "SKILL.md",
@@ -70,8 +70,17 @@
       ]
     },
     {
+      "name": "axis-development-doc",
+      "description": "Use when the user asks to create one or more development documents such as 概要设计, 详细设计, database design, API docs, test plans, deployment docs, or Word/DOCX outputs from a prompt or repo evidence. / 用于根据提示词或仓库证据生成一个或多个开发文档，包括概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。",
+      "path": "skills/axis-development-doc",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-tech-design-doc",
-      "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention, especially when business and technical design must be separated from current implementation notes.",
+      "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention. / 用于撰写、优化或定稿可留档的技术设计文档和方案设计，尤其适合区分业务设计与技术设计。",
       "path": "skills/axis-tech-design-doc",
       "files": [
         "SKILL.md",
@@ -80,7 +89,7 @@
     },
     {
       "name": "axis-test-driven-development",
-      "description": "Use when implementing any feature, bugfix, refactor, or behavior change before writing production code.",
+      "description": "Use when implementing a feature, bugfix, refactor, or behavior change before writing production code. / 用于在实现功能、修复缺陷、重构或行为变更前先进行测试驱动开发。",
       "path": "skills/axis-test-driven-development",
       "files": [
         "SKILL.md",
@@ -89,7 +98,7 @@
     },
     {
       "name": "axis-testing",
-      "description": "Use when testing backend actions that trigger real external side effects, device or service state changes, broker messages, asynchronous progress, or cleanup-sensitive operations.",
+      "description": "Use when testing backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. / 用于测试会触发真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作的后端行为。",
       "path": "skills/axis-testing",
       "files": [
         "SKILL.md",
@@ -98,7 +107,7 @@
     },
     {
       "name": "axis-update",
-      "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from the axis-tools repository.",
+      "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装或修复本地 Axis/Codex 打包技能。",
       "path": "skills/axis-update",
       "files": [
         "SKILL.md",

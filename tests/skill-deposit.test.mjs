@@ -28,7 +28,7 @@ async function writeDemoSkill(sourceRoot, name = 'axis-demo-skill') {
     [
       '---',
       `name: ${name}`,
-      'description: Use when testing Axis skill deposition',
+      'description: Use when testing Axis skill deposition. / 用于测试 Axis 技能沉淀。',
       '---',
       '',
       '# Demo',
@@ -66,6 +66,7 @@ await withTempDir(async (tmp) => {
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
   assert.equal(manifest.version, 1);
   assert.equal(manifest.skills[0].name, 'axis-demo-skill');
+  assert.match(manifest.skills[0].description, /用于测试 Axis 技能沉淀/);
   assert.equal(manifest.skills[0].path, 'skills/axis-demo-skill');
   assert.deepEqual(manifest.skills[0].files.sort(), [
     'SKILL.md',

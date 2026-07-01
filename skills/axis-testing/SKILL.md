@@ -1,6 +1,6 @@
 ---
 name: axis-testing
-description: Use when testing backend actions that trigger real external side effects, device or service state changes, broker messages, asynchronous progress, or cleanup-sensitive operations.
+description: Use when testing backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. / 用于测试会触发真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作的后端行为。
 ---
 
 # Axis Testing

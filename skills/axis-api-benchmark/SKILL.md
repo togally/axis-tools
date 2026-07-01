@@ -1,6 +1,6 @@
 ---
 name: axis-api-benchmark
-description: Use when the user asks to load test or benchmark test-environment APIs, estimate concurrency or active users, compare endpoint latency, or identify slow business interfaces.
+description: Use when the user asks to load test or benchmark APIs, estimate concurrency or active users, compare latency, or identify slow interfaces. / 用于压测或基准测试 API、估算并发或活跃用户、对比延迟并识别慢接口。
 ---
 
 # API Benchmark

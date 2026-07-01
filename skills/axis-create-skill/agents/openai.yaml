@@ -1,6 +1,6 @@
 interface:
   display_name: "Axis Create Skill"
-  short_description: "Scan for public-safe reusable Axis skill candidates"
+  short_description: "Scan reusable skill candidates / 扫描可复用技能候选"
   default_prompt: "Use $axis-create-skill to scan this conversation for public-safe reusable skill candidates."
 
 policy:

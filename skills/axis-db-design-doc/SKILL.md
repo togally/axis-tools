@@ -1,6 +1,6 @@
 ---
 name: axis-db-design-doc
-description: Use when the user asks for a database design document, data dictionary, schema design, ER/table structure documentation, or a Word DBDD using a formal or industry-standard template.
+description: Use when the user asks for a database design document, data dictionary, schema design, ER/table documentation, or a Word DBDD. / 用于生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。
 ---
 
 # Database Design Document
@@ -19,6 +19,19 @@ Do not use this for a tiny one-table explanation, a pure API document, a changel
 ## Core Principle
 
 Ground the document in the real schema first, then format it using a standard document structure. Do not turn an implementation story into a design document unless the user explicitly asks for migration history.
+
+Use a lightly adversarial schema-review stance before finalizing: verify table and field claims against real DDL/code evidence, distinguish persisted data from derived display fields, challenge missing constraints or indexes, and call out assumptions that could make the database document misleading. Keep the critique practical, bounded, and under 30% of the interaction; after the evidence is clear, produce the requested document instead of lingering in analysis.
+
+## Three-Step Work Contract
+
+1. Co-create the database document target with the user.
+   Clarify the expected deliverable, format, scope, source of truth, schema evidence, and any standard/template requirement. Gather the DDL, migrations, ORM metadata, mapper SQL, service lifecycle rules, or pasted schema needed to proceed.
+2. Execute the document result.
+   Produce the database design document, data dictionary, ER summary, or DOCX artifact using the agreed scope and evidence.
+3. Verify the result.
+   Validate schema grounding, table and index coverage, derived-field separation, document structure, and DOCX rendering or parse checks when applicable. Report what was verified and what remains assumed.
+
+Keep light adversarial review under 30% of the interaction. Use it to catch guessed schema facts, missing constraints, and weak evidence; once the source of truth is adequate, write the document.
 
 ## Workflow
 
@@ -40,6 +53,20 @@ Separate these categories:
 - status/enumeration values;
 - derived fields that are not stored;
 - lifecycle rules such as import, calculation, edit, archive, delete, and rebuild.
+
+### 1.5. Light Adversarial Schema Review
+
+Before writing the document, pressure-test the schema evidence:
+
+- Does every table and column come from DDL, migration, ORM metadata, mapper SQL, or a pasted source of truth?
+- Are response-only, computed, denormalized, or display fields clearly separated from persisted columns?
+- Are primary keys, unique constraints, foreign-key-like relationships, and critical indexes present or explicitly called out as missing?
+- Are enum/status values backed by code or data evidence instead of invented from names?
+- Are delete/archive rules, audit fields, tenant fields, and privacy-sensitive fields documented where relevant?
+- Are performance-sensitive query paths covered by matching indexes or noted as risks?
+- Is any migration history being included even though the user asked for a final design document?
+
+If evidence is missing, mark the field or relationship as an assumption or risk instead of presenting it as confirmed.
 
 ### 2. Choose a Standard Template
 
@@ -107,6 +134,7 @@ Report what was verified and where the final file was written.
 - The chosen standard/template basis is named and, when needed, linked.
 - DOCX output is rendered or visually checked before delivery.
 - The reusable skill content does not contain private project names, private paths, hostnames, credentials, or customer-specific facts.
+- Missing constraints, index gaps, derived-field ambiguity, and unverified relationships are challenged or explicitly labeled.
 
 ## Common Mistakes
 
@@ -115,6 +143,7 @@ Report what was verified and where the final file was written.
 - Copying private table names or business details into the reusable skill itself.
 - Leaving an empty auto-generated table of contents in the final Word document.
 - Skipping visual review of dense tables.
+- Presenting guessed relationships or indexes as confirmed schema facts.
 
 ## After Use Deposition
 

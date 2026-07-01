@@ -33,7 +33,7 @@ async function writePackagedSkill(repo, name = 'axis-demo-skill') {
   await mkdir(path.join(skillDir, 'agents'), { recursive: true });
   await writeFile(
     path.join(skillDir, 'SKILL.md'),
-    ['---', `name: ${name}`, 'description: Use when testing packaged Axis skills', '---', '', '# Demo', ''].join('\n'),
+    ['---', `name: ${name}`, 'description: Use when testing packaged Axis skills. / 用于测试打包后的 Axis 技能。', '---', '', '# Demo', ''].join('\n'),
     'utf8',
   );
   await writeFile(path.join(skillDir, 'references', 'guide.md'), 'reference\n', 'utf8');
@@ -172,7 +172,7 @@ await withTempDir(async (tmp) => {
     '--name',
     'axis-demo-created',
     '--description',
-    'Use when testing Axis-created skills',
+    'Use when testing Axis-created skills. / 用于测试 Axis 自动创建技能流程。',
     '--body',
     '# Axis Demo Created\\n\\nUse this skill for the test workflow.\\n',
     '--display-name',
@@ -191,9 +191,16 @@ await withTempDir(async (tmp) => {
   assert.match(stdout, /Created local skill axis-demo-created/);
   assert.match(stdout, /Deposited axis-demo-created/);
   const localSkill = path.join(sourceRoot, 'axis-demo-created');
-  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('Use when testing Axis-created skills')), true);
-  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('After Use Deposition')), true);
-  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('push to the remote repository when permissions allow')), true);
+  const localSkillBody = await readFile(path.join(localSkill, 'SKILL.md'), 'utf8');
+  assert.equal(localSkillBody.includes('Use when testing Axis-created skills'), true);
+  assert.equal(localSkillBody.includes('用于测试 Axis 自动创建技能流程'), true);
+  assert.equal(localSkillBody.includes('Three-Step Work Contract'), true);
+  assert.equal(localSkillBody.includes('Co-create with the user'), true);
+  assert.equal(localSkillBody.includes('no more than 30%'), true);
+  assert.equal(localSkillBody.includes('Light Adversarial Review'), true);
+  assert.equal(localSkillBody.includes('challenge unsafe shortcuts'), true);
+  assert.equal(localSkillBody.includes('After Use Deposition'), true);
+  assert.equal(localSkillBody.includes('push to the remote repository when permissions allow'), true);
   assert.equal(await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes('Axis Demo Created')), true);
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
@@ -201,6 +208,26 @@ await withTempDir(async (tmp) => {
   const { stdout: committed } = await execFileAsync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo });
   assert.match(committed, /skills\/axis-demo-created\/SKILL.md/);
   assert.match(committed, /skills\/manifest.json/);
+});
+
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'local-skills');
+  await mkdir(sourceRoot, { recursive: true });
+  const error = await execFileAsync(process.execPath, [
+    createScript,
+    '--source-root',
+    sourceRoot,
+    '--name',
+    'axis-english-only',
+    '--description',
+    'Use when testing English-only descriptions.',
+    '--body',
+    '# Axis English Only\\n',
+    '--no-validate',
+  ]).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /bilingual English and Chinese/);
 });
 
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
@@ -212,6 +239,7 @@ const packagedSkillNames = [
   'axis-bugfix',
   'axis-create-skill',
   'axis-db-design-doc',
+  'axis-development-doc',
   'axis-tech-design-doc',
   'axis-test-driven-development',
   'axis-testing',
@@ -320,10 +348,63 @@ for (const skillName of packagedSkillNames) {
   const skillMd = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
   assert.match(skillMd, new RegExp(`name: ${skillName}`));
   assert.match(skillMd, /description: Use when/);
+  const descriptionLine = skillMd.split('\n').find((line) => line.startsWith('description:')) ?? '';
+  assert.match(descriptionLine, /[A-Za-z]/);
+  assert.match(descriptionLine, /[\u3400-\u9FFF]/);
   assert.match(skillMd, /## After Use Deposition/);
-  assert.equal(await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes(`$${skillName}`)), true);
+  const openAiYaml = await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8');
+  assert.equal(openAiYaml.includes(`$${skillName}`), true);
+  const shortDescriptionLine = openAiYaml.split('\n').find((line) => line.trim().startsWith('short_description:')) ?? '';
+  assert.match(shortDescriptionLine, /[A-Za-z]/);
+  assert.match(shortDescriptionLine, /[\u3400-\u9FFF]/);
+}
+
+for (const skill of manifest.skills) {
+  assert.match(skill.description, /^Use when/);
+  assert.match(skill.description, /[A-Za-z]/);
+  assert.match(skill.description, /[\u3400-\u9FFF]/);
 }
 
 const createSkillMd = await readFile(path.join(repoRoot, 'skills', 'axis-create-skill', 'SKILL.md'), 'utf8');
 assert.match(createSkillMd, /scan.+whether/i);
+assert.match(createSkillMd, /Bilingual Description Rule/);
+assert.match(createSkillMd, /Three-Step Work Contract/);
+assert.match(createSkillMd, /co-create the requirement with the user/i);
+assert.match(createSkillMd, /Light Adversarial Review/);
+assert.match(createSkillMd, /Coding\/design-type skills should include/i);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
+
+const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-tech-design-doc', 'SKILL.md'), 'utf8');
+assert.match(techDesignDocMd, /Three-Step Work Contract/);
+assert.match(techDesignDocMd, /Light Adversarial Review/);
+assert.match(techDesignDocMd, /boundary risks/i);
+
+const dbDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-db-design-doc', 'SKILL.md'), 'utf8');
+assert.match(dbDesignDocMd, /Three-Step Work Contract/);
+assert.match(dbDesignDocMd, /Light Adversarial Schema Review/);
+assert.match(dbDesignDocMd, /derived display fields/i);
+
+const developmentDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-development-doc', 'SKILL.md'), 'utf8');
+assert.match(developmentDocMd, /概要设计/);
+assert.match(developmentDocMd, /详细设计/);
+assert.match(developmentDocMd, /Document Selection Matrix/);
+assert.match(developmentDocMd, /axis-tech-design-doc/);
+assert.match(developmentDocMd, /axis-db-design-doc/);
+assert.match(developmentDocMd, /Word\/DOCX/i);
+assert.match(developmentDocMd, /Three-Step Work Contract/);
+assert.match(developmentDocMd, /Light Adversarial Review/);
+
+for (const skillName of [
+  'axis-api-performance-tuning',
+  'axis-arch-optimize',
+  'axis-bugfix',
+  'axis-create-skill',
+  'axis-development-doc',
+  'axis-db-design-doc',
+  'axis-tech-design-doc',
+  'axis-test-driven-development',
+]) {
+  const skillMd = await readFile(path.join(repoRoot, 'skills', skillName, 'SKILL.md'), 'utf8');
+  assert.match(skillMd, /Three-Step Work Contract/);
+  assert.match(skillMd, /30%/);
+}
