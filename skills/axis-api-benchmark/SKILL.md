@@ -38,12 +38,12 @@ Do not use for destructive load tests unless the user explicitly approves writes
 4. Obtain tokens from documented test accounts, existing seed scripts, or user-provided bearer tokens. Verify live login before using them.
 5. Run smoke checks for each candidate endpoint. Drop endpoints that are not deployed, return permissions unrelated to the intended actor, or require unavailable merchant credentials.
 6. Run a per-endpoint baseline with small samples and low concurrency. Capture p50/p90/p95/p99/max and business error counts.
-7. Run conservative mixed-read steps, for example 5, 10, 20, 40, 60 concurrency, fixed 15-30 second windows, and stop at the thresholds above.
+7. Run conservative mixed-read steps, for example 5, 10, 20, 40, 60 concurrency, fixed 15-30 second windows, and stop at the thresholds above. For every mixed step, output slow endpoint details sorted by p95 response time so the report names concrete interfaces, not only slow groups.
 8. If mixed p95 rises sharply, run targeted tests for the slowest endpoints at 5/10/20 concurrency to separate global saturation from endpoint-specific bottlenecks.
 9. Report results in business terms:
    - stable concurrency and QPS;
    - p95/p99 latency at each step;
-   - slowest endpoint groups;
+   - slowest endpoint groups and endpoint-level slow rows sorted by response time;
    - excluded unsafe or unavailable areas;
    - a conservative active-user estimate.
 
@@ -77,6 +77,7 @@ Useful flags:
 - `--no-auth-sample`: skip isolated login sampling.
 - `--targeted`: run targeted slow-endpoint probes after the mixed test.
 - `--endpoint-file endpoints.json`: run a custom endpoint set instead of the generic sample profile.
+- `--slow-detail-limit 8`: print the top N slow endpoint rows per mixed step, sorted by p95 response time; use `0` to hide endpoint rows.
 - `--member-token`, `--admin-token`, `--no-login`: use pre-issued tokens or public-only endpoints.
 - `--member-phone`, `--member-password`, `--admin-phone`, `--admin-password`: override test credentials.
 
@@ -111,6 +112,7 @@ Also explain that registered users or DAU are much larger than simultaneous acti
 
 瓶颈：
 - <endpoint/group>: p95, QPS, likely concern
+- 慢接口明细：按 p95 响应时间降序列出 endpoint、group、p95、p99、avg、max、样本数、错误数
 
 人数口径：
 - 重度/正常/轻度活跃用户 estimate

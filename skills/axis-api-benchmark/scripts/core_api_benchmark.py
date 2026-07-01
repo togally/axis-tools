@@ -292,6 +292,27 @@ def print_slowest_groups(results: list[dict[str, Any]], limit: int = 6) -> None:
     print("  slow_p95_groups " + ", ".join(f"{group}:{p95:.0f}ms/{count}" for group, p95, count in slow))
 
 
+def print_slowest_endpoints(results: list[dict[str, Any]], limit: int = 8) -> None:
+    if limit <= 0:
+        return
+    endpoints: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for item in results:
+        endpoints.setdefault((item["group"], item["name"]), []).append(item)
+    slow = []
+    for (group, name), items in endpoints.items():
+        summary = summarize(items)
+        slow.append((group, name, summary))
+    slow.sort(key=lambda item: (item[2]["p95"], item[2]["max"], item[2]["avg"]), reverse=True)
+    print("  slow_endpoints_by_p95")
+    for group, name, summary in slow[:limit]:
+        print(
+            f"    {name} ({group}) "
+            f"p95={summary['p95']:.0f}ms p99={summary['p99']:.0f}ms "
+            f"avg={summary['avg']:.0f}ms max={summary['max']:.0f}ms "
+            f"n={summary['n']} err={summary['err']}"
+        )
+
+
 def steps(max_concurrency: int, raw_steps: str | None) -> list[int]:
     if raw_steps:
         values = [int(part.strip()) for part in raw_steps.split(",") if part.strip()]
@@ -362,6 +383,7 @@ def main() -> None:
     parser.add_argument("--steps", default=None, help="Comma-separated mixed concurrency steps, for example 5,10,20.")
     parser.add_argument("--connect-timeout", type=float, default=3.0)
     parser.add_argument("--read-timeout", type=float, default=18.0)
+    parser.add_argument("--slow-detail-limit", type=int, default=8, help="Number of slow endpoint rows to print per mixed step; use 0 to hide.")
     parser.add_argument("--no-baseline", action="store_true")
     parser.add_argument("--no-auth-sample", action="store_true")
     parser.add_argument("--targeted", action="store_true")
@@ -405,6 +427,7 @@ def main() -> None:
         summary["qps"] = len(results) / elapsed if elapsed else 0.0
         print(f"concurrency={concurrency:2d} elapsed={elapsed:.1f}s {format_summary(summary)}")
         print_slowest_groups(results)
+        print_slowest_endpoints(results, args.slow_detail_limit)
         print_errors(results)
         if summary["err_pct"] > 5 or summary["p95"] > 5000:
             print("  STOP threshold reached")
