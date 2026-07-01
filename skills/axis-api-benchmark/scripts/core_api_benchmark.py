@@ -29,6 +29,7 @@ class Endpoint:
     params: dict[str, Any] | None = None
     auth: str = "public"
     weight: int = 1
+    method: str = "GET"
 
 
 ENDPOINTS = [
@@ -75,6 +76,7 @@ def endpoint_from_dict(item: dict[str, Any]) -> Endpoint:
         params=item.get("params") if isinstance(item.get("params"), dict) else None,
         auth=str(item.get("auth") or "public"),
         weight=int(item.get("weight") or 1),
+        method=str(item.get("method") or "GET").upper(),
     )
 
 
@@ -167,6 +169,19 @@ def extract_token(body: dict[str, Any]) -> str:
     raise RuntimeError(f"token not found; response keys={list(data.keys())}")
 
 
+def endpoint_route(endpoint: Endpoint) -> str:
+    route = f"{endpoint.method} {endpoint.path}"
+    if endpoint.params:
+        query_parts = []
+        for key, value in sorted(endpoint.params.items()):
+            if isinstance(value, list | tuple):
+                query_parts.extend(f"{key}={item}" for item in value)
+            else:
+                query_parts.append(f"{key}={value}")
+        route += "?" + "&".join(query_parts)
+    return route
+
+
 class BenchmarkClient:
     def __init__(self, args: argparse.Namespace) -> None:
         self.args = args
@@ -218,7 +233,17 @@ class BenchmarkClient:
 
     def call(self, endpoint: Endpoint) -> dict[str, Any]:
         started = time.perf_counter()
+        route = endpoint_route(endpoint)
         try:
+            if endpoint.method != "GET":
+                return {
+                    "name": endpoint.name,
+                    "group": endpoint.group,
+                    "route": route,
+                    "ms": (time.perf_counter() - started) * 1000,
+                    "success": False,
+                    "reason": f"unsupported_method={endpoint.method}",
+                }
             response = session().get(
                 self.base_url + endpoint.path,
                 params=endpoint.params or {},
@@ -233,11 +258,12 @@ class BenchmarkClient:
             success, reason = business_success(body)
             if response.status_code != 200:
                 success, reason = False, f"http={response.status_code}"
-            return {"name": endpoint.name, "group": endpoint.group, "ms": elapsed, "success": success, "reason": reason}
+            return {"name": endpoint.name, "group": endpoint.group, "route": route, "ms": elapsed, "success": success, "reason": reason}
         except Exception as error:  # noqa: BLE001 - report benchmark failures compactly.
             return {
                 "name": endpoint.name,
                 "group": endpoint.group,
+                "route": route,
                 "ms": (time.perf_counter() - started) * 1000,
                 "success": False,
                 "reason": type(error).__name__,
@@ -295,18 +321,18 @@ def print_slowest_groups(results: list[dict[str, Any]], limit: int = 6) -> None:
 def print_slowest_endpoints(results: list[dict[str, Any]], limit: int = 8) -> None:
     if limit <= 0:
         return
-    endpoints: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    endpoints: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
     for item in results:
-        endpoints.setdefault((item["group"], item["name"]), []).append(item)
+        endpoints.setdefault((item["group"], item["name"], item.get("route") or item["name"]), []).append(item)
     slow = []
-    for (group, name), items in endpoints.items():
+    for (group, name, route), items in endpoints.items():
         summary = summarize(items)
-        slow.append((group, name, summary))
-    slow.sort(key=lambda item: (item[2]["p95"], item[2]["max"], item[2]["avg"]), reverse=True)
+        slow.append((group, name, route, summary))
+    slow.sort(key=lambda item: (item[3]["p95"], item[3]["max"], item[3]["avg"]), reverse=True)
     print("  slow_endpoints_by_p95")
-    for group, name, summary in slow[:limit]:
+    for group, name, route, summary in slow[:limit]:
         print(
-            f"    {name} ({group}) "
+            f"    {route} name={name} group={group} "
             f"p95={summary['p95']:.0f}ms p99={summary['p99']:.0f}ms "
             f"avg={summary['avg']:.0f}ms max={summary['max']:.0f}ms "
             f"n={summary['n']} err={summary['err']}"
