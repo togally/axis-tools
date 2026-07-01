@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Bugfix"
+  short_description: "Evidence-first bugfix workflow"
+  default_prompt: "Use $axis-bugfix to fix the reported bug from evidence."
+
+policy:
+  allow_implicit_invocation: true

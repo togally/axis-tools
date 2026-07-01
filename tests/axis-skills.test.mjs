@@ -209,6 +209,7 @@ const packagedSkillNames = [
   'axis-api-benchmark',
   'axis-api-performance-tuning',
   'axis-arch-optimize',
+  'axis-bugfix',
   'axis-create-skill',
   'axis-db-design-doc',
   'axis-tech-design-doc',
@@ -238,6 +239,20 @@ const architectureOptimization = manifest.skills.find((skill) => skill.name === 
 assert.ok(architectureOptimization);
 assert.equal(architectureOptimization.files.includes('SKILL.md'), true);
 assert.equal(architectureOptimization.files.includes('agents/openai.yaml'), true);
+
+const bugfixMethod = manifest.skills.find((skill) => skill.name === 'axis-bugfix');
+assert.ok(bugfixMethod);
+assert.equal(bugfixMethod.files.includes('SKILL.md'), true);
+assert.equal(bugfixMethod.files.includes('agents/openai.yaml'), true);
+const bugfixMethodBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-bugfix', 'SKILL.md'),
+  'utf8',
+);
+assert.match(bugfixMethodBody, /Evidence First/i);
+assert.match(bugfixMethodBody, /classify.*external dependency.*application code/is);
+assert.match(bugfixMethodBody, /RED.*GREEN/is);
+assert.match(bugfixMethodBody, /Do not fix by theory alone/i);
+assert.doesNotMatch(bugfixMethodBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 const architectureOptimizationBody = await readFile(path.join(repoRoot, 'skills', 'axis-arch-optimize', 'SKILL.md'), 'utf8');
 assert.match(architectureOptimizationBody, /architecture boundary/i);
 assert.match(architectureOptimizationBody, /cross-cutting/i);

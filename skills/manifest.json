@@ -43,6 +43,15 @@
       ]
     },
     {
+      "name": "axis-bugfix",
+      "description": "Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs/screenshots and wants a root-cause fix rather than a guess.",
+      "path": "skills/axis-bugfix",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-create-skill",
       "description": "Use when the user asks to scan the current conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created.",
       "path": "skills/axis-create-skill",
