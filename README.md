@@ -17,17 +17,34 @@ axis-tools
 
 ```text
 axis-tools/
+├── catalog/
+│   ├── assets.public.yaml
+│   ├── skills.public.yaml
+│   └── taxonomy.yaml
+├── governance/
+│   ├── CONTRIBUTING.md
+│   ├── DEPRECATION.md
+│   ├── REVIEW_CHECKLIST.md
+│   └── SECURITY.md
 ├── scripts/
 │   ├── axis-create-skill.mjs
 │   ├── axis-skill-deposit.mjs
 │   ├── axis-update-skills.mjs
 │   └── install-axis-tools.sh
+├── schemas/
+│   ├── asset.meta.schema.json
+│   ├── catalog.schema.json
+│   ├── skill.meta.schema.json
+│   └── taxonomy.schema.json
 ├── skills/
 │   ├── axis-ali-dashboard/
 │   ├── axis-benchmark/
 │   ├── axis-create-skill/
 │   └── axis-update/
 ├── src/cli.ts
+├── templates/
+│   ├── doc-asset/
+│   └── skill/
 ├── tests/
 ├── package.json
 └── README.md
@@ -55,6 +72,23 @@ This repository is public-oriented. Do not add product-private, customer-specifi
 公共技能应使用泛化流程、示例和占位值。私有项目知识应放在私有 memory、notes 或私有技能中，而不是沉淀到本仓库。
 
 Public skills should use generic workflows, examples, and placeholders. Private project knowledge belongs in private memory, notes, or private skills, not in this repository.
+
+## Public-Safe Governance MVP
+
+第一版治理骨架只覆盖公开仓内的文件化管理，不迁移真实资产，也不引入部署流程。
+
+The first governance skeleton covers file-based management in this public repository only. It does not migrate real assets or introduce a deployment path.
+
+| Area | Path | Purpose |
+| --- | --- | --- |
+| Schemas | `schemas/` | JSON Schema contracts for public skill metadata, document asset metadata, catalog entries, and taxonomy. |
+| Templates | `templates/` | Mock/redacted starting points for new public skills and AI document assets. |
+| Governance | `governance/` | Contribution, safety, review, and deprecation rules. |
+| Catalog | `catalog/` | Public index examples that point to templates or assets without duplicating their full content. |
+
+Use `skill.meta.yaml` beside a runnable `SKILL.md` for governance metadata. Keep `SKILL.md` Codex-compatible and concise; keep catalog files as indexes, not long-form documents.
+
+CI in this project is a repository quality gate for schema, public-safety, and compatibility checks. It is not a deploy pipeline.
 
 ## 安装 / Install
 
@@ -243,6 +277,7 @@ Focused tests:
 npm run test:cli
 npm run test:skill-deposit
 npm run test:axis-skills
+npm run test:public-governance
 ```
 
 直接校验某个技能包：

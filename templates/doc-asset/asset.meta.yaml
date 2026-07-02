@@ -1,0 +1,23 @@
+schema_version: 1
+id: asset.example.public-design-note
+type: design
+visibility: public
+status: draft
+source:
+  kind: redacted-example
+  public_ref: null
+related_skills:
+  - skill.example.axis-example-skill
+related_repos: []
+reuse:
+  audience:
+    - product
+    - engineering
+    - architecture
+  when_to_use: Reuse when a public-safe design note needs consistent metadata, redaction, and review fields.
+  when_not_to_use: Do not use for real incidents, raw logs, credentials, or project-specific facts.
+redaction:
+  checked: true
+  data_profile: redacted
+  notes: Uses only mock or redacted placeholders.
+review_after: 2026-10-01

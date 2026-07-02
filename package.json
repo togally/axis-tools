@@ -10,10 +10,11 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "node --loader ts-node/esm src/cli.ts",
-    "test": "npm run test:cli && npm run test:skill-deposit && npm run test:axis-skills",
+    "test": "npm run test:cli && npm run test:skill-deposit && npm run test:axis-skills && npm run test:public-governance",
     "test:cli": "npm run build && node tests/cli-install.test.mjs",
     "test:skill-deposit": "node tests/skill-deposit.test.mjs",
-    "test:axis-skills": "node tests/axis-skills.test.mjs"
+    "test:axis-skills": "node tests/axis-skills.test.mjs",
+    "test:public-governance": "node tests/public-governance.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axis-tools.example/schemas/asset.meta.schema.json",
+  "title": "Axis public document asset metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "type",
+    "visibility",
+    "status",
+    "source",
+    "related_skills",
+    "reuse",
+    "redaction",
+    "review_after"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^asset\\.[a-z0-9][a-z0-9.-]*$"
+    },
+    "type": {
+      "enum": ["requirement", "design", "plan", "runbook", "retrospective", "prompt-pattern"]
+    },
+    "visibility": {
+      "const": "public"
+    },
+    "status": {
+      "enum": ["draft", "active", "stale", "deprecated", "archived"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "public_ref"],
+      "properties": {
+        "kind": {
+          "enum": ["manual", "public-doc", "mock-example", "redacted-example"]
+        },
+        "public_ref": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "related_skills": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^skill\\.[a-z0-9][a-z0-9.-]*$"
+      },
+      "uniqueItems": true
+    },
+    "related_repos": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "reuse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["audience", "when_to_use", "when_not_to_use"],
+      "properties": {
+        "audience": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "when_to_use": {
+          "type": "string",
+          "minLength": 1
+        },
+        "when_not_to_use": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "redaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checked", "data_profile", "notes"],
+      "properties": {
+        "checked": {
+          "const": true
+        },
+        "data_profile": {
+          "enum": ["mock", "redacted", "public"]
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "review_after": {
+      "type": "string",
+      "format": "date"
+    }
+  }
+}

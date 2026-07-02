@@ -1,0 +1,47 @@
+schema_version: 1
+id: skill.example.axis-example-skill
+visibility: public
+status: draft
+owner_role: engineering
+categories:
+  - skill-template
+  - repository-governance
+scenarios:
+  - create-public-skill
+  - review-public-skill
+inputs:
+  - mock task brief
+  - redacted example artifact
+outputs:
+  - public-safe skill bundle
+  - validation notes
+dependencies:
+  tools:
+    - git
+    - node
+  skills: []
+safety:
+  sensitivity: public
+  allowed_data:
+    - mock examples
+    - redacted examples
+    - public references
+  forbidden_data:
+    - credentials
+    - non-public hostnames
+    - personal data
+    - raw logs
+    - platform identifiers
+validation:
+  smoke_prompts:
+    - examples/public/smoke.md
+  checklist:
+    - schema-valid
+    - no-secrets
+    - mock-data-only
+compatibility:
+  codex_skill: true
+  multica_import: github_url
+review:
+  review_after: 2026-10-01
+  replacement: null
