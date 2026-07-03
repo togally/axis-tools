@@ -1,0 +1,4 @@
+interface:
+  display_name: Axis Example Skill
+  short_description: Public-safe mock skill template / 公开安全 mock 技能模板
+  default_prompt: Use $axis-example-skill to demonstrate a public-safe reusable skill workflow.

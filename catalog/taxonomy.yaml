@@ -1,0 +1,23 @@
+schema_version: 1
+roles:
+  - product
+  - engineering
+  - testing
+  - operations
+  - architecture
+phases:
+  - discovery
+  - design
+  - implementation
+  - validation
+  - maintenance
+domains:
+  - skill-management
+  - document-assets
+  - repository-governance
+  - public-safe
+safety_labels:
+  - public_safe
+  - mock
+  - redacted
+  - public_reference

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axis-tools.example/schemas/catalog.schema.json",
+  "title": "Axis public catalog",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version"],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/catalog_item"
+      },
+      "uniqueItems": true
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/catalog_item"
+      },
+      "uniqueItems": true
+    },
+    "taxonomy": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "uniqueItems": true
+      }
+    }
+  },
+  "$defs": {
+    "catalog_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "path", "status", "visibility", "tags", "data_profile"],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "enum": ["draft", "active", "stale", "deprecated", "archived"]
+        },
+        "visibility": {
+          "const": "public"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        },
+        "data_profile": {
+          "enum": ["mock", "redacted", "public"]
+        },
+        "summary": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

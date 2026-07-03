@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axis-tools.example/schemas/skill.meta.schema.json",
+  "title": "Axis public skill metadata",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "visibility",
+    "status",
+    "owner_role",
+    "categories",
+    "scenarios",
+    "inputs",
+    "outputs",
+    "safety",
+    "validation",
+    "compatibility",
+    "review"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^skill\\.[a-z0-9][a-z0-9.-]*$"
+    },
+    "visibility": {
+      "const": "public"
+    },
+    "status": {
+      "enum": ["draft", "active", "deprecated", "archived"]
+    },
+    "owner_role": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "uniqueItems": true
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "dependencies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^skill\\.[a-z0-9][a-z0-9.-]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sensitivity", "allowed_data", "forbidden_data"],
+      "properties": {
+        "sensitivity": {
+          "const": "public"
+        },
+        "allowed_data": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "forbidden_data": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "validation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["smoke_prompts", "checklist"],
+      "properties": {
+        "smoke_prompts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "uniqueItems": true
+        },
+        "checklist": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["codex_skill", "multica_import"],
+      "properties": {
+        "codex_skill": {
+          "type": "boolean"
+        },
+        "multica_import": {
+          "enum": ["github_url", "archive", "not-applicable"]
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["review_after", "replacement"],
+      "properties": {
+        "review_after": {
+          "type": "string",
+          "format": "date"
+        },
+        "replacement": {
+          "type": ["string", "null"]
+        }
+      }
+    }
+  }
+}

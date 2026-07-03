@@ -1,0 +1,14 @@
+schema_version: 1
+description: Public-safe skill catalog index. Entries point to runnable skill bundles or templates without copying their full content.
+skills:
+  - id: skill.example.axis-example-skill
+    name: axis-example-skill
+    path: templates/skill
+    status: draft
+    visibility: public
+    tags:
+      - skill-template
+      - public-safe
+      - mock
+    data_profile: mock
+    summary: Mock skill template used to demonstrate required public metadata and Codex-compatible structure.

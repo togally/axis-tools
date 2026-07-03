@@ -1,0 +1,14 @@
+schema_version: 1
+description: Public-safe AI document asset catalog index. Entries use mock or redacted examples only.
+assets:
+  - id: asset.example.public-design-note
+    name: public-design-note
+    path: templates/doc-asset/asset.md
+    status: draft
+    visibility: public
+    tags:
+      - design
+      - public-safe
+      - redacted
+    data_profile: redacted
+    summary: Redacted document asset template for reusable design notes.
