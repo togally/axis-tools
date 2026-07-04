@@ -79,6 +79,15 @@
       ]
     },
     {
+      "name": "axis-review-summary",
+      "description": "Use when a user needs to review a PR, change set, or document set before deep inspection. / 用于审核 PR、变更集或文档前生成待审文件摘要和风险定位。",
+      "path": "skills/axis-review-summary",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-tech-design-doc",
       "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention. / 用于撰写、优化或定稿可留档的技术设计文档和方案设计，尤其适合区分业务设计与技术设计。",
       "path": "skills/axis-tech-design-doc",
