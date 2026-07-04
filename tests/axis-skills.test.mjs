@@ -240,6 +240,7 @@ const packagedSkillNames = [
   'axis-create-skill',
   'axis-db-design-doc',
   'axis-development-doc',
+  'axis-review-summary',
   'axis-tech-design-doc',
   'axis-test-driven-development',
   'axis-testing',
@@ -278,6 +279,22 @@ assert.equal(architectureOptimization.files.includes('agents/openai.yaml'), true
 
 const bugfixMethod = manifest.skills.find((skill) => skill.name === 'axis-bugfix');
 assert.ok(bugfixMethod);
+
+const reviewSummary = manifest.skills.find((skill) => skill.name === 'axis-review-summary');
+assert.ok(reviewSummary);
+assert.match(reviewSummary.description, /review a PR, change set, or document set/i);
+assert.match(reviewSummary.description, /审核 PR、变更集或文档/);
+assert.equal(reviewSummary.files.includes('SKILL.md'), true);
+assert.equal(reviewSummary.files.includes('agents/openai.yaml'), true);
+const reviewSummaryBody = await readFile(path.join(repoRoot, 'skills', 'axis-review-summary', 'SKILL.md'), 'utf8');
+assert.match(reviewSummaryBody, /Review Brief/i);
+assert.match(reviewSummaryBody, /待审文件清单/);
+assert.match(reviewSummaryBody, /每个文件摘要/);
+assert.match(reviewSummaryBody, /风险点/);
+assert.match(reviewSummaryBody, /建议细查位置/);
+assert.match(reviewSummaryBody, /原始路径/);
+assert.match(reviewSummaryBody, /public-safe/i);
+assert.match(reviewSummaryBody, /credential|secret|token/i);
 assert.equal(bugfixMethod.files.includes('SKILL.md'), true);
 assert.equal(bugfixMethod.files.includes('agents/openai.yaml'), true);
 const bugfixMethodBody = await readFile(
