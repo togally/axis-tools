@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -44,6 +46,66 @@ async function initializeProject(repo, extraArgs = []) {
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, 'utf8'));
+}
+
+function sha256(text) {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+function publicSafeReport(result = 'passed') {
+  return [
+    '# Report',
+    '',
+    '## Summary',
+    'Local package smoke report.',
+    '',
+    '## Scope',
+    'Demo project package generation.',
+    '',
+    '## Commands',
+    '- npm test',
+    '',
+    '## Result',
+    result,
+    '',
+    '## Evidence',
+    'Focused checks passed.',
+    '',
+    '## Public Safety',
+    'Reviewed; no credentials or private URLs included.',
+    '',
+    '## Limitations',
+    'Local-only package, not uploaded.',
+    '',
+    '## Next Actions',
+    'Review generated package files.',
+    '',
+  ].join('\n');
+}
+
+async function writeTestReport(repo, options = {}) {
+  const runId = options.runId ?? '20260704T010101Z-test-report-abcdef12';
+  const report = options.report ?? publicSafeReport();
+  const { stdout } = await run([
+    'test-report',
+    '--repo',
+    repo,
+    '--run-id',
+    runId,
+    '--title',
+    'Demo Project Test Report',
+    '--summary',
+    'Public-safe validation report for the demo-project package contract.',
+    '--status',
+    'passed',
+    '--tag',
+    'axis-tools',
+    '--tag',
+    'test-report',
+    '--report',
+    report,
+  ]);
+  return JSON.parse(stdout);
 }
 
 await withTempDir(async (repo) => {
@@ -112,35 +174,6 @@ await withTempDir(async (repo) => {
   await mkdir(repo, { recursive: true });
   await initializeProject(repo);
 
-  const report = [
-    '# Report',
-    '',
-    '## Summary',
-    'Local package smoke report.',
-    '',
-    '## Scope',
-    'Demo project package generation.',
-    '',
-    '## Commands',
-    '- npm test',
-    '',
-    '## Result',
-    'passed',
-    '',
-    '## Evidence',
-    'Focused checks passed.',
-    '',
-    '## Public Safety',
-    'Reviewed; no credentials or private URLs included.',
-    '',
-    '## Limitations',
-    'Local-only package, not uploaded.',
-    '',
-    '## Next Actions',
-    'Review generated package files.',
-    '',
-  ].join('\n');
-
   const { stdout } = await run([
     'test-report',
     '--repo',
@@ -158,7 +191,7 @@ await withTempDir(async (repo) => {
     '--tag',
     'test-report',
     '--report',
-    report,
+    publicSafeReport(),
   ], {
     env: {
       ALIYUN_OSS_ACCESS_KEY_SECRET: 'super-secret-value',
@@ -310,4 +343,161 @@ await withTempDir(async (repo) => {
   assert.equal(metadata.document.doc_type, 'execution_report');
   assert.equal(metadata.experience.related_skill, 'axis-coding-capture');
   assert.equal(metadata.agent_execution.expected_outputs.experience_candidates.required, true);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await initializeProject(repo);
+  const runId = '20260704T020202Z-test-report-abcdef12';
+  await writeTestReport(repo, { runId });
+
+  const { stdout, stderr } = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--dry-run'], {
+    env: {
+      ALIYUN_OSS_ENDPOINT: 'https://oss-example-endpoint.invalid',
+      ALIYUN_OSS_REGION: 'oss-cn-hangzhou',
+      ALIYUN_OSS_ACCESS_KEY_ID: 'LTAI_TEST_ACCESS_KEY_ID',
+      ALIYUN_OSS_ACCESS_KEY_SECRET: 'dry-run-secret-value',
+    },
+  });
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'dry_run');
+  assert.equal(result.uploaded, false);
+  assert.equal(result.project.slug, 'demo-project');
+  assert.equal(result.asset_type, 'test_report');
+  assert.equal(result.run_id, runId);
+  assert.deepEqual(result.release, { channel: 'private_beta', gate: 'not_requested' });
+  assert.equal(result.publish.status, 'local_ready');
+  assert.equal(result.target_prefix, `oss://axis-v01-beta-packages-example/axis/v0.1/private-beta/packages/demo-project/${runId}/`);
+  assert.deepEqual(result.files.map((file) => file.path).sort(), ['experience.md', 'manifest.json', 'metadata.json', 'report.md']);
+  assert.equal(result.upload_order.at(-1).path, 'manifest.json');
+  assert.doesNotMatch(stdout, /dry-run-secret-value|LTAI_TEST_ACCESS_KEY_ID|oss-example-endpoint/);
+  assert.doesNotMatch(stderr, /dry-run-secret-value|LTAI_TEST_ACCESS_KEY_ID|oss-example-endpoint/);
+
+  const manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
+  assert.equal(manifest.publish.status, 'local_ready');
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await initializeProject(repo);
+  const runId = '20260704T030303Z-test-report-abcdef12';
+  const report = publicSafeReport().replace(
+    'Focused checks passed.',
+    'ALIYUN_OSS_ACCESS_KEY_SECRET=leaked-secret-value\nAuthorization: Bearer leaked-token-value',
+  );
+  const packageResult = await writeTestReport(repo, { runId, report });
+
+  const { stdout, stderr } = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--local-only']);
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'local_only');
+  assert.equal(result.uploaded, false);
+  assert.equal(result.redactions, 2);
+  assert.doesNotMatch(stdout, /leaked-secret-value|leaked-token-value/);
+  assert.doesNotMatch(stderr, /leaked-secret-value|leaked-token-value/);
+
+  const packageDir = path.join(repo, packageResult.package_dir);
+  const redactedReport = await readFile(path.join(packageDir, 'report.md'), 'utf8');
+  assert.doesNotMatch(redactedReport, /leaked-secret-value|leaked-token-value/);
+  assert.match(redactedReport, /\[REDACTED\]/);
+
+  const manifest = await readJson(path.join(packageDir, 'manifest.json'));
+  const reportEntry = manifest.files.find((file) => file.path === 'report.md');
+  assert.ok(reportEntry);
+  assert.equal(reportEntry.sha256, sha256(redactedReport));
+  assert.equal(manifest.publish.status, 'local_ready');
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await initializeProject(repo);
+  const configPath = path.join(repo, '.axis', 'config.yml');
+  const config = await readFile(configPath, 'utf8');
+  await writeFile(
+    configPath,
+    config
+      .replace('channel: private_beta', 'channel: public')
+      .replace('gate: not_requested', 'gate: passed'),
+    'utf8',
+  );
+  const runId = '20260704T040404Z-test-report-abcdef12';
+  const packageResult = await writeTestReport(repo, { runId });
+  const manifestPath = path.join(repo, packageResult.package_dir, 'manifest.json');
+  const manifest = await readJson(manifestPath);
+  manifest.release.gate = 'pending';
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+  const error = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--local-only']).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /public release requires release.gate: passed/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await initializeProject(repo);
+  const runId = '20260704T050505Z-test-report-abcdef12';
+  const packageResult = await writeTestReport(repo, { runId });
+  await writeFile(path.join(repo, packageResult.package_dir, '.env'), 'ALIYUN_OSS_ACCESS_KEY_SECRET=unsafe\n', 'utf8');
+
+  const error = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--dry-run']).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /refusing unsafe package path: \.env/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await initializeProject(repo);
+  const runId = '20260704T060606Z-test-report-abcdef12';
+  await writeTestReport(repo, { runId });
+  const mockDir = path.join(repo, 'mock-oss');
+  const objectPrefix = path.join(
+    mockDir,
+    'axis-v01-beta-packages-example',
+    'axis',
+    'v0.1',
+    'private-beta',
+    'packages',
+    'demo-project',
+    runId,
+  );
+  await mkdir(objectPrefix, { recursive: true });
+  await writeFile(path.join(objectPrefix, 'report.md'), 'conflicting remote object\n', 'utf8');
+  await writeFile(path.join(objectPrefix, 'report.md.sha256'), '0000000000000000000000000000000000000000000000000000000000000000\n', 'utf8');
+
+  const uploadEnv = {
+    AXIS_OSS_MOCK_DIR: mockDir,
+    ALIYUN_OSS_ENDPOINT: 'https://oss-example-endpoint.invalid',
+    ALIYUN_OSS_REGION: 'oss-cn-hangzhou',
+    ALIYUN_OSS_ACCESS_KEY_ID: 'LTAI_TEST_ACCESS_KEY_ID',
+    ALIYUN_OSS_ACCESS_KEY_SECRET: 'retry-secret-value',
+  };
+  const firstError = await run(['oss-publish', '--repo', repo, '--run-id', runId], { env: uploadEnv }).catch((caught) => caught);
+
+  assert.equal(firstError.code, 1);
+  assert.match(firstError.stderr, /remote object differs: .*report\.md/);
+  let manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
+  assert.equal(manifest.publish.status, 'failed');
+
+  await rm(path.join(objectPrefix, 'report.md'), { force: true });
+  await rm(path.join(objectPrefix, 'report.md.sha256'), { force: true });
+  const { stdout, stderr } = await run(['oss-publish', '--repo', repo, '--run-id', runId], { env: uploadEnv });
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'upload');
+  assert.equal(result.uploaded, true);
+  assert.equal(result.publish.status, 'published');
+  assert.equal(result.upload_order.at(-1).path, 'manifest.json');
+  assert.doesNotMatch(stdout, /retry-secret-value|LTAI_TEST_ACCESS_KEY_ID|oss-example-endpoint/);
+  assert.doesNotMatch(stderr, /retry-secret-value|LTAI_TEST_ACCESS_KEY_ID|oss-example-endpoint/);
+  assert.equal(existsSync(path.join(objectPrefix, 'manifest.json')), true);
+  const remoteManifest = await readJson(path.join(objectPrefix, 'manifest.json'));
+  assert.equal(remoteManifest.publish.status, 'published');
+  manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
+  assert.equal(manifest.publish.status, 'published');
 });

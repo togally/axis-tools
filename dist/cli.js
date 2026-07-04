@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -68,6 +69,7 @@ Commands:
   validate-config --repo <path>
   coding-capture --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
   test-report --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
+  oss-publish --repo <path> --run-id <run-id> [--dry-run | --local-only]
 
 Skill helper scripts:
   node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
@@ -596,6 +598,548 @@ async function writePackageCommand(assetType) {
         files: manifest.files.map((file) => file.path),
     }, null, 2));
 }
+async function readJsonFile(filePath) {
+    return JSON.parse(await readFile(filePath, 'utf8'));
+}
+async function writeJsonFile(filePath, value) {
+    await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+async function readOptionalLocalConfig(repo) {
+    const configPath = path.join(repo, '.axis', 'config.local.yml');
+    if (!existsSync(configPath))
+        return null;
+    return parseSimpleYaml(await readFile(configPath, 'utf8'));
+}
+async function readPublishConfig(repo) {
+    const config = await readAxisConfig(repo);
+    const localConfig = await readOptionalLocalConfig(repo);
+    if (!localConfig)
+        return { config, localDryRun: false };
+    if (localConfig.contract_version && localConfig.contract_version !== '0.1') {
+        throw new Error('contract_version in .axis/config.local.yml must be "0.1"');
+    }
+    return {
+        config: {
+            ...config,
+            package: {
+                ...config.package,
+                outbox_dir: localConfig.local?.outbox_dir ?? config.package?.outbox_dir,
+            },
+            oss: {
+                ...config.oss,
+                ...localConfig.oss,
+            },
+        },
+        localDryRun: localConfig.local?.dry_run === true,
+    };
+}
+function assertReleaseChannel(value, source) {
+    if (value !== 'private_beta' && value !== 'public') {
+        throw new Error(`${source} must be private_beta or public`);
+    }
+}
+function assertReleaseGate(value, source) {
+    if (value !== 'not_requested' && value !== 'pending' && value !== 'passed' && value !== 'failed') {
+        throw new Error(`${source} must be not_requested, pending, passed, or failed`);
+    }
+}
+function assertPublishStatus(value) {
+    if (value !== 'local_ready' && value !== 'uploading' && value !== 'published' && value !== 'failed') {
+        throw new Error('manifest.publish.status must be local_ready, uploading, published, or failed');
+    }
+}
+function normalizeOssPrefix(prefix) {
+    return prefix.replace(/^\/+|\/+$/g, '');
+}
+function objectKeyFor(prefix, slug, runId, relativePath) {
+    return `${normalizeOssPrefix(prefix)}/${slug}/${runId}/${relativePath}`;
+}
+function ossUri(bucket, objectKey) {
+    return `oss://${bucket}/${objectKey}`;
+}
+function redactSensitiveText(text) {
+    let redactions = 0;
+    const replaceAll = (pattern, replacement) => {
+        text = text.replace(pattern, () => {
+            redactions += 1;
+            return replacement;
+        });
+    };
+    const redactAfterPrefix = (pattern) => {
+        text = text.replace(pattern, (_match, prefix) => {
+            redactions += 1;
+            return `${prefix}[REDACTED]`;
+        });
+    };
+    redactAfterPrefix(/(ALIYUN_OSS_ACCESS_KEY_SECRET\s*=\s*)[^\s`'"]+/gi);
+    redactAfterPrefix(/(ALIYUN_OSS_ACCESS_KEY_ID\s*=\s*)[^\s`'"]+/gi);
+    redactAfterPrefix(/\b(access[_-]?key[_-]?secret\s*[:=]\s*)[^\s`'"]+/gi);
+    redactAfterPrefix(/\b(secret[_-]?access[_-]?key\s*[:=]\s*)[^\s`'"]+/gi);
+    redactAfterPrefix(/(authorization:\s*bearer\s+)[A-Za-z0-9._~+/=-]+/gi);
+    replaceAll(/\bBearer\s+[A-Za-z0-9._~+/=-]+/g, 'Bearer [REDACTED]');
+    replaceAll(/\b(?:AKIA|LTAI)[A-Za-z0-9]{8,}\b/g, '[REDACTED]');
+    replaceAll(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g, '[REDACTED PRIVATE KEY]');
+    return { text, redactions };
+}
+function unsafePathReason(relativePath) {
+    if (!relativePath || relativePath.startsWith('../') || path.isAbsolute(relativePath)) {
+        return relativePath || '(empty)';
+    }
+    const segments = relativePath.split('/');
+    const unsafeDirs = new Set([
+        '.git',
+        '.hg',
+        '.svn',
+        '.cache',
+        '.next',
+        '.nuxt',
+        '.turbo',
+        '.vite',
+        '.parcel-cache',
+        '__pycache__',
+        '.pytest_cache',
+        '.mypy_cache',
+        'node_modules',
+        'coverage',
+        'dist',
+        'build',
+        'out',
+        'target',
+    ]);
+    for (const segment of segments.slice(0, -1)) {
+        if (unsafeDirs.has(segment))
+            return relativePath;
+    }
+    const fileName = segments[segments.length - 1];
+    if (/^\.env(?:\.|$)/i.test(fileName))
+        return relativePath;
+    if (/^(?:\.npmrc|\.pypirc|\.netrc|\.dockerconfigjson)$/i.test(fileName))
+        return relativePath;
+    if (/\.(?:pem|key|p12|pfx|crt|cer)$/i.test(fileName))
+        return relativePath;
+    if (/(^|[._-])(?:cookie|cookies|token|tokens|secret|secrets|credential|credentials)([._-]|$)/i.test(fileName)) {
+        return relativePath;
+    }
+    return null;
+}
+async function collectPackageRelativePaths(packageDir) {
+    const files = [];
+    async function visit(current) {
+        const entries = await readdir(current, { withFileTypes: true });
+        for (const entry of entries) {
+            const child = path.join(current, entry.name);
+            const relativePath = toPosix(path.relative(packageDir, child));
+            const unsafe = unsafePathReason(relativePath);
+            if (unsafe)
+                throw new Error(`refusing unsafe package path: ${unsafe}`);
+            if (entry.isSymbolicLink()) {
+                throw new Error(`refusing symlink in package path: ${relativePath}`);
+            }
+            if (entry.isDirectory()) {
+                await visit(child);
+            }
+            else if (entry.isFile()) {
+                files.push(relativePath);
+            }
+        }
+    }
+    await visit(packageDir);
+    return files.sort();
+}
+async function fileEntryFromRelative(packageDir, existing) {
+    const absolutePath = path.join(packageDir, existing.path);
+    const content = await readFile(absolutePath);
+    const stats = await stat(absolutePath);
+    return {
+        ...existing,
+        sha256: createHash('sha256').update(content).digest('hex'),
+        bytes: stats.size,
+    };
+}
+async function refreshManifestFileEntries(packageDir, manifest) {
+    if (!manifest.files)
+        return;
+    const refreshed = [];
+    for (const entry of manifest.files) {
+        if (entry.path === 'manifest.json') {
+            refreshed.push(entry);
+        }
+        else {
+            refreshed.push(await fileEntryFromRelative(packageDir, entry));
+        }
+    }
+    manifest.files = refreshed;
+}
+async function persistManifest(packageDir, manifest, status) {
+    if (!manifest.publish)
+        manifest.publish = {};
+    if (status)
+        manifest.publish.status = status;
+    await refreshManifestFileEntries(packageDir, manifest);
+    await writeJsonFile(path.join(packageDir, 'manifest.json'), manifest);
+}
+function sortedCopy(values) {
+    return [...values].sort();
+}
+function assertSameStringSet(actual, expected, message) {
+    const actualSorted = sortedCopy(actual);
+    const expectedSorted = sortedCopy(expected);
+    if (actualSorted.length !== expectedSorted.length || actualSorted.some((value, index) => value !== expectedSorted[index])) {
+        throw new Error(`${message}: expected ${expectedSorted.join(', ')}; got ${actualSorted.join(', ')}`);
+    }
+}
+async function validatePackageManifest(repo, packageDir, runId, config, localFiles) {
+    const manifestPath = path.join(packageDir, 'manifest.json');
+    const metadataPath = path.join(packageDir, 'metadata.json');
+    if (!existsSync(manifestPath))
+        throw new Error('manifest.json is required');
+    if (!existsSync(metadataPath))
+        throw new Error('metadata.json is required');
+    const manifest = await readJsonFile(manifestPath);
+    const metadata = await readJsonFile(metadataPath);
+    if (manifest.schema !== 'axis.package.manifest')
+        throw new Error('manifest.schema must be axis.package.manifest');
+    if (manifest.schema_version !== '0.1')
+        throw new Error('manifest.schema_version must be "0.1"');
+    if (manifest.project?.slug !== config.project?.slug)
+        throw new Error('manifest.project.slug must match .axis/config.yml');
+    if (manifest.project?.display_name !== config.project?.display_name) {
+        throw new Error('manifest.project.display_name must match .axis/config.yml');
+    }
+    if (manifest.run?.run_id !== runId)
+        throw new Error('manifest.run.run_id must match --run-id');
+    if (manifest.package_id !== `${config.project?.slug}__${runId}`)
+        throw new Error('manifest.package_id does not match project slug and run id');
+    assertReleaseChannel(manifest.release?.channel, 'manifest.release.channel');
+    assertReleaseGate(manifest.release?.gate, 'manifest.release.gate');
+    if (manifest.release.channel === 'public' && manifest.release.gate !== 'passed') {
+        throw new Error('public release requires release.gate: passed');
+    }
+    if (manifest.release.channel !== config.release?.channel)
+        throw new Error('manifest.release.channel must match .axis/config.yml');
+    if (manifest.release.gate !== config.release?.gate)
+        throw new Error('manifest.release.gate must match .axis/config.yml');
+    if (manifest.publish?.provider !== 'aliyun-oss')
+        throw new Error('manifest.publish.provider must be aliyun-oss');
+    assertPublishStatus(manifest.publish?.status);
+    if (manifest.publish.bucket !== config.oss?.bucket)
+        throw new Error('manifest.publish.bucket must match .axis/config.yml');
+    if (manifest.publish.prefix !== config.oss?.prefix)
+        throw new Error('manifest.publish.prefix must match .axis/config.yml');
+    const expectedBaseUri = `oss://${config.oss?.bucket}/${config.oss?.prefix}/${config.project?.slug}/${runId}/`;
+    if (manifest.publish.base_uri !== expectedBaseUri)
+        throw new Error('manifest.publish.base_uri does not match configured OSS target');
+    if (!Array.isArray(manifest.files) || manifest.files.length === 0)
+        throw new Error('manifest.files is required');
+    const manifestPaths = manifest.files.map((file) => file.path);
+    for (const filePath of manifestPaths) {
+        const unsafe = unsafePathReason(filePath);
+        if (unsafe)
+            throw new Error(`refusing unsafe package path: ${unsafe}`);
+        if (filePath.startsWith('../') || path.isAbsolute(filePath)) {
+            throw new Error(`manifest file path must be relative: ${filePath}`);
+        }
+    }
+    assertSameStringSet(localFiles, manifestPaths, 'manifest.files must match package directory files');
+    for (const entry of manifest.files) {
+        const absolutePath = path.join(packageDir, entry.path);
+        if (!existsSync(absolutePath))
+            throw new Error(`manifest file missing: ${entry.path}`);
+        if (entry.path === 'manifest.json')
+            continue;
+        const actual = await fileEntryFromRelative(packageDir, entry);
+        if (actual.sha256 !== entry.sha256)
+            throw new Error(`manifest checksum mismatch: ${entry.path}`);
+        if (actual.bytes !== entry.bytes)
+            throw new Error(`manifest byte count mismatch: ${entry.path}`);
+    }
+    if (metadata.public_safety?.reviewed !== true)
+        throw new Error('metadata.public_safety.reviewed must be true');
+    if (metadata.public_safety.contains_credentials !== false) {
+        throw new Error('metadata.public_safety.contains_credentials must be false');
+    }
+    if (metadata.public_safety.contains_private_urls !== false) {
+        throw new Error('metadata.public_safety.contains_private_urls must be false');
+    }
+    if (metadata.public_safety.validation?.status !== 'passed') {
+        throw new Error('metadata.public_safety.validation.status must be passed');
+    }
+    if (manifest.public_safety_validation?.status !== 'passed') {
+        throw new Error('manifest.public_safety_validation.status must be passed');
+    }
+    return { manifest, metadata };
+}
+async function redactMarkdownFiles(packageDir, manifest, mutate) {
+    let redactions = 0;
+    for (const entry of manifest.files ?? []) {
+        if (!entry.path.endsWith('.md'))
+            continue;
+        const absolutePath = path.join(packageDir, entry.path);
+        const original = await readFile(absolutePath, 'utf8');
+        const redacted = redactSensitiveText(original);
+        redactions += redacted.redactions;
+        if (mutate && redacted.text !== original) {
+            await writeFile(absolutePath, redacted.text, 'utf8');
+        }
+    }
+    if (mutate && redactions > 0) {
+        await persistManifest(packageDir, manifest, 'local_ready');
+    }
+    return redactions;
+}
+function readOssCredentials(config) {
+    const envMap = {
+        endpoint: config.oss?.endpoint_env,
+        region: config.oss?.region_env,
+        accessKeyId: config.oss?.access_key_id_env,
+        accessKeySecret: config.oss?.access_key_secret_env,
+        securityToken: config.oss?.security_token_env,
+    };
+    const missing = [];
+    const readEnv = (name, required) => {
+        if (!name) {
+            if (required)
+                missing.push('(unconfigured)');
+            return undefined;
+        }
+        const value = process.env[name];
+        if (!value && required)
+            missing.push(name);
+        return value;
+    };
+    const credentials = {
+        endpoint: readEnv(envMap.endpoint, true),
+        region: readEnv(envMap.region, true),
+        accessKeyId: readEnv(envMap.accessKeyId, true),
+        accessKeySecret: readEnv(envMap.accessKeySecret, true),
+        securityToken: readEnv(envMap.securityToken, false),
+    };
+    if (missing.length > 0) {
+        throw new Error(`missing required OSS environment variables: ${missing.join(', ')}`);
+    }
+    return credentials;
+}
+class LocalMockOssStorage {
+    root;
+    bucket;
+    constructor(root, bucket) {
+        this.root = root;
+        this.bucket = bucket;
+    }
+    objectPath(key) {
+        return path.join(this.root, this.bucket, ...key.split('/'));
+    }
+    async headObject(key) {
+        const objectPath = this.objectPath(key);
+        if (!existsSync(objectPath))
+            return null;
+        const sidecarPath = `${objectPath}.sha256`;
+        if (existsSync(sidecarPath)) {
+            return { sha256: (await readFile(sidecarPath, 'utf8')).trim() || null };
+        }
+        return {
+            sha256: createHash('sha256').update(await readFile(objectPath)).digest('hex'),
+        };
+    }
+    async putObject(key, filePath, metadata) {
+        const objectPath = this.objectPath(key);
+        await mkdir(path.dirname(objectPath), { recursive: true });
+        await writeFile(objectPath, await readFile(filePath));
+        await writeFile(`${objectPath}.sha256`, `${metadata.sha256}\n`, 'utf8');
+    }
+}
+class AliyunOssStorage {
+    client;
+    constructor(config, credentials) {
+        const require = createRequire(import.meta.url);
+        const OSS = require('ali-oss');
+        this.client = new OSS({
+            region: credentials.region,
+            endpoint: credentials.endpoint,
+            accessKeyId: credentials.accessKeyId,
+            accessKeySecret: credentials.accessKeySecret,
+            stsToken: credentials.securityToken,
+            bucket: config.oss?.bucket,
+        });
+    }
+    async headObject(key) {
+        try {
+            const result = await this.client.head(key);
+            return { sha256: result.meta?.sha256 ?? null };
+        }
+        catch (error) {
+            if (isNotFoundError(error))
+                return null;
+            throw error;
+        }
+    }
+    async putObject(key, filePath, metadata) {
+        await this.client.put(key, filePath, {
+            meta: {
+                sha256: metadata.sha256,
+            },
+        });
+    }
+}
+function isNotFoundError(error) {
+    if (!error || typeof error !== 'object')
+        return false;
+    const maybe = error;
+    return maybe.status === 404 || maybe.code === 'NoSuchKey' || maybe.name === 'NoSuchKeyError';
+}
+function storageAdapter(config, credentials) {
+    const mockRoot = process.env.AXIS_OSS_MOCK_DIR;
+    if (mockRoot) {
+        return new LocalMockOssStorage(path.resolve(mockRoot), config.oss?.bucket);
+    }
+    return new AliyunOssStorage(config, credentials);
+}
+function mediaTypeForPath(filePath, fallback) {
+    if (fallback)
+        return fallback;
+    if (filePath.endsWith('.json'))
+        return 'application/json';
+    if (filePath.endsWith('.md'))
+        return 'text/markdown';
+    return 'application/octet-stream';
+}
+async function buildPublishFiles(packageDir, manifest, config, runId) {
+    const bucket = config.oss?.bucket;
+    const prefix = config.oss?.prefix;
+    const slug = config.project?.slug;
+    const files = [];
+    for (const entry of manifest.files ?? []) {
+        const absolutePath = path.join(packageDir, entry.path);
+        const content = await readFile(absolutePath);
+        const stats = await stat(absolutePath);
+        const objectKey = objectKeyFor(prefix, slug, runId, entry.path);
+        files.push({
+            path: entry.path,
+            absolutePath,
+            media_type: mediaTypeForPath(entry.path, entry.media_type),
+            sha256: createHash('sha256').update(content).digest('hex'),
+            bytes: stats.size,
+            object_key: objectKey,
+            target_uri: ossUri(bucket, objectKey),
+        });
+    }
+    return files.sort((left, right) => {
+        if (left.path === 'manifest.json')
+            return 1;
+        if (right.path === 'manifest.json')
+            return -1;
+        return left.path.localeCompare(right.path);
+    });
+}
+async function uploadPublishFiles(adapter, files) {
+    const uploaded = [];
+    for (const file of files) {
+        const existing = await adapter.headObject(file.object_key);
+        if (existing) {
+            if (existing.sha256 !== file.sha256) {
+                throw new Error(`remote object differs: ${file.object_key}`);
+            }
+            uploaded.push({ ...file, status: 'already_present' });
+            continue;
+        }
+        await adapter.putObject(file.object_key, file.absolutePath, { sha256: file.sha256 });
+        uploaded.push({ ...file, status: 'uploaded' });
+    }
+    return uploaded;
+}
+function publishSummary(mode, uploaded, metadata, manifest, files, redactions) {
+    return {
+        ok: true,
+        mode,
+        uploaded,
+        project: {
+            slug: manifest.project?.slug,
+            display_name: manifest.project?.display_name,
+        },
+        asset_type: metadata.artifact?.type,
+        run_id: manifest.run?.run_id,
+        release: {
+            channel: manifest.release?.channel,
+            gate: manifest.release?.gate,
+        },
+        publish: {
+            status: manifest.publish?.status,
+            bucket: manifest.publish?.bucket,
+            prefix: manifest.publish?.prefix,
+            base_uri: manifest.publish?.base_uri,
+        },
+        target_prefix: manifest.publish?.base_uri,
+        files: files.map((file) => ({
+            path: file.path,
+            media_type: file.media_type,
+            bytes: file.bytes,
+            sha256: file.sha256,
+            target_uri: file.target_uri,
+            status: file.status,
+        })),
+        upload_order: files.map((file) => ({
+            path: file.path,
+            target_uri: file.target_uri,
+            status: file.status,
+        })),
+        redactions,
+    };
+}
+async function ossPublishCommand() {
+    const repo = repoArg();
+    const runId = requireArg('--run-id');
+    if (!/^\d{8}T\d{6}Z-[a-z0-9-]+-[a-f0-9]{8}$/.test(runId)) {
+        throw new Error('--run-id must match YYYYMMDDThhmmssZ-name-8hex');
+    }
+    const { config, localDryRun } = await readPublishConfig(repo);
+    const { errors } = validateAxisConfig(config);
+    if (errors.length > 0) {
+        throw new Error(errors.join('\n'));
+    }
+    const dryRun = hasFlag('--dry-run') || localDryRun;
+    const localOnly = hasFlag('--local-only');
+    if (dryRun && localOnly)
+        throw new Error('--dry-run and --local-only cannot be combined');
+    const mode = dryRun ? 'dry_run' : localOnly ? 'local_only' : 'upload';
+    const packageDir = path.join(repo, config.package?.outbox_dir, 'v0.1', config.project?.slug, runId);
+    if (!existsSync(packageDir)) {
+        throw new Error(`outbox run not found: ${relativeToRepo(repo, packageDir)}`);
+    }
+    const localFiles = await collectPackageRelativePaths(packageDir);
+    const { manifest, metadata } = await validatePackageManifest(repo, packageDir, runId, config, localFiles);
+    const redactions = await redactMarkdownFiles(packageDir, manifest, mode !== 'dry_run');
+    if (mode !== 'dry_run') {
+        await persistManifest(packageDir, manifest, manifest.publish?.status);
+    }
+    const plannedFiles = await buildPublishFiles(packageDir, manifest, config, runId);
+    if (mode === 'dry_run' || mode === 'local_only') {
+        console.log(JSON.stringify(publishSummary(mode, false, metadata, manifest, plannedFiles, redactions), null, 2));
+        return;
+    }
+    const credentials = readOssCredentials(config);
+    const adapter = storageAdapter(config, credentials);
+    try {
+        await persistManifest(packageDir, manifest, 'uploading');
+        const uploadFiles = await buildPublishFiles(packageDir, manifest, config, runId);
+        const manifestUploadFile = uploadFiles.find((file) => file.path === 'manifest.json');
+        if (!manifestUploadFile)
+            throw new Error('manifest.json is required');
+        const contentUploadFiles = uploadFiles.filter((file) => file.path !== 'manifest.json');
+        const uploadedFiles = await uploadPublishFiles(adapter, contentUploadFiles);
+        await persistManifest(packageDir, manifest, 'published');
+        const finalFiles = await buildPublishFiles(packageDir, manifest, config, runId);
+        const finalManifestUploadFile = finalFiles.find((file) => file.path === 'manifest.json');
+        if (!finalManifestUploadFile)
+            throw new Error('manifest.json is required');
+        const manifestUploadedFiles = await uploadPublishFiles(adapter, [finalManifestUploadFile]);
+        const statuses = new Map([...uploadedFiles, ...manifestUploadedFiles].map((file) => [file.path, file.status]));
+        console.log(JSON.stringify(publishSummary(mode, true, metadata, manifest, finalFiles.map((file) => ({ ...file, status: statuses.get(file.path) ?? 'uploaded' })), redactions), null, 2));
+    }
+    catch (error) {
+        await persistManifest(packageDir, manifest, 'failed');
+        throw new Error(error instanceof Error ? error.message : String(error));
+    }
+}
 function parseInstallAgentArg(value) {
     if (!value || value === 'all')
         return 'all';
@@ -739,6 +1283,10 @@ async function main() {
     }
     if (command === 'test-report') {
         await writePackageCommand('test_report');
+        return;
+    }
+    if (command === 'oss-publish') {
+        await ossPublishCommand();
         return;
     }
     printUsage();
