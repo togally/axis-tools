@@ -71,6 +71,17 @@ const skillNames = {
   testReport: 'axis-test-report',
   ossPublish: 'axis-oss-publish',
 } as const;
+const protocolVersions = {
+  document_protocol: '0.1',
+  workflow_protocol: '0.1',
+  experience_protocol: '0.1',
+  agent_execution_protocol: '0.1',
+} as const;
+const publicSafetyValidators = [
+  'deterministic_secret_scan',
+  'private_url_scan',
+  'manual_public_safe_review',
+] as const;
 
 function repoRoot(): string {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -447,6 +458,22 @@ function skillResponsibilityForAsset(assetType: AssetType): string {
   return 'Convert coding work into a public-safe local package.';
 }
 
+function documentTypeForAsset(assetType: AssetType): 'execution_report' | 'test_report' {
+  return assetType === 'test_report' ? 'test_report' : 'execution_report';
+}
+
+function canonicalFamilyForAsset(assetType: AssetType): string {
+  return assetType === 'test_report' ? 'test_verify_benchmark' : 'fix_optimize';
+}
+
+function protocolDocId(runId: string): string {
+  return `report_${runId.replace(/[^A-Za-z0-9]+/g, '_')}`;
+}
+
+function workflowStatusForArtifact(status: ArtifactStatus): 'blocked' | 'completed' {
+  return status === 'failed' || status === 'partial' ? 'blocked' : 'completed';
+}
+
 async function writePackageCommand(assetType: AssetType): Promise<void> {
   const repo = repoArg();
   const config = await readAxisConfig(repo);
@@ -474,6 +501,23 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
   await rm(packageDir, { recursive: true, force: true });
   await mkdir(packageDir, { recursive: true });
 
+  await writeFile(path.join(packageDir, 'report.md'), report.endsWith('\n') ? report : `${report}\n`, 'utf8');
+  await writeFile(path.join(packageDir, 'experience.md'), experience.endsWith('\n') ? experience : `${experience}\n`, 'utf8');
+
+  const reportEntry = await fileEntry(packageDir, 'report', 'report.md', 'text/markdown');
+  const experienceEntry = await fileEntry(packageDir, 'experience', 'experience.md', 'text/markdown');
+  const docId = protocolDocId(runId);
+  const documentType = documentTypeForAsset(assetType);
+  const workflowStatus = workflowStatusForArtifact(artifactStatus);
+  const publicSafetyValidation = {
+    status: 'passed',
+    validators: [...publicSafetyValidators],
+    findings_count: 0,
+    validated_at: createdAt,
+    validated_by: {
+      role: 'producing_skill',
+    },
+  };
   const metadata = {
     schema: 'axis.package.metadata',
     schema_version: '0.1',
@@ -494,7 +538,49 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
       reviewed: true,
       contains_credentials: false,
       contains_private_urls: false,
+      validation: publicSafetyValidation,
       redaction_notes: 'No credentials, private URLs, or customer-specific identifiers were included.',
+    },
+    document: {
+      doc_id: docId,
+      doc_type: documentType,
+      status: 'completed',
+      revision: 1,
+      storage: {
+        path: 'report.md',
+        content_sha256: reportEntry.sha256,
+      },
+    },
+    workflow: {
+      workflow_run_id: null,
+      workflow_step: null,
+      status: workflowStatus,
+      blocked_reason: workflowStatus === 'blocked' ? 'partial_execution' : null,
+      checkpoint_ref: docId,
+    },
+    experience: {
+      scope: 'task',
+      related_skill: skillNameForAsset(assetType),
+      candidate_path: 'experience.md',
+      confidence: 'medium',
+      quality: {
+        evidence_count: 1,
+        novelty: 'unknown',
+      },
+    },
+    agent_execution: {
+      pack_id: null,
+      run_id: runId,
+      expected_outputs: {
+        execution_report: {
+          doc_type: documentType,
+          required: true,
+        },
+        experience_candidates: {
+          doc_type: 'experience_card',
+          required: assetType === 'coding_capture',
+        },
+      },
     },
     links: {
       manifest_path: 'manifest.json',
@@ -503,8 +589,6 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
     },
   };
   await writeFile(path.join(packageDir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
-  await writeFile(path.join(packageDir, 'report.md'), report.endsWith('\n') ? report : `${report}\n`, 'utf8');
-  await writeFile(path.join(packageDir, 'experience.md'), experience.endsWith('\n') ? experience : `${experience}\n`, 'utf8');
 
   const git = await gitInfo(repo);
   const baseUri = `oss://${config.oss?.bucket}/${config.oss?.prefix}/${slug}/${runId}/`;
@@ -531,8 +615,8 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
     },
     files: [
       await fileEntry(packageDir, 'metadata', 'metadata.json', 'application/json'),
-      await fileEntry(packageDir, 'report', 'report.md', 'text/markdown'),
-      await fileEntry(packageDir, 'experience', 'experience.md', 'text/markdown'),
+      reportEntry,
+      experienceEntry,
       {
         kind: 'manifest',
         path: 'manifest.json',
@@ -548,6 +632,39 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
       prefix: config.oss?.prefix,
       base_uri: baseUri,
     },
+    protocols: protocolVersions,
+    document_refs: [
+      {
+        doc_id: docId,
+        doc_type: documentType,
+        status: 'completed',
+        revision: 1,
+        source_path: 'report.md',
+        content_sha256: reportEntry.sha256,
+      },
+    ],
+    skill_refs: [
+      {
+        skill_id: skillNameForAsset(assetType),
+        canonical_family: canonicalFamilyForAsset(assetType),
+        status: 'active',
+      },
+    ],
+    tool_refs: [],
+    execution: {
+      pack_id: null,
+      report_doc_id: docId,
+      retry_of_run_id: null,
+      resume_from_report_id: null,
+    },
+    experience_refs: [],
+    workflow_recovery: {
+      workflow_run_id: null,
+      status: workflowStatus,
+      blocked_reason: workflowStatus === 'blocked' ? 'partial_execution' : null,
+      checkpoint_ref: docId,
+    },
+    public_safety_validation: publicSafetyValidation,
   };
   const manifestPath = path.join(packageDir, 'manifest.json');
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');

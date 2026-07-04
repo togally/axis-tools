@@ -191,6 +191,52 @@ await withTempDir(async (repo) => {
     assert.match(file.sha256, /^[a-f0-9]{64}$/);
     assert.equal(Number.isInteger(file.bytes), true);
   }
+  const reportEntry = manifest.files.find((file) => file.path === 'report.md');
+  assert.ok(reportEntry);
+  assert.deepEqual(manifest.protocols, {
+    document_protocol: '0.1',
+    workflow_protocol: '0.1',
+    experience_protocol: '0.1',
+    agent_execution_protocol: '0.1',
+  });
+  assert.deepEqual(manifest.document_refs, [
+    {
+      doc_id: 'report_20260703T121530Z_test_report_a1b2c3d4',
+      doc_type: 'test_report',
+      status: 'completed',
+      revision: 1,
+      source_path: 'report.md',
+      content_sha256: reportEntry.sha256,
+    },
+  ]);
+  assert.deepEqual(manifest.skill_refs, [
+    {
+      skill_id: 'axis-test-report',
+      canonical_family: 'test_verify_benchmark',
+      status: 'active',
+    },
+  ]);
+  assert.deepEqual(manifest.tool_refs, []);
+  assert.deepEqual(manifest.execution, {
+    pack_id: null,
+    report_doc_id: 'report_20260703T121530Z_test_report_a1b2c3d4',
+    retry_of_run_id: null,
+    resume_from_report_id: null,
+  });
+  assert.deepEqual(manifest.experience_refs, []);
+  assert.deepEqual(manifest.workflow_recovery, {
+    workflow_run_id: null,
+    status: 'completed',
+    blocked_reason: null,
+    checkpoint_ref: 'report_20260703T121530Z_test_report_a1b2c3d4',
+  });
+  assert.equal(manifest.public_safety_validation.status, 'passed');
+  assert.deepEqual(manifest.public_safety_validation.validators, [
+    'deterministic_secret_scan',
+    'private_url_scan',
+    'manual_public_safe_review',
+  ]);
+  assert.equal(manifest.public_safety_validation.findings_count, 0);
 
   const metadata = await readJson(path.join(packageDir, 'metadata.json'));
   assert.equal(metadata.schema, 'axis.package.metadata');
@@ -201,6 +247,28 @@ await withTempDir(async (repo) => {
   assert.equal(metadata.public_safety.reviewed, true);
   assert.equal(metadata.public_safety.contains_credentials, false);
   assert.equal(metadata.public_safety.contains_private_urls, false);
+  assert.equal(metadata.public_safety.validation.status, 'passed');
+  assert.deepEqual(metadata.public_safety.validation.validators, [
+    'deterministic_secret_scan',
+    'private_url_scan',
+    'manual_public_safe_review',
+  ]);
+  assert.equal(metadata.public_safety.validation.findings_count, 0);
+  assert.equal(metadata.public_safety.validation.validated_by.role, 'producing_skill');
+  assert.equal(metadata.document.doc_id, 'report_20260703T121530Z_test_report_a1b2c3d4');
+  assert.equal(metadata.document.doc_type, 'test_report');
+  assert.equal(metadata.document.status, 'completed');
+  assert.equal(metadata.document.revision, 1);
+  assert.equal(metadata.document.storage.path, 'report.md');
+  assert.equal(metadata.document.storage.content_sha256, reportEntry.sha256);
+  assert.equal(metadata.workflow.status, 'completed');
+  assert.equal(metadata.workflow.checkpoint_ref, 'report_20260703T121530Z_test_report_a1b2c3d4');
+  assert.equal(metadata.experience.scope, 'task');
+  assert.equal(metadata.experience.related_skill, 'axis-test-report');
+  assert.equal(metadata.experience.quality.evidence_count, 1);
+  assert.equal(metadata.agent_execution.run_id, '20260703T121530Z-test-report-a1b2c3d4');
+  assert.equal(metadata.agent_execution.expected_outputs.execution_report.required, true);
+  assert.equal(metadata.agent_execution.expected_outputs.experience_candidates.required, false);
   assert.equal(metadata.links.manifest_path, 'manifest.json');
   assert.equal(metadata.links.report_path, 'report.md');
   assert.equal(metadata.links.experience_path, 'experience.md');
@@ -239,4 +307,7 @@ await withTempDir(async (repo) => {
   const metadata = await readJson(path.join(repo, result.package_dir, 'metadata.json'));
   assert.equal(metadata.artifact.type, 'coding_capture');
   assert.equal(metadata.skill.name, 'axis-coding-capture');
+  assert.equal(metadata.document.doc_type, 'execution_report');
+  assert.equal(metadata.experience.related_skill, 'axis-coding-capture');
+  assert.equal(metadata.agent_execution.expected_outputs.experience_candidates.required, true);
 });
