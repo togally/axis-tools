@@ -56,6 +56,10 @@ axis-tools/
 | --- | --- |
 | `axis-ali-dashboard` | 生成、修复并校验阿里云 CloudMonitor/SLS 大屏 JSON，包含 SLS 下钻和业务流大屏模式。<br>Create, repair, and validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, including SLS drilldowns and business-flow dashboard patterns. |
 | `axis-benchmark` | 对 API、本地模块或依赖链路做保守压测，比较延迟/吞吐，并把 QPS/并发转换成明确口径的容量说明。项目接口或模块 runner 应通过本地文件提供。<br>Run conservative API, local-module, or dependency-path benchmarks, compare latency/throughput, and translate QPS/concurrency into clearly scoped capacity estimates. Project endpoints or module runners should be supplied through local files. |
+| `axis-project-init` | 初始化 Axis v0.1 项目的 `.axis/config.yml`、本地 outbox 忽略规则和 private-beta 发布元数据。<br>Initialize Axis v0.1 `.axis/config.yml`, local outbox ignore rules, and private-beta release metadata. |
+| `axis-coding-capture` | 将编码、重构、缺陷修复或架构工作采集为本地 outbox 执行报告和可复用经验卡片。<br>Capture coding, refactor, bugfix, or architecture work as a local outbox execution report and reusable experience card. |
+| `axis-test-report` | 将 build/lint/test/压测等验证结果采集为本地 outbox 测试报告包。<br>Capture build, lint, test, benchmark, or pressure-test validation as a local outbox test report package. |
+| `axis-oss-publish` | 校验、脱敏、dry-run 或上传 Axis v0.1 outbox 包到受控阿里云 OSS 前缀，并保证 `manifest.json` 最后上传。<br>Validate, redact, dry-run, or upload Axis v0.1 outbox packages to the controlled Aliyun OSS prefix, with `manifest.json` uploaded last. |
 | `axis-create-skill` | 扫描对话中是否存在可复用、适合公开仓沉淀的技能机会，并先判断是否应该创建。<br>Scan conversations for reusable, public-safe skill opportunities and decide whether a skill belongs in this public repository before creating one. |
 | `axis-update` | 从本仓库刷新并校验本机安装的 Axis packaged skills。<br>Refresh and validate locally installed Axis packaged skills from this repository. |
 
