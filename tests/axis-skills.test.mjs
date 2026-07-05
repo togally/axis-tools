@@ -237,17 +237,85 @@ const packagedSkillNames = [
   'axis-arch-optimize',
   'axis-benchmark',
   'axis-bugfix',
+  'axis-coding-capture',
   'axis-create-skill',
   'axis-db-design-doc',
   'axis-development-doc',
+  'axis-oss-publish',
+  'axis-project-init',
   'axis-review-summary',
   'axis-tech-design-doc',
   'axis-test-driven-development',
+  'axis-test-report',
   'axis-testing',
   'axis-update',
 ];
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
+
+const v01CaptureSkills = [
+  'axis-project-init',
+  'axis-coding-capture',
+  'axis-test-report',
+  'axis-oss-publish',
+];
+for (const skillName of v01CaptureSkills) {
+  const skill = manifest.skills.find((entry) => entry.name === skillName);
+  assert.ok(skill, `${skillName} should be packaged`);
+  assert.deepEqual(skill.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+  assert.match(skill.description, /^Use when\b/);
+  assert.match(skill.description, /[\u3400-\u9FFF]/);
+
+  const body = await readFile(path.join(repoRoot, 'skills', skillName, 'SKILL.md'), 'utf8');
+  assert.match(body, new RegExp(`name: ${skillName}`));
+  assert.match(body, /\.axis\/outbox/);
+  assert.match(body, /release\.channel/);
+  assert.match(body, /release\.gate/);
+  assert.match(body, /private_beta/);
+  assert.match(body, /axis oss-publish|axis-oss-publish/);
+  assert.match(body, /After Use Deposition/);
+
+  const openAiYaml = await readFile(path.join(repoRoot, 'skills', skillName, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(openAiYaml, /allow_implicit_invocation: true/);
+}
+
+const projectInitBody = await readFile(path.join(repoRoot, 'skills', 'axis-project-init', 'SKILL.md'), 'utf8');
+assert.match(projectInitBody, /axis project-init/);
+assert.match(projectInitBody, /\.axis\/config\.yml/);
+
+const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-coding-capture', 'SKILL.md'), 'utf8');
+for (const requiredSection of [
+  '需求理解摘要',
+  '实现摘要',
+  '文件改动摘要',
+  'API/数据模型变化',
+  '验证命令',
+  '风险和后续事项',
+  '可复用经验卡片',
+]) {
+  assert.match(codingCaptureBody, new RegExp(requiredSection));
+}
+
+const testReportBody = await readFile(path.join(repoRoot, 'skills', 'axis-test-report', 'SKILL.md'), 'utf8');
+for (const requiredSection of [
+  'build/lint/test',
+  '压测输入和结果摘要',
+  '原始日志附件',
+  '失败原因分析',
+  '复测建议',
+]) {
+  assert.match(testReportBody, new RegExp(requiredSection));
+}
+
+const ossPublishBody = await readFile(path.join(repoRoot, 'skills', 'axis-oss-publish', 'SKILL.md'), 'utf8');
+assert.match(ossPublishBody, /manifest\.json.*last/i);
+assert.match(ossPublishBody, /--dry-run/);
+assert.match(ossPublishBody, /--local-only/);
+
+const publicCatalog = await readFile(path.join(repoRoot, 'catalog', 'skills.public.yaml'), 'utf8');
+for (const skillName of v01CaptureSkills) {
+  assert.doesNotMatch(publicCatalog, new RegExp(skillName), `${skillName} should stay out of the public catalog before the release gate passes`);
+}
 
 const benchmarkSkill = manifest.skills.find((skill) => skill.name === 'axis-benchmark');
 assert.ok(benchmarkSkill);

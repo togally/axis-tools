@@ -1,0 +1,7 @@
+interface:
+  display_name: "Coding Capture"
+  short_description: "Capture coding work reports / 采集编码工作报告"
+  default_prompt: "Use $axis-coding-capture to write a public-safe Axis coding capture package."
+
+policy:
+  allow_implicit_invocation: true
