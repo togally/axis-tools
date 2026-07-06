@@ -158,6 +158,17 @@
         "SKILL.md",
         "agents/openai.yaml"
       ]
+    },
+    {
+      "name": "axis-yunxiao-codeup",
+      "description": "Use when accessing Yunxiao Codeup repositories or merge requests through OpenAPI with an environment token. / 用于通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。",
+      "path": "skills/axis-yunxiao-codeup",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/yunxiao-openapi.md",
+        "scripts/yunxiao_codeup.py"
+      ]
     }
   ]
 }

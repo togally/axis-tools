@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
 const publicRepoSensitivePattern =
-  /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|codeup\.aliyun|aliyuncs\.com)\b/i;
+  /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei)\b/i;
 const codingDesignSkillPattern =
   /\b(api|architecture|architectural|benchmark|bugfix|code|coding|database|dbdd|design|document|implementation|implementing|optimization|optimise|optimize|performance|refactor|schema|sql|tdd|test|testing|technical)\b/i;
 const afterUseDepositionSection = `

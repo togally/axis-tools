@@ -249,6 +249,7 @@ const packagedSkillNames = [
   'axis-test-report',
   'axis-testing',
   'axis-update',
+  'axis-yunxiao-codeup',
 ];
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
@@ -431,10 +432,22 @@ assert.match(axisTestingBody, /status boundary/i);
 assert.match(axisTestingBody, /progress/i);
 assert.match(axisTestingBody, /cleanup/i);
 
+const allSkillFiles = await readTreeFiles(path.join(repoRoot, 'skills'));
+const manifestPath = path.join(repoRoot, 'skills', 'manifest.json');
+const yunxiaoCodeupFiles = allSkillFiles.filter((filePath) => filePath.includes(`${path.sep}axis-yunxiao-codeup${path.sep}`));
 const publicSkillText = (await Promise.all(
-  (await readTreeFiles(path.join(repoRoot, 'skills'))).map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
+  allSkillFiles
+    .filter((filePath) => filePath !== manifestPath && !yunxiaoCodeupFiles.includes(filePath))
+    .map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
 )).join('\n');
 assert.doesNotMatch(publicSkillText, /PetMall|petmall|PETMALL|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup/);
+assert.ok(yunxiaoCodeupFiles.length > 0, 'axis-yunxiao-codeup should be packaged');
+const yunxiaoCodeupText = (await Promise.all(
+  yunxiaoCodeupFiles.map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
+)).join('\n');
+assert.match(yunxiaoCodeupText, /CODE_UP_API_TOKEN/);
+assert.match(yunxiaoCodeupText, /x-yunxiao-token/);
+assert.doesNotMatch(yunxiaoCodeupText, /PetMall|petmall|PETMALL|owh-test|whalecloud|jiazhiwei|66f37335691d6fdafb3ccf4e|114\.55\.114\.219/);
 
 for (const skillName of packagedSkillNames) {
   const skillDir = path.join(repoRoot, 'skills', skillName);
