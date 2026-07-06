@@ -52,6 +52,16 @@
       ]
     },
     {
+      "name": "axis-business-domain-doc",
+      "description": "Use when generating Axis v0.2 domain business and technical documents for one business_id from business_inventory and repository evidence. / 用于根据 business_inventory 中的一个 business_id 和仓库证据生成 Axis v0.2 业务域业务文档与技术文档。",
+      "path": "skills/axis-business-domain-doc",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "quick_validate.py"
+      ]
+    },
+    {
       "name": "axis-coding-capture",
       "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.1 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.1 执行报告和经验卡片。",
       "path": "skills/axis-coding-capture",
@@ -88,6 +98,16 @@
       ]
     },
     {
+      "name": "axis-doc-drift-capture",
+      "description": "Use when a completed task or PR needs Axis v0.2 task records, version iteration records, and document drift impact classification. / 用于在任务或 PR 完成后记录 Axis v0.2 任务执行、版本迭代和文档漂移影响。",
+      "path": "skills/axis-doc-drift-capture",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "quick_validate.py"
+      ]
+    },
+    {
       "name": "axis-oss-publish",
       "description": "Use when an Axis v0.1 local outbox package must be validated, redacted locally, dry-run checked, or uploaded to the controlled Aliyun OSS prefix. / 用于校验、脱敏、本地预演或上传 Axis v0.1 outbox 包到受控阿里云 OSS 前缀。",
       "path": "skills/axis-oss-publish",
@@ -100,6 +120,15 @@
       "name": "axis-project-init",
       "description": "Use when starting an Axis v0.1 project that needs .axis/config.yml, .axis/outbox/ ignore rules, and private_beta release metadata before capture or OSS publish. / 用于初始化 Axis v0.1 项目的配置、outbox 忽略规则和 private_beta 发布元数据。",
       "path": "skills/axis-project-init",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-project-knowledge-bootstrap",
+      "description": "Use when a repository needs its first Axis v0.2 project knowledge set for global technical architecture, global business architecture, business inventory, and document gap report. / 用于为存量项目首次生成 Axis v0.2 项目知识文档集，包括全局技术架构、全局业务架构、子业务清单和文档缺口报告。",
+      "path": "skills/axis-project-knowledge-bootstrap",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"

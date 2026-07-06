@@ -33,8 +33,9 @@ bundles locally and keep public-safe execution records consistent.
 
 ```text
 axis-tools/
+├── .axis/config.yml        # Axis v0.1 public-safe repo config for local outbox validation
 ├── catalog/                 # 公共安全 catalog 示例和索引
-├── docs/                    # Axis v0.1 合同和 doc-as-code 协议
+├── docs/                    # Axis v0.1 合同、doc-as-code 协议和 v0.2 项目知识协议
 ├── governance/              # 贡献、安全、评审和废弃规则
 ├── schemas/                 # skill、asset、catalog、taxonomy JSON Schema
 ├── scripts/                 # 安装、刷新、创建、沉淀 helper scripts
@@ -72,6 +73,9 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 文档设计 | `axis-development-doc` | 生成概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。 |
 | 文档设计 | `axis-tech-design-doc` | 撰写、优化或定稿技术设计文档和方案设计。 |
 | 文档设计 | `axis-db-design-doc` | 生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。 |
+| 项目知识 | `axis-project-knowledge-bootstrap` | 为存量项目首次生成全局技术架构、全局业务架构、子业务清单和文档缺口报告。 |
+| 项目知识 | `axis-business-domain-doc` | 根据 `business_inventory` 中的一个业务项生成业务域业务文档和技术文档。 |
+| 项目知识 | `axis-doc-drift-capture` | 任务或 PR 完成后记录 task_execution_record、version_iteration_record 和文档漂移影响范围。 |
 | 评审 | `axis-review-summary` | 在深入评审 PR、变更集或文档集前，生成待审文件摘要和风险定位。 |
 | 项目初始化 | `axis-project-init` | 初始化 Axis v0.1 项目的 `.axis/config.yml`、outbox 忽略规则和 private-beta 发布元数据。 |
 | 留档与发布 | `axis-coding-capture` | 将编码、重构、缺陷修复或架构工作采集为执行报告和经验卡片。 |
@@ -216,6 +220,10 @@ axis validate-config --repo /path/to/project
 
 本地偏好可以放在 `.axis/config.local.yml`，例如 dry-run 或本地脱敏规则文件路径。该文件必须保持本地使用，不应提交；也不应包含真实凭据值。
 
+### 项目知识协议
+
+`docs/v0.2-project-knowledge-doc-protocol.md` 是三个项目知识 skills 的源控协议依据：`axis-project-knowledge-bootstrap`、`axis-business-domain-doc` 和 `axis-doc-drift-capture`。它规定 `.axis/docs/projects/{project_slug}` 下的全局架构、业务清单、领域文档、任务记录、版本记录和文档漂移记录结构，并要求缺失证据必须显式记录，不能编造业务或技术事实。
+
 OSS 发布前，在 shell 环境中设置 `.axis/config.yml` 里声明的环境变量：
 
 ```bash
@@ -332,8 +340,9 @@ Use this repository when:
 
 ```text
 axis-tools/
+├── .axis/config.yml        # Axis v0.1 public-safe repo config for local outbox validation
 ├── catalog/                 # Public-safe catalog examples and indexes
-├── docs/                    # Axis v0.1 contract and doc-as-code protocols
+├── docs/                    # Axis v0.1 contract, doc-as-code protocols, and v0.2 project knowledge protocol
 ├── governance/              # Contribution, security, review, and deprecation rules
 ├── schemas/                 # JSON Schema for skills, assets, catalogs, and taxonomy
 ├── scripts/                 # Install, refresh, create, and deposit helper scripts
@@ -371,6 +380,9 @@ scripts/                 # Optional reusable validators or runners
 | Documentation and design | `axis-development-doc` | Generate overview design, detailed design, database design, API docs, test plans, deployment docs, or Word documents. |
 | Documentation and design | `axis-tech-design-doc` | Write, refine, or finalize technical design and solution design documents. |
 | Documentation and design | `axis-db-design-doc` | Generate database design documents, data dictionaries, schema design, ER docs, or Word DBDD files. |
+| Project knowledge | `axis-project-knowledge-bootstrap` | Generate the first global technical architecture, global business architecture, business inventory, and document gap report for an existing project. |
+| Project knowledge | `axis-business-domain-doc` | Generate domain business and technical documents for one business item from `business_inventory`. |
+| Project knowledge | `axis-doc-drift-capture` | Record task execution, version iteration impact, and affected documents after a task or PR completes. |
 | Review | `axis-review-summary` | Summarize review scope and risk before a deep PR, change-set, or document-set review. |
 | Project setup | `axis-project-init` | Initialize Axis v0.1 `.axis/config.yml`, outbox ignore rules, and private-beta release metadata. |
 | Deposition and release | `axis-coding-capture` | Capture coding, refactor, bugfix, or architecture work as execution reports and experience cards. |
@@ -512,6 +524,10 @@ Validate config:
 ```bash
 axis validate-config --repo /path/to/project
 ```
+
+### Project Knowledge Protocol
+
+`docs/v0.2-project-knowledge-doc-protocol.md` is the source-controlled protocol for `axis-project-knowledge-bootstrap`, `axis-business-domain-doc`, and `axis-doc-drift-capture`. It defines the global architecture, business inventory, domain documents, task records, version records, and document drift records under `.axis/docs/projects/{project_slug}`, and requires missing evidence to be recorded explicitly instead of inventing business or technical facts.
 
 Local preferences can live in `.axis/config.local.yml`, such as dry-run mode or a local redaction-pattern file path. Keep that file local, do not commit it, and do not place real credentials in it.
 

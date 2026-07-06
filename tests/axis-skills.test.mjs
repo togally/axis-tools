@@ -237,12 +237,15 @@ const packagedSkillNames = [
   'axis-arch-optimize',
   'axis-benchmark',
   'axis-bugfix',
+  'axis-business-domain-doc',
   'axis-coding-capture',
   'axis-create-skill',
   'axis-db-design-doc',
   'axis-development-doc',
+  'axis-doc-drift-capture',
   'axis-oss-publish',
   'axis-project-init',
+  'axis-project-knowledge-bootstrap',
   'axis-review-summary',
   'axis-tech-design-doc',
   'axis-test-driven-development',
@@ -283,6 +286,131 @@ for (const skillName of v01CaptureSkills) {
 const projectInitBody = await readFile(path.join(repoRoot, 'skills', 'axis-project-init', 'SKILL.md'), 'utf8');
 assert.match(projectInitBody, /axis project-init/);
 assert.match(projectInitBody, /\.axis\/config\.yml/);
+
+const projectKnowledgeBootstrap = manifest.skills.find((skill) => skill.name === 'axis-project-knowledge-bootstrap');
+assert.ok(projectKnowledgeBootstrap);
+assert.deepEqual(projectKnowledgeBootstrap.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.match(projectKnowledgeBootstrap.description, /^Use when/);
+assert.match(projectKnowledgeBootstrap.description, /[\u3400-\u9FFF]/);
+const projectKnowledgeBootstrapBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-project-knowledge-bootstrap', 'SKILL.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Three-Step Work Contract',
+  'Evidence Collection Rules',
+  'routes',
+  'controllers',
+  'pages',
+  'menus',
+  'services',
+  'entities',
+  'migrations',
+  'tests',
+  'config',
+  'docs',
+  'project_technical_architecture',
+  'project_business_architecture',
+  'business_inventory',
+  'doc_gap_report',
+  'business_id',
+  'aliases',
+  'actors',
+  'critical / high / medium / low',
+  'active / deprecated / prototype / external_only / unknown',
+  'missing / draft / review / approved / low_confidence / stale / blocked / not_applicable',
+  'generate_domain_docs / review_evidence / mark_not_applicable / refresh_stale_docs / manual_confirm',
+]) {
+  assert.match(projectKnowledgeBootstrapBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(projectKnowledgeBootstrapBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(projectKnowledgeBootstrapBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+
+const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');
+assert.ok(docDriftCapture);
+assert.deepEqual(docDriftCapture.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
+assert.match(docDriftCapture.description, /^Use when/);
+assert.match(docDriftCapture.description, /[\u3400-\u9FFF]/);
+const docDriftCaptureBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-drift-capture', 'SKILL.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Three-Step Work Contract',
+  'task_execution_record',
+  'version_iteration_record',
+  'affected_docs',
+  'issue_id',
+  'pr_url',
+  'commit_sha',
+  'changed_files',
+  'verification',
+  'completed_at',
+  'risk_items',
+  'follow_up_items',
+  'code',
+  'api',
+  'schema',
+  'cache',
+  'permission',
+  'business_flow',
+  'unchanged',
+  'needs_revision',
+  'stale',
+  'missing',
+  'conflict',
+  'No Silent Approved-Doc Rewrite',
+  'doc_update_authorization',
+  'raw logs',
+  'credentials',
+  'connection strings',
+  'customer data',
+]) {
+  assert.match(docDriftCaptureBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(docDriftCaptureBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+
+const businessDomainDoc = manifest.skills.find((skill) => skill.name === 'axis-business-domain-doc');
+assert.ok(businessDomainDoc);
+assert.deepEqual(businessDomainDoc.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
+assert.match(businessDomainDoc.description, /^Use when/);
+assert.match(businessDomainDoc.description, /[\u3400-\u9FFF]/);
+const businessDomainDocBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-business-domain-doc', 'SKILL.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Three-Step Work Contract',
+  'business_id',
+  'business_inventory',
+  'project_technical_architecture',
+  'project_business_architecture',
+  'domain_business_spec',
+  'domain_technical_design',
+  'business flow',
+  'state model',
+  'permissions',
+  'table structure',
+  'interfaces',
+  'code locations',
+  'test points',
+  'axis-development-doc',
+  'axis-tech-design-doc',
+  'axis-db-design-doc',
+  'missing_evidence',
+  'assumptions',
+  'doc_gap_report',
+  'gap_items',
+  'low_confidence',
+  'conflict',
+  'do not invent',
+  'public-safe',
+]) {
+  assert.match(businessDomainDocBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(businessDomainDocBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(businessDomainDocBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
 const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-coding-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
@@ -505,9 +633,12 @@ for (const skillName of [
   'axis-benchmark',
   'axis-arch-optimize',
   'axis-bugfix',
+  'axis-business-domain-doc',
   'axis-create-skill',
   'axis-development-doc',
   'axis-db-design-doc',
+  'axis-doc-drift-capture',
+  'axis-project-knowledge-bootstrap',
   'axis-tech-design-doc',
   'axis-test-driven-development',
 ]) {
