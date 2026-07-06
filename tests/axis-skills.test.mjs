@@ -241,6 +241,7 @@ const packagedSkillNames = [
   'axis-create-skill',
   'axis-db-design-doc',
   'axis-development-doc',
+  'axis-doc-drift-capture',
   'axis-oss-publish',
   'axis-project-init',
   'axis-project-knowledge-bootstrap',
@@ -323,6 +324,51 @@ for (const requiredText of [
 }
 assert.doesNotMatch(projectKnowledgeBootstrapBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(projectKnowledgeBootstrapBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+
+const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');
+assert.ok(docDriftCapture);
+assert.deepEqual(docDriftCapture.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.match(docDriftCapture.description, /^Use when/);
+assert.match(docDriftCapture.description, /[\u3400-\u9FFF]/);
+const docDriftCaptureBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-drift-capture', 'SKILL.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Three-Step Work Contract',
+  'task_execution_record',
+  'version_iteration_record',
+  'affected_docs',
+  'issue_id',
+  'pr_url',
+  'commit_sha',
+  'changed_files',
+  'verification',
+  'completed_at',
+  'risk_items',
+  'follow_up_items',
+  'code',
+  'api',
+  'schema',
+  'cache',
+  'permission',
+  'business_flow',
+  'unchanged',
+  'needs_revision',
+  'stale',
+  'missing',
+  'conflict',
+  'No Silent Approved-Doc Rewrite',
+  'doc_update_authorization',
+  'raw logs',
+  'credentials',
+  'connection strings',
+  'customer data',
+]) {
+  assert.match(docDriftCaptureBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(docDriftCaptureBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
 const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-coding-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
@@ -548,6 +594,7 @@ for (const skillName of [
   'axis-create-skill',
   'axis-development-doc',
   'axis-db-design-doc',
+  'axis-doc-drift-capture',
   'axis-project-knowledge-bootstrap',
   'axis-tech-design-doc',
   'axis-test-driven-development',
