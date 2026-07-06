@@ -52,6 +52,15 @@
       ]
     },
     {
+      "name": "axis-business-domain-doc",
+      "description": "Use when generating Axis v0.2 domain business and technical documents for one business_id from business_inventory and repository evidence. / 用于根据 business_inventory 中的一个 business_id 和仓库证据生成 Axis v0.2 业务域业务文档与技术文档。",
+      "path": "skills/axis-business-domain-doc",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-coding-capture",
       "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.1 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.1 执行报告和经验卡片。",
       "path": "skills/axis-coding-capture",

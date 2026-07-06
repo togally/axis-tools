@@ -244,8 +244,8 @@ const packagedSkillNames = [
   'axis-development-doc',
   'axis-doc-drift-capture',
   'axis-oss-publish',
-  'axis-project-knowledge-bootstrap',
   'axis-project-init',
+  'axis-project-knowledge-bootstrap',
   'axis-review-summary',
   'axis-tech-design-doc',
   'axis-test-driven-development',
@@ -370,6 +370,47 @@ for (const requiredText of [
 }
 assert.doesNotMatch(docDriftCaptureBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+
+const businessDomainDoc = manifest.skills.find((skill) => skill.name === 'axis-business-domain-doc');
+assert.ok(businessDomainDoc);
+assert.deepEqual(businessDomainDoc.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.match(businessDomainDoc.description, /^Use when/);
+assert.match(businessDomainDoc.description, /[\u3400-\u9FFF]/);
+const businessDomainDocBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-business-domain-doc', 'SKILL.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Three-Step Work Contract',
+  'business_id',
+  'business_inventory',
+  'project_technical_architecture',
+  'project_business_architecture',
+  'domain_business_spec',
+  'domain_technical_design',
+  'business flow',
+  'state model',
+  'permissions',
+  'table structure',
+  'interfaces',
+  'code locations',
+  'test points',
+  'axis-development-doc',
+  'axis-tech-design-doc',
+  'axis-db-design-doc',
+  'missing_evidence',
+  'assumptions',
+  'doc_gap_report',
+  'gap_items',
+  'low_confidence',
+  'conflict',
+  'do not invent',
+  'public-safe',
+]) {
+  assert.match(businessDomainDocBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(businessDomainDocBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(businessDomainDocBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
 const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-coding-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
