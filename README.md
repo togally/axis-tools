@@ -73,6 +73,7 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 文档设计 | `axis-tech-design-doc` | 撰写、优化或定稿技术设计文档和方案设计。 |
 | 文档设计 | `axis-db-design-doc` | 生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。 |
 | 项目知识 | `axis-project-knowledge-bootstrap` | 为存量项目首次生成全局技术架构、全局业务架构、子业务清单和文档缺口报告。 |
+| 项目知识 | `axis-business-domain-doc` | 根据 `business_inventory` 中的一个业务项生成业务域业务文档和技术文档。 |
 | 评审 | `axis-review-summary` | 在深入评审 PR、变更集或文档集前，生成待审文件摘要和风险定位。 |
 | 项目初始化 | `axis-project-init` | 初始化 Axis v0.1 项目的 `.axis/config.yml`、outbox 忽略规则和 private-beta 发布元数据。 |
 | 留档与发布 | `axis-coding-capture` | 将编码、重构、缺陷修复或架构工作采集为执行报告和经验卡片。 |
@@ -373,6 +374,7 @@ scripts/                 # Optional reusable validators or runners
 | Documentation and design | `axis-tech-design-doc` | Write, refine, or finalize technical design and solution design documents. |
 | Documentation and design | `axis-db-design-doc` | Generate database design documents, data dictionaries, schema design, ER docs, or Word DBDD files. |
 | Project knowledge | `axis-project-knowledge-bootstrap` | Generate the first global technical architecture, global business architecture, business inventory, and document gap report for an existing project. |
+| Project knowledge | `axis-business-domain-doc` | Generate domain business and technical documents for one business item from `business_inventory`. |
 | Review | `axis-review-summary` | Summarize review scope and risk before a deep PR, change-set, or document-set review. |
 | Project setup | `axis-project-init` | Initialize Axis v0.1 `.axis/config.yml`, outbox ignore rules, and private-beta release metadata. |
 | Deposition and release | `axis-coding-capture` | Capture coding, refactor, bugfix, or architecture work as execution reports and experience cards. |
