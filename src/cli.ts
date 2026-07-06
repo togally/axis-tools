@@ -211,6 +211,13 @@ interface PackageMetadata {
     slug?: string;
     display_name?: string;
   };
+  source_evidence?: {
+    run_id?: string;
+  };
+  index_refs?: {
+    organization_index?: string;
+    project_package_path?: string;
+  };
   artifact?: {
     type?: string;
   };
@@ -245,6 +252,10 @@ interface OssCredentials {
 interface OssStorageAdapter {
   headObject(key: string): Promise<{ sha256: string | null } | null>;
   putObject(key: string, filePath: string, metadata: { sha256: string }): Promise<void>;
+}
+
+interface ResolveAxisConfigOptions {
+  localOssEnvOverrides?: AxisConfig['oss'];
 }
 
 const execFileAsync = promisify(execFile);
@@ -621,6 +632,16 @@ function validateOssTarget(
   };
 }
 
+function withLocalOssEnvOverrides(profile: RegistryOssProfile, overrides: AxisConfig['oss'] | undefined): RegistryOssProfile {
+  if (!overrides) return profile;
+  const merged = { ...profile };
+  for (const field of requiredEnvFields) {
+    if (overrides[field]) merged[field] = overrides[field];
+  }
+  if (overrides.security_token_env) merged.security_token_env = overrides.security_token_env;
+  return merged;
+}
+
 function findDuplicateProjectSlugs(organization: RegistryOrganization): string[] {
   const slugs: string[] = [];
   const collect = (projects: unknown): void => {
@@ -656,7 +677,7 @@ async function readOrganizationRegistry(repo: string, registryPath: string): Pro
   return parseSimpleYaml(await readFile(absolutePath, 'utf8')) as OrganizationRegistry;
 }
 
-async function resolveAxisConfig(repo: string, config: AxisConfig): Promise<{
+async function resolveAxisConfig(repo: string, config: AxisConfig, options: ResolveAxisConfigOptions = {}): Promise<{
   errors: string[];
   requiredEnv: string[];
   effectiveConfig: EffectiveAxisConfig | null;
@@ -753,7 +774,8 @@ async function resolveAxisConfig(repo: string, config: AxisConfig): Promise<{
     errors.push('oss.profile is not declared for organization.id');
     return { errors, requiredEnv: [], effectiveConfig: null };
   }
-  const { oss, requiredEnv } = validateOssTarget(errors, profile, 'organization registry oss_profile');
+  const resolvedProfile = withLocalOssEnvOverrides(profile, options.localOssEnvOverrides);
+  const { oss, requiredEnv } = validateOssTarget(errors, resolvedProfile, 'organization registry oss_profile');
   if (oss) {
     oss.profile = profileName;
   }
@@ -1238,7 +1260,11 @@ async function readOptionalLocalConfig(repo: string): Promise<AxisConfig | null>
   return parseSimpleYaml(await readFile(configPath, 'utf8'));
 }
 
-async function readPublishConfig(repo: string): Promise<{ config: AxisConfig; localDryRun: boolean }> {
+async function readPublishConfig(repo: string): Promise<{
+  config: AxisConfig;
+  localDryRun: boolean;
+  localOssEnvOverrides?: AxisConfig['oss'];
+}> {
   const config = await readAxisConfig(repo);
   const localConfig = await readOptionalLocalConfig(repo);
   if (!localConfig) return { config, localDryRun: false };
@@ -1252,6 +1278,11 @@ async function readPublishConfig(repo: string): Promise<{ config: AxisConfig; lo
   if (localConfig.oss?.security_token_env) {
     localOssEnvOverrides.security_token_env = localConfig.oss.security_token_env;
   }
+  const hasLocalOssEnvOverrides = Object.keys(localOssEnvOverrides).length > 0;
+  const oss = config.contract_version === '0.2' ? config.oss : {
+    ...config.oss,
+    ...localOssEnvOverrides,
+  };
   return {
     config: {
       ...config,
@@ -1259,12 +1290,10 @@ async function readPublishConfig(repo: string): Promise<{ config: AxisConfig; lo
         ...config.package,
         outbox_dir: localConfig.local?.outbox_dir ?? config.package?.outbox_dir,
       },
-      oss: {
-        ...config.oss,
-        ...localOssEnvOverrides,
-      },
+      oss,
     },
     localDryRun: localConfig.local?.dry_run === true,
+    localOssEnvOverrides: config.contract_version === '0.2' && hasLocalOssEnvOverrides ? localOssEnvOverrides : undefined,
   };
 }
 
@@ -1479,6 +1508,16 @@ async function validatePackageManifest(
       || manifest.oss_profile?.prefix !== expectedOssProfile?.prefix
     ) {
       throw new Error('manifest organization/project/oss snapshot does not match resolved config');
+    }
+    const expectedOrganizationIndex = `${normalizeOssPrefix(config.oss.prefix)}/orgs/${expectedOrganization?.id}/index/packages.jsonl`;
+    if (metadata.source_evidence?.run_id !== runId) {
+      throw new Error('metadata.source_evidence.run_id must match --run-id');
+    }
+    if (metadata.index_refs?.organization_index !== expectedOrganizationIndex) {
+      throw new Error('metadata.index_refs.organization_index must match resolved OSS target');
+    }
+    if (metadata.index_refs?.project_package_path !== ossPackagePath(config, runId)) {
+      throw new Error('metadata.index_refs.project_package_path must match resolved OSS target');
     }
   }
 
@@ -1769,8 +1808,8 @@ async function ossPublishCommand(): Promise<void> {
   if (!/^\d{8}T\d{6}Z-[a-z0-9-]+-[a-f0-9]{8}$/.test(runId)) {
     throw new Error('--run-id must match YYYYMMDDThhmmssZ-name-8hex');
   }
-  const { config: rawConfig, localDryRun } = await readPublishConfig(repo);
-  const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig);
+  const { config: rawConfig, localDryRun, localOssEnvOverrides } = await readPublishConfig(repo);
+  const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig, { localOssEnvOverrides });
   if (errors.length > 0) {
     throw new Error(errors.join('\n'));
   }

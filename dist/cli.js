@@ -346,6 +346,18 @@ function validateOssTarget(errors, source, fieldPrefix) {
         requiredEnv,
     };
 }
+function withLocalOssEnvOverrides(profile, overrides) {
+    if (!overrides)
+        return profile;
+    const merged = { ...profile };
+    for (const field of requiredEnvFields) {
+        if (overrides[field])
+            merged[field] = overrides[field];
+    }
+    if (overrides.security_token_env)
+        merged.security_token_env = overrides.security_token_env;
+    return merged;
+}
 function findDuplicateProjectSlugs(organization) {
     const slugs = [];
     const collect = (projects) => {
@@ -381,7 +393,7 @@ async function readOrganizationRegistry(repo, registryPath) {
     }
     return parseSimpleYaml(await readFile(absolutePath, 'utf8'));
 }
-async function resolveAxisConfig(repo, config) {
+async function resolveAxisConfig(repo, config, options = {}) {
     const errors = [];
     if (config.contract_version !== '0.1' && config.contract_version !== '0.2') {
         errors.push('contract_version must be "0.1" or "0.2"');
@@ -472,7 +484,8 @@ async function resolveAxisConfig(repo, config) {
         errors.push('oss.profile is not declared for organization.id');
         return { errors, requiredEnv: [], effectiveConfig: null };
     }
-    const { oss, requiredEnv } = validateOssTarget(errors, profile, 'organization registry oss_profile');
+    const resolvedProfile = withLocalOssEnvOverrides(profile, options.localOssEnvOverrides);
+    const { oss, requiredEnv } = validateOssTarget(errors, resolvedProfile, 'organization registry oss_profile');
     if (oss) {
         oss.profile = profileName;
     }
@@ -952,6 +965,11 @@ async function readPublishConfig(repo) {
     if (localConfig.oss?.security_token_env) {
         localOssEnvOverrides.security_token_env = localConfig.oss.security_token_env;
     }
+    const hasLocalOssEnvOverrides = Object.keys(localOssEnvOverrides).length > 0;
+    const oss = config.contract_version === '0.2' ? config.oss : {
+        ...config.oss,
+        ...localOssEnvOverrides,
+    };
     return {
         config: {
             ...config,
@@ -959,12 +977,10 @@ async function readPublishConfig(repo) {
                 ...config.package,
                 outbox_dir: localConfig.local?.outbox_dir ?? config.package?.outbox_dir,
             },
-            oss: {
-                ...config.oss,
-                ...localOssEnvOverrides,
-            },
+            oss,
         },
         localDryRun: localConfig.local?.dry_run === true,
+        localOssEnvOverrides: config.contract_version === '0.2' && hasLocalOssEnvOverrides ? localOssEnvOverrides : undefined,
     };
 }
 function assertReleaseChannel(value, source) {
@@ -1167,6 +1183,16 @@ async function validatePackageManifest(repo, packageDir, runId, config, localFil
             || manifest.oss_profile?.bucket !== expectedOssProfile?.bucket
             || manifest.oss_profile?.prefix !== expectedOssProfile?.prefix) {
             throw new Error('manifest organization/project/oss snapshot does not match resolved config');
+        }
+        const expectedOrganizationIndex = `${normalizeOssPrefix(config.oss.prefix)}/orgs/${expectedOrganization?.id}/index/packages.jsonl`;
+        if (metadata.source_evidence?.run_id !== runId) {
+            throw new Error('metadata.source_evidence.run_id must match --run-id');
+        }
+        if (metadata.index_refs?.organization_index !== expectedOrganizationIndex) {
+            throw new Error('metadata.index_refs.organization_index must match resolved OSS target');
+        }
+        if (metadata.index_refs?.project_package_path !== ossPackagePath(config, runId)) {
+            throw new Error('metadata.index_refs.project_package_path must match resolved OSS target');
         }
     }
     assertReleaseChannel(manifest.release?.channel, 'manifest.release.channel');
@@ -1450,8 +1476,8 @@ async function ossPublishCommand() {
     if (!/^\d{8}T\d{6}Z-[a-z0-9-]+-[a-f0-9]{8}$/.test(runId)) {
         throw new Error('--run-id must match YYYYMMDDThhmmssZ-name-8hex');
     }
-    const { config: rawConfig, localDryRun } = await readPublishConfig(repo);
-    const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig);
+    const { config: rawConfig, localDryRun, localOssEnvOverrides } = await readPublishConfig(repo);
+    const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig, { localOssEnvOverrides });
     if (errors.length > 0) {
         throw new Error(errors.join('\n'));
     }
