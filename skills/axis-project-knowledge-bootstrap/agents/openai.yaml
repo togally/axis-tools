@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Project Knowledge Bootstrap"
+  short_description: "Bootstrap project knowledge docs / 生成项目知识启动文档"
+  default_prompt: "Use $axis-project-knowledge-bootstrap to generate the first global technical architecture, global business architecture, business inventory, and document gap report for this repository."
+
+policy:
+  allow_implicit_invocation: true
