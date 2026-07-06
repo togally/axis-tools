@@ -328,7 +328,7 @@ assert.doesNotMatch(projectKnowledgeBootstrapBody, /\b(PetMall|petmall|owh-test|
 
 const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');
 assert.ok(docDriftCapture);
-assert.deepEqual(docDriftCapture.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.deepEqual(docDriftCapture.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
 assert.match(docDriftCapture.description, /^Use when/);
 assert.match(docDriftCapture.description, /[\u3400-\u9FFF]/);
 const docDriftCaptureBody = await readFile(
@@ -373,7 +373,7 @@ assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud
 
 const businessDomainDoc = manifest.skills.find((skill) => skill.name === 'axis-business-domain-doc');
 assert.ok(businessDomainDoc);
-assert.deepEqual(businessDomainDoc.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.deepEqual(businessDomainDoc.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
 assert.match(businessDomainDoc.description, /^Use when/);
 assert.match(businessDomainDoc.description, /[\u3400-\u9FFF]/);
 const businessDomainDocBody = await readFile(
