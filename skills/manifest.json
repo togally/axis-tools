@@ -88,6 +88,15 @@
       ]
     },
     {
+      "name": "axis-doc-drift-capture",
+      "description": "Use when a completed task or PR needs Axis v0.2 task records, version iteration records, and document drift impact classification. / 用于在任务或 PR 完成后记录 Axis v0.2 任务执行、版本迭代和文档漂移影响。",
+      "path": "skills/axis-doc-drift-capture",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-oss-publish",
       "description": "Use when an Axis v0.1 local outbox package must be validated, redacted locally, dry-run checked, or uploaded to the controlled Aliyun OSS prefix. / 用于校验、脱敏、本地预演或上传 Axis v0.1 outbox 包到受控阿里云 OSS 前缀。",
       "path": "skills/axis-oss-publish",
