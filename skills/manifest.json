@@ -106,6 +106,15 @@
       ]
     },
     {
+      "name": "axis-project-knowledge-bootstrap",
+      "description": "Use when a repository needs its first Axis v0.2 project knowledge set for global technical architecture, global business architecture, business inventory, and document gap report. / 用于为存量项目首次生成 Axis v0.2 项目知识文档集，包括全局技术架构、全局业务架构、子业务清单和文档缺口报告。",
+      "path": "skills/axis-project-knowledge-bootstrap",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-review-summary",
       "description": "Use when a user needs to review a PR, change set, or document set before deep inspection. / 用于审核 PR、变更集或文档前生成待审文件摘要和风险定位。",
       "path": "skills/axis-review-summary",
