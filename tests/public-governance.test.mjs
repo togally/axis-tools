@@ -5,12 +5,14 @@ import path from 'node:path';
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 
 const requiredFiles = [
+  '.axis/config.yml',
   'schemas/skill.meta.schema.json',
   'schemas/asset.meta.schema.json',
   'schemas/catalog.schema.json',
   'catalog/skills.public.yaml',
   'catalog/assets.public.yaml',
   'catalog/taxonomy.yaml',
+  'docs/v0.2-project-knowledge-doc-protocol.md',
   'templates/skill/SKILL.md',
   'templates/skill/skill.meta.yaml',
   'templates/doc-asset/asset.md',
@@ -76,6 +78,57 @@ assert.match(assetsCatalog, /redacted/);
 const taxonomy = await readRequired('catalog/taxonomy.yaml');
 assert.match(taxonomy, /schema_version: 1/);
 assert.match(taxonomy, /public_safe/);
+
+const axisConfig = await readRequired('.axis/config.yml');
+for (const requiredText of [
+  'contract_version: "0.1"',
+  'slug: axis-tools',
+  'display_name: axis-tools',
+  'outbox_dir: .axis/outbox',
+  'channel: private_beta',
+  'gate: not_requested',
+  'provider: aliyun-oss',
+  'bucket: axis-v01-beta-packages-example',
+  'prefix: axis/v0.1/private-beta/packages',
+  'endpoint_env: ALIYUN_OSS_ENDPOINT',
+  'region_env: ALIYUN_OSS_REGION',
+  'access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID',
+  'access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET',
+  'security_token_env: ALIYUN_OSS_SECURITY_TOKEN',
+  'project_init: axis-project-init',
+  'coding_capture: axis-coding-capture',
+  'test_report: axis-test-report',
+  'oss_publish: axis-oss-publish',
+]) {
+  assert.match(axisConfig, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(axisConfig, /(?:access_key|secret|token|password)\s*:\s*[^_\s][^\n]+/i);
+
+const v02Protocol = await readRequired('docs/v0.2-project-knowledge-doc-protocol.md');
+for (const requiredText of [
+  'Axis v0.2 Project Knowledge Document Protocol',
+  'axis-project-knowledge-bootstrap',
+  'axis-business-domain-doc',
+  'axis-doc-drift-capture',
+  'project_technical_architecture',
+  'project_business_architecture',
+  'business_inventory',
+  'doc_gap_report',
+  'business_id',
+  'domain_business_spec',
+  'domain_technical_design',
+  'task_execution_record',
+  'version_iteration_record',
+  'affected_docs',
+  'document_status',
+  'public-safe',
+  'do not invent',
+  '.axis/docs/projects/{project_slug}',
+]) {
+  assert.match(v02Protocol, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(v02Protocol, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(v02Protocol, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|codeup)\b/i);
 
 const publicSkeletonFiles = await Promise.all(
   (await Promise.all([

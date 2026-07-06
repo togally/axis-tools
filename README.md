@@ -33,8 +33,9 @@ bundles locally and keep public-safe execution records consistent.
 
 ```text
 axis-tools/
+├── .axis/config.yml        # Axis v0.1 public-safe repo config for local outbox validation
 ├── catalog/                 # 公共安全 catalog 示例和索引
-├── docs/                    # Axis v0.1 合同和 doc-as-code 协议
+├── docs/                    # Axis v0.1 合同、doc-as-code 协议和 v0.2 项目知识协议
 ├── governance/              # 贡献、安全、评审和废弃规则
 ├── schemas/                 # skill、asset、catalog、taxonomy JSON Schema
 ├── scripts/                 # 安装、刷新、创建、沉淀 helper scripts
@@ -219,6 +220,10 @@ axis validate-config --repo /path/to/project
 
 本地偏好可以放在 `.axis/config.local.yml`，例如 dry-run 或本地脱敏规则文件路径。该文件必须保持本地使用，不应提交；也不应包含真实凭据值。
 
+### 项目知识协议
+
+`docs/v0.2-project-knowledge-doc-protocol.md` 是三个项目知识 skills 的源控协议依据：`axis-project-knowledge-bootstrap`、`axis-business-domain-doc` 和 `axis-doc-drift-capture`。它规定 `.axis/docs/projects/{project_slug}` 下的全局架构、业务清单、领域文档、任务记录、版本记录和文档漂移记录结构，并要求缺失证据必须显式记录，不能编造业务或技术事实。
+
 OSS 发布前，在 shell 环境中设置 `.axis/config.yml` 里声明的环境变量：
 
 ```bash
@@ -335,8 +340,9 @@ Use this repository when:
 
 ```text
 axis-tools/
+├── .axis/config.yml        # Axis v0.1 public-safe repo config for local outbox validation
 ├── catalog/                 # Public-safe catalog examples and indexes
-├── docs/                    # Axis v0.1 contract and doc-as-code protocols
+├── docs/                    # Axis v0.1 contract, doc-as-code protocols, and v0.2 project knowledge protocol
 ├── governance/              # Contribution, security, review, and deprecation rules
 ├── schemas/                 # JSON Schema for skills, assets, catalogs, and taxonomy
 ├── scripts/                 # Install, refresh, create, and deposit helper scripts
@@ -518,6 +524,10 @@ Validate config:
 ```bash
 axis validate-config --repo /path/to/project
 ```
+
+### Project Knowledge Protocol
+
+`docs/v0.2-project-knowledge-doc-protocol.md` is the source-controlled protocol for `axis-project-knowledge-bootstrap`, `axis-business-domain-doc`, and `axis-doc-drift-capture`. It defines the global architecture, business inventory, domain documents, task records, version records, and document drift records under `.axis/docs/projects/{project_slug}`, and requires missing evidence to be recorded explicitly instead of inventing business or technical facts.
 
 Local preferences can live in `.axis/config.local.yml`, such as dry-run mode or a local redaction-pattern file path. Keep that file local, do not commit it, and do not place real credentials in it.
 
