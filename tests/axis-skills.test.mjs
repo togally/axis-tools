@@ -178,7 +178,7 @@ await withTempDir(async (tmp) => {
     '--display-name',
     'Axis Demo Created',
     '--short-description',
-    'Create a demo Axis skill',
+    'Create demo Axis skill / 创建演示 Axis 技能',
     '--default-prompt',
     'Use $axis-demo-created to run the demo workflow.',
     '--no-validate',
@@ -201,7 +201,10 @@ await withTempDir(async (tmp) => {
   assert.equal(localSkillBody.includes('challenge unsafe shortcuts'), true);
   assert.equal(localSkillBody.includes('After Use Deposition'), true);
   assert.equal(localSkillBody.includes('push to the remote repository when permissions allow'), true);
-  assert.equal(await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes('Axis Demo Created')), true);
+  const createdOpenAiYaml = await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(createdOpenAiYaml, /^\s*display_name: "axis-demo-created"$/m);
+  assert.doesNotMatch(createdOpenAiYaml, /^\s*display_name: "Axis Demo Created"$/m);
+  assert.match(createdOpenAiYaml, /Create demo Axis skill \/ 创建演示 Axis 技能/);
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
   assert.equal(manifest.skills[0].name, 'axis-demo-created');
