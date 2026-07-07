@@ -20,6 +20,29 @@ die() {
   exit 1
 }
 
+safe_install_work_dir() {
+  work_dir="$(dirname "$AXIS_TOOLS_DIR")"
+  case "$work_dir" in
+    /*)
+      printf '%s' "$work_dir"
+      ;;
+    *)
+      printf '%s' "${HOME:-/tmp}"
+      ;;
+  esac
+}
+
+ensure_accessible_cwd() {
+  if pwd -P >/dev/null 2>&1; then
+    return 0
+  fi
+
+  work_dir="$(safe_install_work_dir)"
+  mkdir -p "$work_dir"
+  cd "$work_dir" || die "Current working directory is unavailable and could not switch to $work_dir."
+  warn "Current working directory was unavailable; continuing from $work_dir."
+}
+
 require_cmd() {
   if ! command -v "$1" >/dev/null 2>&1; then
     die "$1 is required but was not found in PATH. Install $1 and run this script again."
@@ -59,6 +82,7 @@ has_local_changes() {
 clone_repo() {
   parent_dir="$(dirname "$AXIS_TOOLS_DIR")"
   mkdir -p "$parent_dir"
+  cd "$parent_dir" || die "Cannot access install parent directory $parent_dir."
   log "Cloning $AXIS_TOOLS_REPO into $AXIS_TOOLS_DIR"
   git clone --branch "$AXIS_TOOLS_BRANCH" "$AXIS_TOOLS_REPO" "$AXIS_TOOLS_DIR"
 }
@@ -240,6 +264,8 @@ verify_cli() {
 }
 
 main() {
+  ensure_accessible_cwd
+
   require_cmd git
   require_cmd node
   require_cmd npm
