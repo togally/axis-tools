@@ -254,6 +254,45 @@ const packagedSkillNames = [
   'axis-update',
   'axis-yunxiao-codeup',
 ];
+const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillDirs = (await readdir(path.join(repoRoot, 'skills'), { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
+assert.deepEqual(packagedSkillDirs, packagedSkillNames, 'packaged skill directories should match the manifest-backed skill list');
+for (const skillName of packagedSkillDirs) {
+  assert.match(skillName, skillNamePattern, `${skillName} should use axis-xxx naming`);
+  const manifestEntry = manifest.skills.find((skill) => skill.name === skillName);
+  assert.ok(manifestEntry, `${skillName} should be listed in the manifest`);
+  assert.equal(manifestEntry.path, `skills/${skillName}`);
+  assert.match(manifestEntry.name, skillNamePattern);
+
+  const skillMd = await readFile(path.join(repoRoot, 'skills', skillName, 'SKILL.md'), 'utf8');
+  assert.match(skillMd, new RegExp(`^name: ${skillName}$`, 'm'));
+  const openAiYaml = await readFile(path.join(repoRoot, 'skills', skillName, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(openAiYaml, new RegExp(`\\$${skillName}\\b`));
+}
+
+const consolidationAudit = await readFile(path.join(repoRoot, 'docs', 'axis-skill-consolidation-audit.md'), 'utf8');
+for (const requiredText of [
+  'Axis Skill Consolidation Audit',
+  'Current Decision',
+  'Rename Guard',
+  'axis-development-doc',
+  'axis-tech-design-doc',
+  'axis-db-design-doc',
+  'axis-project-knowledge-bootstrap',
+  'axis-business-domain-doc',
+  'axis-doc-drift-capture',
+  'axis-coding-capture',
+  'axis-test-report',
+  'axis-oss-publish',
+  'axis-create-skill',
+  'axis-update',
+  'Do not merge now',
+]) {
+  assert.match(consolidationAudit, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
 

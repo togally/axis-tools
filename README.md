@@ -60,6 +60,8 @@ scripts/                 # 可选：可复用校验或执行脚本
 
 ### 当前提供的 skills
 
+合并与命名规则见 [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md)：当前所有 packaged skills 保持 `axis-xxx` 命名，按职责家族整合，暂不做目录级合并。
+
 | 类别 | Skill | 使用场景 |
 | --- | --- | --- |
 | 云监控与平台 | `axis-ali-dashboard` | 创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和业务流大屏。 |
@@ -421,6 +423,8 @@ scripts/                 # Optional reusable validators or runners
 ```
 
 ### Available Skills
+
+See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md) for consolidation and naming rules. All packaged skills currently keep the `axis-xxx` naming format and are integrated by capability family instead of directory-level merges.
 
 | Category | Skill | When to use it |
 | --- | --- | --- |
