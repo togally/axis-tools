@@ -13,6 +13,7 @@ The required naming contract is:
 - every packaged skill directory under `skills/` must match `axis-[a-z0-9][a-z0-9-]*`;
 - every `SKILL.md` front matter `name` must exactly match the directory name;
 - every `skills/manifest.json` entry must use the same `name` and `path: skills/<name>`;
+- every `agents/openai.yaml` `display_name` must exactly match the skill name so UI pickers show the `axis-xxx` identifier;
 - every `agents/openai.yaml` default prompt must reference `$<axis-skill-name>`;
 - new skills created or deposited by `scripts/axis-create-skill.mjs` and `scripts/axis-skill-deposit.mjs` must keep the same `axis-xxx` rule.
 
@@ -85,4 +86,3 @@ All current packaged skills are intentionally retained:
 - `axis-testing`
 - `axis-update`
 - `axis-yunxiao-codeup`
-

@@ -1,5 +1,5 @@
 interface:
-  display_name: "Coding Capture"
+  display_name: "axis-coding-capture"
   short_description: "Capture coding work reports / 采集编码工作报告"
   default_prompt: "Use $axis-coding-capture to write a public-safe Axis coding capture package."
 
