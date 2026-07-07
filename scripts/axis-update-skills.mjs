@@ -69,13 +69,20 @@ async function main() {
   const repo = path.resolve(argValue('--repo') || defaultRepo());
   const agent = argValue('--agent') || 'codex';
   const validator = path.resolve(argValue('--validator') || defaultValidator());
+  const backupDir = argValue('--backup-dir');
   const outputJson = hasFlag('--json');
+  const force = hasFlag('--force');
+  const dryRun = hasFlag('--dry-run');
   const result = {
     ok: false,
     repo,
     agent,
+    force,
+    dry_run: dryRun,
     pulled: false,
     installed: [],
+    inventory: [],
+    backup_dir: null,
     validated: [],
   };
 
@@ -96,11 +103,17 @@ async function main() {
     throw new Error(`Axis CLI entry not found after build: ${cli}`);
   }
 
-  const install = await run(process.execPath, [cli, 'install', '--agent', agent, '--force'], { cwd: repo });
+  const installArgs = [cli, 'install', '--agent', agent];
+  if (dryRun) installArgs.push('--dry-run');
+  if (force) installArgs.push('--force');
+  if (backupDir) installArgs.push('--backup-dir', path.resolve(backupDir));
+  const install = await run(process.execPath, installArgs, { cwd: repo });
   const installResult = parseJsonOutput(install.stdout);
   result.installed = Array.isArray(installResult.installed) ? installResult.installed : [];
+  result.inventory = Array.isArray(installResult.inventory) ? installResult.inventory : [];
+  result.backup_dir = installResult.backup_dir ?? null;
 
-  if (!hasFlag('--no-validate')) {
+  if (!dryRun && !hasFlag('--no-validate')) {
     const seenTargets = new Set();
     for (const item of result.installed) {
       if (!item?.target) continue;
