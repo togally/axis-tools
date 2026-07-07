@@ -1,5 +1,5 @@
 interface:
-  display_name: "Database Design Doc"
+  display_name: "axis-db-design-doc"
   short_description: "Generate database design docs / 生成数据库设计文档"
   default_prompt: "Use $axis-db-design-doc to create a database design document from schema/code evidence."
 

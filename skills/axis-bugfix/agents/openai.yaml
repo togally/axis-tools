@@ -1,5 +1,5 @@
 interface:
-  display_name: "Axis Bugfix"
+  display_name: "axis-bugfix"
   short_description: "Evidence-first bugfix workflow / 证据优先的缺陷修复流程"
   default_prompt: "Use $axis-bugfix to fix the reported bug from evidence."
 

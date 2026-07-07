@@ -1,5 +1,5 @@
 interface:
-  display_name: "Axis Review Summary"
+  display_name: "axis-review-summary"
   short_description: "Review PR/change/doc files / 审核 PR、变更或文档文件"
   default_prompt: "Use $axis-review-summary to prepare a public-safe review brief for this PR, change set, or document set."
 

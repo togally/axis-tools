@@ -626,6 +626,7 @@ for (const skillName of packagedSkillNames) {
   assert.match(descriptionLine, /[\u3400-\u9FFF]/);
   assert.match(skillMd, /## After Use Deposition/);
   const openAiYaml = await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(openAiYaml, new RegExp(`^\\s*display_name: "${skillName}"$`, 'm'));
   assert.equal(openAiYaml.includes(`$${skillName}`), true);
   const shortDescriptionLine = openAiYaml.split('\n').find((line) => line.trim().startsWith('short_description:')) ?? '';
   assert.match(shortDescriptionLine, /[A-Za-z]/);

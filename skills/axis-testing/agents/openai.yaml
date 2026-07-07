@@ -1,5 +1,5 @@
 interface:
-  display_name: "Axis Testing"
+  display_name: "axis-testing"
   short_description: "Test side-effecting actions / 测试有副作用的后端行为"
   default_prompt: "Use $axis-testing to test this real side-effecting action."
 
