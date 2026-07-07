@@ -80,6 +80,27 @@ await withTempDir(async (tmp) => {
   const sourceRoot = path.join(tmp, 'source-skills');
   const repo = path.join(tmp, 'repo');
   await mkdir(repo, { recursive: true });
+  await writeDemoSkill(sourceRoot, 'demo-skill');
+
+  const error = await execFileAsync(process.execPath, [
+    script,
+    '--repo',
+    repo,
+    '--source-root',
+    sourceRoot,
+    '--skill',
+    'demo-skill',
+    '--no-validate',
+  ]).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /axis-example-skill/);
+});
+
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'source-skills');
+  const repo = path.join(tmp, 'repo');
+  await mkdir(repo, { recursive: true });
   await writeDemoSkill(sourceRoot);
   await writeFile(path.join(repo, 'unrelated.txt'), 'do not stage\n', 'utf8');
   await execFileAsync('git', ['init'], { cwd: repo });

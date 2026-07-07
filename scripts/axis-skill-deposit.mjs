@@ -8,7 +8,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const skillNamePattern = /^[A-Za-z0-9][A-Za-z0-9_.-]*$/;
+const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -30,7 +30,7 @@ function defaultValidator() {
 
 function ensureSkillName(name) {
   if (!skillNamePattern.test(name)) {
-    throw new Error(`Unsafe skill name: ${name}`);
+    throw new Error(`Skill name must look like axis-example-skill: ${name}`);
   }
   return name;
 }
