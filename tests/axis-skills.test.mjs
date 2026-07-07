@@ -232,6 +232,7 @@ await withTempDir(async (tmp) => {
 
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const packagedSkillNames = [
+  'axis-ai-content-ops',
   'axis-ali-dashboard',
   'axis-api-performance-tuning',
   'axis-arch-optimize',
@@ -518,6 +519,30 @@ assert.ok(bugfixMethod);
 
 const reviewSummary = manifest.skills.find((skill) => skill.name === 'axis-review-summary');
 assert.ok(reviewSummary);
+
+const aiContentOps = manifest.skills.find((skill) => skill.name === 'axis-ai-content-ops');
+assert.ok(aiContentOps);
+assert.deepEqual(aiContentOps.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.match(aiContentOps.description, /^Use when/);
+assert.match(aiContentOps.description, /[\u3400-\u9FFF]/);
+const aiContentOpsBody = await readFile(path.join(repoRoot, 'skills', 'axis-ai-content-ops', 'SKILL.md'), 'utf8');
+for (const requiredText of [
+  'mother draft',
+  'platform-native variants',
+  'soft lead-in',
+  'publish log',
+  '24h',
+  '72h',
+  'data flywheel',
+  'WeChat',
+  'Xiaohongshu',
+  'Zhihu',
+  'Bilibili',
+]) {
+  assert.match(aiContentOpsBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(aiContentOpsBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(aiContentOpsBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup|小贾同学啦)\b/i);
 assert.match(reviewSummary.description, /review a PR, change set, or document set/i);
 assert.match(reviewSummary.description, /审核 PR、变更集或文档/);
 assert.equal(reviewSummary.files.includes('SKILL.md'), true);
