@@ -52,6 +52,19 @@ function sha256(text) {
   return createHash('sha256').update(text).digest('hex');
 }
 
+async function rewritePackageJsonAndRefreshManifest(packageDir, relativePath, value) {
+  const serialized = `${JSON.stringify(value, null, 2)}\n`;
+  await writeFile(path.join(packageDir, relativePath), serialized, 'utf8');
+
+  const manifestPath = path.join(packageDir, 'manifest.json');
+  const manifest = await readJson(manifestPath);
+  const entry = manifest.files.find((file) => file.path === relativePath);
+  assert.ok(entry);
+  entry.sha256 = sha256(serialized);
+  entry.bytes = Buffer.byteLength(serialized);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+}
+
 function publicSafeReport(result = 'passed') {
   return [
     '# Report',
@@ -106,6 +119,86 @@ async function writeTestReport(repo, options = {}) {
     report,
   ]);
   return JSON.parse(stdout);
+}
+
+async function writeV02Config(repo, options = {}) {
+  const orgId = options.orgId ?? 'org_axis_tools';
+  const profile = options.profile ?? 'private_beta_main';
+  const channel = options.channel ?? 'private_beta';
+  const gate = options.gate ?? 'not_requested';
+  await mkdir(path.join(repo, '.axis'), { recursive: true });
+  await writeFile(path.join(repo, '.axis', 'config.yml'), [
+    'contract_version: "0.2"',
+    'organization:',
+    `  id: ${orgId}`,
+    '  registry: .axis/organizations.yml',
+    'project:',
+    '  slug: demo-project',
+    '  display_name: Demo Project',
+    'package:',
+    '  outbox_dir: .axis/outbox',
+    'release:',
+    `  channel: ${channel}`,
+    `  gate: ${gate}`,
+    'oss:',
+    '  provider: aliyun-oss',
+    `  profile: ${profile}`,
+    'skills:',
+    '  project_init: axis-project-init',
+    '  coding_capture: axis-coding-capture',
+    '  test_report: axis-test-report',
+    '  oss_publish: axis-oss-publish',
+    '',
+  ].join('\n'), 'utf8');
+}
+
+async function writeV02Registry(repo) {
+  await mkdir(path.join(repo, '.axis'), { recursive: true });
+  await writeFile(path.join(repo, '.axis', 'organizations.yml'), [
+    'schema: axis.organization_registry',
+    'schema_version: "0.2"',
+    'organizations:',
+    '  - id: org_axis_tools',
+    '    slug: axis-tools',
+    '    display_name: Axis Tools',
+    '    status: active',
+    '    oss_profiles:',
+    '      - name: private_beta_main',
+    '        provider: aliyun-oss',
+    '        bucket: axis-v02-private-beta-example',
+    '        prefix: axis/v0.2',
+    '        endpoint_env: ALIYUN_OSS_ENDPOINT',
+    '        region_env: ALIYUN_OSS_REGION',
+    '        access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID',
+    '        access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET',
+    '        security_token_env: ALIYUN_OSS_SECURITY_TOKEN',
+    '    products:',
+    '      - slug: axis-tools',
+    '        display_name: Axis Tools',
+    '        projects:',
+    '          - slug: demo-project',
+    '            display_name: Demo Project',
+    '  - id: org_second_mock',
+    '    slug: second-mock',
+    '    display_name: Second Mock Organization',
+    '    status: active',
+    '    oss_profiles:',
+    '      - name: private_beta_main',
+    '        provider: aliyun-oss',
+    '        bucket: second-org-v02-private-beta-example',
+    '        prefix: axis/v0.2',
+    '        endpoint_env: SECOND_OSS_ENDPOINT',
+    '        region_env: SECOND_OSS_REGION',
+    '        access_key_id_env: SECOND_OSS_ACCESS_KEY_ID',
+    '        access_key_secret_env: SECOND_OSS_ACCESS_KEY_SECRET',
+    '    products:',
+    '      - slug: demo-product',
+    '        display_name: Demo Product',
+    '        projects:',
+    '          - slug: demo-project',
+    '            display_name: Same Slug In Another Org',
+    '',
+  ].join('\n'), 'utf8');
 }
 
 await withTempDir(async (repo) => {
@@ -500,4 +593,228 @@ await withTempDir(async (repo) => {
   assert.equal(remoteManifest.publish.status, 'published');
   manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
   assert.equal(manifest.publish.status, 'published');
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeFile(path.join(repo, '.axis', 'config.yml'), [
+    'contract_version: "0.2"',
+    'project:',
+    '  slug: demo-project',
+    '  display_name: Demo Project',
+    'package:',
+    '  outbox_dir: .axis/outbox',
+    'release:',
+    '  channel: private_beta',
+    '  gate: not_requested',
+    'oss:',
+    '  provider: aliyun-oss',
+    '  profile: private_beta_main',
+    'skills:',
+    '  project_init: axis-project-init',
+    '  coding_capture: axis-coding-capture',
+    '  test_report: axis-test-report',
+    '  oss_publish: axis-oss-publish',
+    '',
+  ].join('\n'), 'utf8');
+
+  const error = await run(['validate-config', '--repo', repo]).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /organization\.id is required/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo, { orgId: 'org_missing' });
+
+  const error = await run(['validate-config', '--repo', repo]).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /organization\.id is not declared in the organization registry/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo, { profile: 'missing_profile' });
+
+  const error = await run(['validate-config', '--repo', repo]).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /oss\.profile is not declared for organization\.id/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  const runId = '20260706T010101Z-test-report-abcdef12';
+
+  const packageResult = await writeTestReport(repo, { runId });
+
+  assert.equal(packageResult.package_dir, `.axis/outbox/v0.2/org_axis_tools/demo-project/${runId}`);
+  const manifest = await readJson(path.join(repo, packageResult.package_dir, 'manifest.json'));
+  assert.equal(manifest.schema_version, '0.2');
+  assert.equal(manifest.package_id, `org_axis_tools__demo-project__${runId}`);
+  assert.deepEqual(manifest.organization, {
+    id: 'org_axis_tools',
+    slug: 'axis-tools',
+    display_name: 'Axis Tools',
+  });
+  assert.deepEqual(manifest.project, {
+    slug: 'demo-project',
+    display_name: 'Demo Project',
+  });
+  assert.deepEqual(manifest.oss_profile, {
+    name: 'private_beta_main',
+    provider: 'aliyun-oss',
+    bucket: 'axis-v02-private-beta-example',
+    prefix: 'axis/v0.2',
+  });
+  assert.equal(
+    manifest.publish.base_uri,
+    `oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/packages/demo-project/${runId}/`,
+  );
+
+  const metadata = await readJson(path.join(repo, packageResult.package_dir, 'metadata.json'));
+  assert.deepEqual(metadata.organization, manifest.organization);
+  assert.deepEqual(metadata.project, manifest.project);
+  assert.equal(metadata.source_evidence.run_id, runId);
+  assert.equal(metadata.index_refs.organization_index, 'axis/v0.2/orgs/org_axis_tools/index/packages.jsonl');
+  assert.equal(metadata.index_refs.project_package_path, `axis/v0.2/orgs/org_axis_tools/packages/demo-project/${runId}/`);
+
+  await writeV02Config(repo, { orgId: 'org_second_mock' });
+  const secondRunId = '20260706T010102Z-test-report-abcdef12';
+  const secondPackageResult = await writeTestReport(repo, { runId: secondRunId });
+  const secondManifest = await readJson(path.join(repo, secondPackageResult.package_dir, 'manifest.json'));
+
+  assert.equal(secondPackageResult.package_dir, `.axis/outbox/v0.2/org_second_mock/demo-project/${secondRunId}`);
+  assert.equal(secondManifest.organization.id, 'org_second_mock');
+  assert.equal(secondManifest.oss_profile.bucket, 'second-org-v02-private-beta-example');
+  assert.equal(
+    secondManifest.publish.base_uri,
+    `oss://second-org-v02-private-beta-example/axis/v0.2/orgs/org_second_mock/packages/demo-project/${secondRunId}/`,
+  );
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  const runId = '20260706T020202Z-test-report-abcdef12';
+  const packageResult = await writeTestReport(repo, { runId });
+  const manifestPath = path.join(repo, packageResult.package_dir, 'manifest.json');
+  const manifest = await readJson(manifestPath);
+  manifest.organization.id = 'org_tampered';
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+  const error = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--local-only']).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /manifest organization\/project\/oss snapshot does not match resolved config/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  const runId = '20260706T020203Z-test-report-abcdef12';
+  const packageResult = await writeTestReport(repo, { runId });
+  const packageDir = path.join(repo, packageResult.package_dir);
+  const metadata = await readJson(path.join(packageDir, 'metadata.json'));
+  metadata.index_refs.organization_index = 'axis/v0.2/orgs/org_tampered/index/packages.jsonl';
+  await rewritePackageJsonAndRefreshManifest(packageDir, 'metadata.json', metadata);
+
+  const error = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--local-only']).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /metadata\.index_refs\.organization_index must match resolved OSS target/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  const runId = '20260706T020204Z-test-report-abcdef12';
+  const packageResult = await writeTestReport(repo, { runId });
+  const packageDir = path.join(repo, packageResult.package_dir);
+  const metadata = await readJson(path.join(packageDir, 'metadata.json'));
+  metadata.source_evidence.run_id = '20260706T999999Z-test-report-deadbeef';
+  await rewritePackageJsonAndRefreshManifest(packageDir, 'metadata.json', metadata);
+
+  const error = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--local-only']).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /metadata\.source_evidence\.run_id must match --run-id/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  const runId = '20260706T020205Z-test-report-abcdef12';
+  await writeTestReport(repo, { runId });
+  await writeFile(path.join(repo, '.axis', 'config.local.yml'), [
+    'contract_version: "0.2"',
+    'oss:',
+    '  endpoint_env: LOCAL_OSS_ENDPOINT',
+    '  region_env: LOCAL_OSS_REGION',
+    '  access_key_id_env: LOCAL_OSS_ACCESS_KEY_ID',
+    '  access_key_secret_env: LOCAL_OSS_ACCESS_KEY_SECRET',
+    '',
+  ].join('\n'), 'utf8');
+  const mockDir = path.join(repo, 'mock-oss-v02-local-env');
+
+  const { stdout, stderr } = await run(['oss-publish', '--repo', repo, '--run-id', runId], {
+    env: {
+      AXIS_OSS_MOCK_DIR: mockDir,
+      ALIYUN_OSS_ENDPOINT: '',
+      ALIYUN_OSS_REGION: '',
+      ALIYUN_OSS_ACCESS_KEY_ID: '',
+      ALIYUN_OSS_ACCESS_KEY_SECRET: '',
+      LOCAL_OSS_ENDPOINT: 'https://local-oss-endpoint.invalid',
+      LOCAL_OSS_REGION: 'oss-cn-local',
+      LOCAL_OSS_ACCESS_KEY_ID: 'LOCAL_TEST_ACCESS_KEY_ID',
+      LOCAL_OSS_ACCESS_KEY_SECRET: 'local-secret-value',
+    },
+  });
+
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.mode, 'upload');
+  assert.equal(result.uploaded, true);
+  assert.equal(result.publish.bucket, 'axis-v02-private-beta-example');
+  assert.equal(result.publish.prefix, 'axis/v0.2');
+  assert.equal(result.upload_order.at(-1).path, 'manifest.json');
+  assert.doesNotMatch(stdout, /local-secret-value|LOCAL_TEST_ACCESS_KEY_ID|local-oss-endpoint/);
+  assert.doesNotMatch(stderr, /local-secret-value|LOCAL_TEST_ACCESS_KEY_ID|local-oss-endpoint/);
+  assert.equal(
+    existsSync(path.join(
+      mockDir,
+      'axis-v02-private-beta-example',
+      'axis',
+      'v0.2',
+      'orgs',
+      'org_axis_tools',
+      'packages',
+      'demo-project',
+      runId,
+      'manifest.json',
+    )),
+    true,
+  );
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo, { channel: 'public', gate: 'pending' });
+
+  const error = await run(['validate-config', '--repo', repo]).catch((caught) => caught);
+
+  assert.equal(error.code, 1);
+  assert.match(error.stderr, /public release requires release\.gate: passed/);
 });

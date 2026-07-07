@@ -19,6 +19,7 @@ type AssetType = 'coding_capture' | 'test_report';
 type ArtifactStatus = 'passed' | 'failed' | 'partial' | 'informational';
 type PublishStatus = 'local_ready' | 'uploading' | 'published' | 'failed';
 type PublishMode = 'dry_run' | 'local_only' | 'upload';
+type ContractVersion = '0.1' | '0.2';
 
 interface InstalledSkill {
   skill: string;
@@ -60,6 +61,10 @@ interface BackupSession extends BackupManifest {
 
 interface AxisConfig {
   contract_version?: string;
+  organization?: {
+    id?: string;
+    registry?: string;
+  };
   project?: {
     slug?: string;
     display_name?: string;
@@ -78,6 +83,7 @@ interface AxisConfig {
   };
   oss?: {
     provider?: string;
+    profile?: string;
     bucket?: string;
     prefix?: string;
     endpoint_env?: string;
@@ -92,6 +98,86 @@ interface AxisConfig {
     test_report?: string;
     oss_publish?: string;
   };
+}
+
+interface OrganizationSnapshot {
+  id: string;
+  slug: string;
+  display_name: string;
+}
+
+interface EffectiveOssConfig {
+  provider: 'aliyun-oss';
+  profile?: string;
+  bucket: string;
+  prefix: string;
+  endpoint_env: string;
+  region_env: string;
+  access_key_id_env: string;
+  access_key_secret_env: string;
+  security_token_env?: string;
+}
+
+interface EffectiveAxisConfig {
+  contract_version: ContractVersion;
+  organization?: OrganizationSnapshot;
+  project: {
+    slug: string;
+    display_name: string;
+  };
+  package: {
+    outbox_dir: string;
+  };
+  release: {
+    channel: ReleaseChannel;
+    gate: ReleaseGate;
+  };
+  oss: EffectiveOssConfig;
+  skills: {
+    project_init: string;
+    coding_capture: string;
+    test_report: string;
+    oss_publish: string;
+  };
+}
+
+interface OrganizationRegistry {
+  schema?: string;
+  schema_version?: string;
+  organizations?: unknown;
+}
+
+interface RegistryOrganization {
+  id?: string;
+  slug?: string;
+  display_name?: string;
+  status?: string;
+  oss_profiles?: unknown;
+  products?: unknown;
+  projects?: unknown;
+}
+
+interface RegistryOssProfile {
+  name?: string;
+  provider?: string;
+  bucket?: string;
+  prefix?: string;
+  endpoint_env?: string;
+  region_env?: string;
+  access_key_id_env?: string;
+  access_key_secret_env?: string;
+  security_token_env?: string;
+}
+
+interface RegistryProject {
+  slug?: string;
+  display_name?: string;
+}
+
+interface RegistryProduct {
+  slug?: string;
+  display_name?: string;
+  projects?: unknown;
 }
 
 interface FileEntry {
@@ -110,9 +196,20 @@ interface PackageManifest {
   schema?: string;
   schema_version?: string;
   package_id?: string;
+  organization?: {
+    id?: string;
+    slug?: string;
+    display_name?: string;
+  };
   project?: {
     slug?: string;
     display_name?: string;
+  };
+  oss_profile?: {
+    name?: string;
+    provider?: string;
+    bucket?: string;
+    prefix?: string;
   };
   producer?: {
     skill?: string;
@@ -138,6 +235,22 @@ interface PackageManifest {
 }
 
 interface PackageMetadata {
+  organization?: {
+    id?: string;
+    slug?: string;
+    display_name?: string;
+  };
+  project?: {
+    slug?: string;
+    display_name?: string;
+  };
+  source_evidence?: {
+    run_id?: string;
+  };
+  index_refs?: {
+    organization_index?: string;
+    project_package_path?: string;
+  };
   artifact?: {
     type?: string;
   };
@@ -172,6 +285,10 @@ interface OssCredentials {
 interface OssStorageAdapter {
   headObject(key: string): Promise<{ sha256: string | null } | null>;
   putObject(key: string, filePath: string, metadata: { sha256: string }): Promise<void>;
+}
+
+interface ResolveAxisConfigOptions {
+  localOssEnvOverrides?: AxisConfig['oss'];
 }
 
 const execFileAsync = promisify(execFile);
@@ -309,6 +426,16 @@ function defaultConfigYaml(slug: string, displayName: string): string {
   ].join('\n');
 }
 
+type SimpleYamlValue = string | boolean | SimpleYamlObject | SimpleYamlValue[];
+interface SimpleYamlObject {
+  [key: string]: SimpleYamlValue;
+}
+
+interface SimpleYamlLine {
+  indent: number;
+  content: string;
+}
+
 function parseScalar(value: string): string | boolean {
   const trimmed = value.trim();
   if (trimmed === 'true') return true;
@@ -319,32 +446,98 @@ function parseScalar(value: string): string | boolean {
   return trimmed;
 }
 
-function parseSimpleYaml(text: string): AxisConfig {
-  const root: Record<string, unknown> = {};
-  const stack: { indent: number; value: Record<string, unknown> }[] = [{ indent: -1, value: root }];
-  for (const rawLine of text.split(/\r?\n/)) {
-    if (!rawLine.trim() || rawLine.trimStart().startsWith('#')) continue;
-    const indent = rawLine.match(/^ */)?.[0].length ?? 0;
-    const line = rawLine.trim();
-    const separator = line.indexOf(':');
-    if (separator === -1) {
-      throw new Error(`Unsupported config line: ${line}`);
-    }
-    const key = line.slice(0, separator).trim();
-    const rawValue = line.slice(separator + 1);
-    while (stack.length > 1 && indent <= stack[stack.length - 1].indent) {
-      stack.pop();
-    }
-    const parent = stack[stack.length - 1].value;
-    if (!rawValue.trim()) {
-      const child: Record<string, unknown> = {};
-      parent[key] = child;
-      stack.push({ indent, value: child });
-    } else {
-      parent[key] = parseScalar(rawValue);
-    }
+function isSimpleYamlObject(value: SimpleYamlValue): value is SimpleYamlObject {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parseKeyValue(line: string): { key: string; rawValue: string } {
+  const separator = line.indexOf(':');
+  if (separator === -1) {
+    throw new Error(`Unsupported config line: ${line}`);
   }
-  return root as AxisConfig;
+  return {
+    key: line.slice(0, separator).trim(),
+    rawValue: line.slice(separator + 1),
+  };
+}
+
+function parseSimpleYaml(text: string): AxisConfig {
+  const lines: SimpleYamlLine[] = text.split(/\r?\n/)
+    .filter((rawLine) => rawLine.trim() && !rawLine.trimStart().startsWith('#'))
+    .map((rawLine) => ({
+      indent: rawLine.match(/^ */)?.[0].length ?? 0,
+      content: rawLine.trim(),
+    }));
+  let index = 0;
+
+  const parseBlock = (indent: number): SimpleYamlValue => {
+    if (index >= lines.length || lines[index].indent < indent) return {};
+    if (lines[index].indent !== indent) {
+      throw new Error(`Unsupported config indentation: ${lines[index].content}`);
+    }
+    return lines[index].content.startsWith('- ') ? parseArray(indent) : parseMap(indent);
+  };
+
+  const parseMap = (indent: number): SimpleYamlObject => {
+    const object: SimpleYamlObject = {};
+    while (index < lines.length) {
+      const line = lines[index];
+      if (line.indent < indent) break;
+      if (line.indent !== indent || line.content.startsWith('- ')) break;
+      const { key, rawValue } = parseKeyValue(line.content);
+      index += 1;
+      if (rawValue.trim()) {
+        object[key] = parseScalar(rawValue);
+      } else if (index < lines.length && lines[index].indent > indent) {
+        object[key] = parseBlock(lines[index].indent);
+      } else {
+        object[key] = {};
+      }
+    }
+    return object;
+  };
+
+  const parseArray = (indent: number): SimpleYamlValue[] => {
+    const values: SimpleYamlValue[] = [];
+    while (index < lines.length && lines[index].indent === indent && lines[index].content.startsWith('- ')) {
+      const itemText = lines[index].content.slice(2).trim();
+      index += 1;
+      if (!itemText) {
+        values.push(index < lines.length && lines[index].indent > indent ? parseBlock(lines[index].indent) : {});
+        continue;
+      }
+
+      if (itemText.includes(':')) {
+        const { key, rawValue } = parseKeyValue(itemText);
+        const object: SimpleYamlObject = {};
+        if (rawValue.trim()) {
+          object[key] = parseScalar(rawValue);
+        } else if (index < lines.length && lines[index].indent > indent) {
+          object[key] = parseBlock(lines[index].indent);
+        } else {
+          object[key] = {};
+        }
+        if (index < lines.length && lines[index].indent > indent) {
+          const rest = parseBlock(lines[index].indent);
+          if (!isSimpleYamlObject(rest)) {
+            throw new Error(`Unsupported array item continuation: ${itemText}`);
+          }
+          Object.assign(object, rest);
+        }
+        values.push(object);
+      } else {
+        values.push(parseScalar(itemText));
+      }
+    }
+    return values;
+  };
+
+  if (lines.length === 0) return {};
+  const parsed = parseBlock(lines[0].indent);
+  if (!isSimpleYamlObject(parsed)) {
+    throw new Error('Root YAML value must be a mapping');
+  }
+  return parsed as AxisConfig;
 }
 
 async function readAxisConfig(repo: string): Promise<AxisConfig> {
@@ -363,50 +556,57 @@ function requireString(errors: string[], value: unknown, field: string): string 
   return value;
 }
 
-function validateAxisConfig(config: AxisConfig): { errors: string[]; requiredEnv: string[] } {
-  const errors: string[] = [];
-  if (config.contract_version !== '0.1') errors.push('contract_version must be "0.1"');
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
 
+function collectionRecords<T>(value: unknown, keyField: string): T[] {
+  if (Array.isArray(value)) {
+    return value.filter(isRecord) as T[];
+  }
+  if (!isRecord(value)) return [];
+  return Object.entries(value)
+    .filter((entry): entry is [string, Record<string, unknown>] => isRecord(entry[1]))
+    .map(([key, record]) => ({
+      ...record,
+      [keyField]: typeof record[keyField] === 'string' ? record[keyField] : key,
+    }) as T);
+}
+
+function validateProjectReleaseSkills(
+  config: AxisConfig,
+  errors: string[],
+): {
+  slug: string | null;
+  displayName: string | null;
+  channel: ReleaseChannel | null;
+  gate: ReleaseGate | null;
+} {
   const slug = requireString(errors, config.project?.slug, 'project.slug');
   if (slug && !/^[a-z0-9][a-z0-9-]{1,62}$/.test(slug)) {
     errors.push('project.slug must match ^[a-z0-9][a-z0-9-]{1,62}$');
   }
-  requireString(errors, config.project?.display_name, 'project.display_name');
+  const displayName = requireString(errors, config.project?.display_name, 'project.display_name');
   if (config.package?.outbox_dir !== defaultOutboxDir) {
     errors.push(`package.outbox_dir must be ${defaultOutboxDir}`);
   }
 
   const channel = config.release?.channel;
   const gate = config.release?.gate;
+  let releaseChannel: ReleaseChannel | null = null;
+  let releaseGate: ReleaseGate | null = null;
   if (channel !== 'private_beta' && channel !== 'public') {
     errors.push('release.channel must be private_beta or public');
+  } else {
+    releaseChannel = channel;
   }
   if (gate !== 'not_requested' && gate !== 'pending' && gate !== 'passed' && gate !== 'failed') {
     errors.push('release.gate must be not_requested, pending, passed, or failed');
+  } else {
+    releaseGate = gate;
   }
   if (channel === 'public' && gate !== 'passed') {
     errors.push('public release requires release.gate: passed');
-  }
-
-  if (config.oss?.provider !== 'aliyun-oss') errors.push('oss.provider must be aliyun-oss');
-  requireString(errors, config.oss?.bucket, 'oss.bucket');
-  const prefix = requireString(errors, config.oss?.prefix, 'oss.prefix');
-  if (prefix && (prefix.startsWith('/') || prefix.endsWith('/'))) {
-    errors.push('oss.prefix must not start or end with /');
-  }
-
-  const requiredEnv: string[] = [];
-  for (const field of requiredEnvFields) {
-    const envName = requireString(errors, config.oss?.[field], `oss.${field}`);
-    if (!envName) continue;
-    if (!/^[A-Z_][A-Z0-9_]*$/.test(envName)) {
-      errors.push(`oss.${field} must be an environment variable name`);
-    }
-    requiredEnv.push(envName);
-  }
-  const securityTokenEnv = config.oss?.security_token_env;
-  if (securityTokenEnv && !/^[A-Z_][A-Z0-9_]*$/.test(securityTokenEnv)) {
-    errors.push('oss.security_token_env must be an environment variable name');
   }
 
   if (config.skills?.project_init !== skillNames.projectInit) errors.push(`skills.project_init must be ${skillNames.projectInit}`);
@@ -414,7 +614,220 @@ function validateAxisConfig(config: AxisConfig): { errors: string[]; requiredEnv
   if (config.skills?.test_report !== skillNames.testReport) errors.push(`skills.test_report must be ${skillNames.testReport}`);
   if (config.skills?.oss_publish !== skillNames.ossPublish) errors.push(`skills.oss_publish must be ${skillNames.ossPublish}`);
 
-  return { errors, requiredEnv };
+  return { slug, displayName, channel: releaseChannel, gate: releaseGate };
+}
+
+function validateOssTarget(
+  errors: string[],
+  source: Record<string, unknown> | AxisConfig['oss'] | RegistryOssProfile | undefined,
+  fieldPrefix: string,
+): { oss: EffectiveOssConfig | null; requiredEnv: string[] } {
+  const provider = source?.provider;
+  if (provider !== 'aliyun-oss') errors.push(`${fieldPrefix}.provider must be aliyun-oss`);
+  const bucket = requireString(errors, source?.bucket, `${fieldPrefix}.bucket`);
+  const prefix = requireString(errors, source?.prefix, `${fieldPrefix}.prefix`);
+  if (prefix && (prefix.startsWith('/') || prefix.endsWith('/'))) {
+    errors.push(`${fieldPrefix}.prefix must not start or end with /`);
+  }
+
+  const requiredEnv: string[] = [];
+  for (const field of requiredEnvFields) {
+    const envName = requireString(errors, source?.[field], `${fieldPrefix}.${field}`);
+    if (!envName) continue;
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(envName)) {
+      errors.push(`${fieldPrefix}.${field} must be an environment variable name`);
+    }
+    requiredEnv.push(envName);
+  }
+  const securityTokenEnv = source?.security_token_env;
+  if (securityTokenEnv && typeof securityTokenEnv !== 'string') {
+    errors.push(`${fieldPrefix}.security_token_env must be an environment variable name`);
+  }
+  if (typeof securityTokenEnv === 'string' && !/^[A-Z_][A-Z0-9_]*$/.test(securityTokenEnv)) {
+    errors.push(`${fieldPrefix}.security_token_env must be an environment variable name`);
+  }
+
+  if (errors.length > 0 || provider !== 'aliyun-oss' || !bucket || !prefix) {
+    return { oss: null, requiredEnv };
+  }
+
+  return {
+    oss: {
+      provider,
+      bucket,
+      prefix,
+      endpoint_env: source?.endpoint_env as string,
+      region_env: source?.region_env as string,
+      access_key_id_env: source?.access_key_id_env as string,
+      access_key_secret_env: source?.access_key_secret_env as string,
+      security_token_env: typeof securityTokenEnv === 'string' ? securityTokenEnv : undefined,
+    },
+    requiredEnv,
+  };
+}
+
+function withLocalOssEnvOverrides(profile: RegistryOssProfile, overrides: AxisConfig['oss'] | undefined): RegistryOssProfile {
+  if (!overrides) return profile;
+  const merged = { ...profile };
+  for (const field of requiredEnvFields) {
+    if (overrides[field]) merged[field] = overrides[field];
+  }
+  if (overrides.security_token_env) merged.security_token_env = overrides.security_token_env;
+  return merged;
+}
+
+function findDuplicateProjectSlugs(organization: RegistryOrganization): string[] {
+  const slugs: string[] = [];
+  const collect = (projects: unknown): void => {
+    for (const project of collectionRecords<RegistryProject>(projects, 'slug')) {
+      if (typeof project.slug === 'string') slugs.push(project.slug);
+    }
+  };
+  collect(organization.projects);
+  for (const product of collectionRecords<RegistryProduct>(organization.products, 'slug')) {
+    collect(product.projects);
+  }
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const slug of slugs) {
+    if (seen.has(slug)) duplicates.add(slug);
+    seen.add(slug);
+  }
+  return [...duplicates].sort();
+}
+
+async function readOrganizationRegistry(repo: string, registryPath: string): Promise<OrganizationRegistry> {
+  if (path.isAbsolute(registryPath) || registryPath.split(/[\\/]+/).includes('..')) {
+    throw new Error('organization.registry must be a relative path inside the repo');
+  }
+  const absolutePath = path.resolve(repo, registryPath);
+  const repoWithSeparator = repo.endsWith(path.sep) ? repo : `${repo}${path.sep}`;
+  if (!absolutePath.startsWith(repoWithSeparator)) {
+    throw new Error('organization.registry must be a relative path inside the repo');
+  }
+  if (!existsSync(absolutePath)) {
+    throw new Error(`organization registry file not found: ${registryPath}`);
+  }
+  return parseSimpleYaml(await readFile(absolutePath, 'utf8')) as OrganizationRegistry;
+}
+
+async function resolveAxisConfig(repo: string, config: AxisConfig, options: ResolveAxisConfigOptions = {}): Promise<{
+  errors: string[];
+  requiredEnv: string[];
+  effectiveConfig: EffectiveAxisConfig | null;
+}> {
+  const errors: string[] = [];
+  if (config.contract_version !== '0.1' && config.contract_version !== '0.2') {
+    errors.push('contract_version must be "0.1" or "0.2"');
+  }
+  const common = validateProjectReleaseSkills(config, errors);
+  const baseConfig = {
+    project: {
+      slug: common.slug ?? '',
+      display_name: common.displayName ?? '',
+    },
+    package: {
+      outbox_dir: defaultOutboxDir,
+    },
+    release: {
+      channel: common.channel ?? 'private_beta',
+      gate: common.gate ?? 'not_requested',
+    },
+    skills: {
+      project_init: skillNames.projectInit,
+      coding_capture: skillNames.codingCapture,
+      test_report: skillNames.testReport,
+      oss_publish: skillNames.ossPublish,
+    },
+  };
+
+  if (config.contract_version === '0.1') {
+    const { oss, requiredEnv } = validateOssTarget(errors, config.oss, 'oss');
+    return {
+      errors,
+      requiredEnv,
+      effectiveConfig: errors.length === 0 && oss ? {
+        contract_version: '0.1',
+        ...baseConfig,
+        oss,
+      } : null,
+    };
+  }
+
+  if (config.contract_version !== '0.2') {
+    return { errors, requiredEnv: [], effectiveConfig: null };
+  }
+
+  if (config.oss?.provider !== 'aliyun-oss') errors.push('oss.provider must be aliyun-oss');
+  if (config.oss?.bucket) errors.push('oss.bucket is not allowed for contract_version "0.2"; use oss.profile');
+  if (config.oss?.prefix) errors.push('oss.prefix is not allowed for contract_version "0.2"; use oss.profile');
+
+  const organizationId = requireString(errors, config.organization?.id, 'organization.id');
+  if (organizationId && !/^[a-z0-9][a-z0-9_-]{1,62}$/.test(organizationId)) {
+    errors.push('organization.id must match ^[a-z0-9][a-z0-9_-]{1,62}$');
+  }
+  const registryPath = requireString(errors, config.organization?.registry, 'organization.registry');
+  const profileName = requireString(errors, config.oss?.profile, 'oss.profile');
+  if (profileName && !/^[a-z0-9][a-z0-9_-]{1,62}$/.test(profileName)) {
+    errors.push('oss.profile must match ^[a-z0-9][a-z0-9_-]{1,62}$');
+  }
+  if (!organizationId || !registryPath || !profileName) {
+    return { errors, requiredEnv: [], effectiveConfig: null };
+  }
+
+  let registry: OrganizationRegistry | null = null;
+  try {
+    registry = await readOrganizationRegistry(repo, registryPath);
+  } catch (error: unknown) {
+    errors.push(error instanceof Error ? error.message : String(error));
+  }
+  if (!registry) return { errors, requiredEnv: [], effectiveConfig: null };
+  if (registry.schema && registry.schema !== 'axis.organization_registry') {
+    errors.push('organization registry schema must be axis.organization_registry');
+  }
+  if (registry.schema_version !== '0.2') {
+    errors.push('organization registry schema_version must be "0.2"');
+  }
+
+  const organization = collectionRecords<RegistryOrganization>(registry.organizations, 'id')
+    .find((candidate) => candidate.id === organizationId);
+  if (!organization) {
+    errors.push('organization.id is not declared in the organization registry');
+    return { errors, requiredEnv: [], effectiveConfig: null };
+  }
+  const organizationSlug = requireString(errors, organization.slug, 'organization registry organization.slug');
+  const organizationDisplayName = requireString(errors, organization.display_name, 'organization registry organization.display_name');
+  const duplicateSlugs = findDuplicateProjectSlugs(organization);
+  if (duplicateSlugs.length > 0) {
+    errors.push(`project.slug is duplicated inside organization.id ${organizationId}: ${duplicateSlugs.join(', ')}`);
+  }
+
+  const profile = collectionRecords<RegistryOssProfile>(organization.oss_profiles, 'name')
+    .find((candidate) => candidate.name === profileName);
+  if (!profile) {
+    errors.push('oss.profile is not declared for organization.id');
+    return { errors, requiredEnv: [], effectiveConfig: null };
+  }
+  const resolvedProfile = withLocalOssEnvOverrides(profile, options.localOssEnvOverrides);
+  const { oss, requiredEnv } = validateOssTarget(errors, resolvedProfile, 'organization registry oss_profile');
+  if (oss) {
+    oss.profile = profileName;
+  }
+
+  return {
+    errors,
+    requiredEnv,
+    effectiveConfig: errors.length === 0 && oss && organizationSlug && organizationDisplayName ? {
+      contract_version: '0.2',
+      organization: {
+        id: organizationId,
+        slug: organizationSlug,
+        display_name: organizationDisplayName,
+      },
+      ...baseConfig,
+      oss,
+    } : null,
+  };
 }
 
 async function ensureGitignore(repo: string): Promise<void> {
@@ -456,20 +869,29 @@ async function projectInitCommand(): Promise<void> {
 async function validateConfigCommand(): Promise<void> {
   const repo = repoArg();
   const config = await readAxisConfig(repo);
-  const { errors, requiredEnv } = validateAxisConfig(config);
+  const { errors, requiredEnv, effectiveConfig } = await resolveAxisConfig(repo, config);
   if (errors.length > 0) {
     throw new Error(errors.join('\n'));
   }
+  if (!effectiveConfig) throw new Error('Unable to resolve Axis config');
   console.log(JSON.stringify({
     ok: true,
+    contract_version: effectiveConfig.contract_version,
+    organization: effectiveConfig.organization,
     project: {
-      slug: config.project?.slug,
-      display_name: config.project?.display_name,
+      slug: effectiveConfig.project.slug,
+      display_name: effectiveConfig.project.display_name,
     },
     release: {
-      channel: config.release?.channel,
-      gate: config.release?.gate,
+      channel: effectiveConfig.release.channel,
+      gate: effectiveConfig.release.gate,
     },
+    oss_profile: effectiveConfig.oss.profile ? {
+      name: effectiveConfig.oss.profile,
+      provider: effectiveConfig.oss.provider,
+      bucket: effectiveConfig.oss.bucket,
+      prefix: effectiveConfig.oss.prefix,
+    } : undefined,
     required_env: requiredEnv,
   }, null, 2));
 }
@@ -549,6 +971,56 @@ async function gitInfo(repo: string): Promise<{ branch: string; commit: string; 
   };
 }
 
+function packageDirFor(repo: string, config: EffectiveAxisConfig, runId: string): string {
+  if (config.contract_version === '0.2') {
+    const organizationId = config.organization?.id;
+    if (!organizationId) throw new Error('organization.id is required for v0.2 package path');
+    return path.join(repo, config.package.outbox_dir, 'v0.2', organizationId, config.project.slug, runId);
+  }
+  return path.join(repo, config.package.outbox_dir, 'v0.1', config.project.slug, runId);
+}
+
+function packageIdFor(config: EffectiveAxisConfig, runId: string): string {
+  if (config.contract_version === '0.2') {
+    return `${config.organization?.id}__${config.project.slug}__${runId}`;
+  }
+  return `${config.project.slug}__${runId}`;
+}
+
+function ossPackagePath(config: EffectiveAxisConfig, runId: string): string {
+  if (config.contract_version === '0.2') {
+    return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization?.id}/packages/${config.project.slug}/${runId}/`;
+  }
+  return `${normalizeOssPrefix(config.oss.prefix)}/${config.project.slug}/${runId}/`;
+}
+
+function baseUriFor(config: EffectiveAxisConfig, runId: string): string {
+  return `oss://${config.oss.bucket}/${ossPackagePath(config, runId)}`;
+}
+
+function organizationSnapshot(config: EffectiveAxisConfig): OrganizationSnapshot | undefined {
+  if (config.contract_version !== '0.2') return undefined;
+  if (!config.organization) throw new Error('organization.id is required for v0.2 package snapshot');
+  return config.organization;
+}
+
+function projectSnapshot(config: EffectiveAxisConfig): { slug: string; display_name: string } {
+  return {
+    slug: config.project.slug,
+    display_name: config.project.display_name,
+  };
+}
+
+function ossProfileSnapshot(config: EffectiveAxisConfig): { name: string; provider: string; bucket: string; prefix: string } | undefined {
+  if (config.contract_version !== '0.2') return undefined;
+  return {
+    name: config.oss.profile as string,
+    provider: config.oss.provider,
+    bucket: config.oss.bucket,
+    prefix: config.oss.prefix,
+  };
+}
+
 async function fileEntry(packageDir: string, kind: FileEntry['kind'], fileName: string, mediaType: string): Promise<FileEntry> {
   const filePath = path.join(packageDir, fileName);
   const content = await readFile(filePath);
@@ -591,16 +1063,16 @@ function workflowStatusForArtifact(status: ArtifactStatus): 'blocked' | 'complet
 
 async function writePackageCommand(assetType: AssetType): Promise<void> {
   const repo = repoArg();
-  const config = await readAxisConfig(repo);
-  const { errors } = validateAxisConfig(config);
+  const rawConfig = await readAxisConfig(repo);
+  const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig);
   if (errors.length > 0) {
     throw new Error(errors.join('\n'));
   }
-  const slug = config.project?.slug as string;
-  const displayName = config.project?.display_name as string;
-  const outboxDir = config.package?.outbox_dir as string;
-  const releaseChannel = config.release?.channel as ReleaseChannel;
-  const releaseGate = config.release?.gate as ReleaseGate;
+  if (!config) throw new Error('Unable to resolve Axis config');
+  const slug = config.project.slug;
+  const displayName = config.project.display_name;
+  const releaseChannel = config.release.channel;
+  const releaseGate = config.release.gate;
   const title = requireArg('--title');
   const summary = requireArg('--summary');
   if (summary.length > 500) {
@@ -612,7 +1084,7 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
   const experience = await readTextArg('--experience', '--experience-file', defaultExperience(title));
   const runId = buildRunId(assetType);
   const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const packageDir = path.join(repo, outboxDir, 'v0.1', slug, runId);
+  const packageDir = packageDirFor(repo, config, runId);
   await rm(packageDir, { recursive: true, force: true });
   await mkdir(packageDir, { recursive: true });
 
@@ -624,6 +1096,10 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
   const docId = protocolDocId(runId);
   const documentType = documentTypeForAsset(assetType);
   const workflowStatus = workflowStatusForArtifact(artifactStatus);
+  const git = await gitInfo(repo);
+  const organization = organizationSnapshot(config);
+  const project = projectSnapshot(config);
+  const ossProfile = ossProfileSnapshot(config);
   const publicSafetyValidation = {
     status: 'passed',
     validators: [...publicSafetyValidators],
@@ -635,10 +1111,23 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
   };
   const metadata = {
     schema: 'axis.package.metadata',
-    schema_version: '0.1',
+    schema_version: config.contract_version,
     title,
     summary,
     tags,
+    ...(organization ? { organization } : {}),
+    ...(config.contract_version === '0.2' ? {
+      project,
+      source_evidence: {
+        repo_ref: path.basename(repo),
+        commit: git.commit,
+        run_id: runId,
+      },
+      index_refs: {
+        organization_index: `${normalizeOssPrefix(config.oss.prefix)}/orgs/${organization?.id}/index/packages.jsonl`,
+        project_package_path: ossPackagePath(config, runId).replace(/\/$/, '/'),
+      },
+    } : {}),
     artifact: {
       type: assetType,
       status: artifactStatus,
@@ -705,17 +1194,14 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
   };
   await writeFile(path.join(packageDir, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 
-  const git = await gitInfo(repo);
-  const baseUri = `oss://${config.oss?.bucket}/${config.oss?.prefix}/${slug}/${runId}/`;
   const manifest = {
     schema: 'axis.package.manifest',
-    schema_version: '0.1',
-    package_id: `${slug}__${runId}`,
+    schema_version: config.contract_version,
+    package_id: packageIdFor(config, runId),
     created_at: createdAt,
-    project: {
-      slug,
-      display_name: displayName,
-    },
+    ...(organization ? { organization } : {}),
+    project,
+    ...(ossProfile ? { oss_profile: ossProfile } : {}),
     producer: {
       skill: skillNameForAsset(assetType),
       agent: 'codex',
@@ -743,9 +1229,9 @@ async function writePackageCommand(assetType: AssetType): Promise<void> {
     publish: {
       provider: 'aliyun-oss',
       status: 'local_ready',
-      bucket: config.oss?.bucket,
-      prefix: config.oss?.prefix,
-      base_uri: baseUri,
+      bucket: config.oss.bucket,
+      prefix: config.oss.prefix,
+      base_uri: baseUriFor(config, runId),
     },
     protocols: protocolVersions,
     document_refs: [
@@ -808,13 +1294,29 @@ async function readOptionalLocalConfig(repo: string): Promise<AxisConfig | null>
   return parseSimpleYaml(await readFile(configPath, 'utf8'));
 }
 
-async function readPublishConfig(repo: string): Promise<{ config: AxisConfig; localDryRun: boolean }> {
+async function readPublishConfig(repo: string): Promise<{
+  config: AxisConfig;
+  localDryRun: boolean;
+  localOssEnvOverrides?: AxisConfig['oss'];
+}> {
   const config = await readAxisConfig(repo);
   const localConfig = await readOptionalLocalConfig(repo);
   if (!localConfig) return { config, localDryRun: false };
-  if (localConfig.contract_version && localConfig.contract_version !== '0.1') {
-    throw new Error('contract_version in .axis/config.local.yml must be "0.1"');
+  if (localConfig.contract_version && localConfig.contract_version !== config.contract_version) {
+    throw new Error('contract_version in .axis/config.local.yml must match .axis/config.yml');
   }
+  const localOssEnvOverrides: AxisConfig['oss'] = {};
+  for (const field of requiredEnvFields) {
+    if (localConfig.oss?.[field]) localOssEnvOverrides[field] = localConfig.oss[field];
+  }
+  if (localConfig.oss?.security_token_env) {
+    localOssEnvOverrides.security_token_env = localConfig.oss.security_token_env;
+  }
+  const hasLocalOssEnvOverrides = Object.keys(localOssEnvOverrides).length > 0;
+  const oss = config.contract_version === '0.2' ? config.oss : {
+    ...config.oss,
+    ...localOssEnvOverrides,
+  };
   return {
     config: {
       ...config,
@@ -822,12 +1324,10 @@ async function readPublishConfig(repo: string): Promise<{ config: AxisConfig; lo
         ...config.package,
         outbox_dir: localConfig.local?.outbox_dir ?? config.package?.outbox_dir,
       },
-      oss: {
-        ...config.oss,
-        ...localConfig.oss,
-      },
+      oss,
     },
     localDryRun: localConfig.local?.dry_run === true,
+    localOssEnvOverrides: config.contract_version === '0.2' && hasLocalOssEnvOverrides ? localOssEnvOverrides : undefined,
   };
 }
 
@@ -855,6 +1355,13 @@ function normalizeOssPrefix(prefix: string): string {
 
 function objectKeyFor(prefix: string, slug: string, runId: string, relativePath: string): string {
   return `${normalizeOssPrefix(prefix)}/${slug}/${runId}/${relativePath}`;
+}
+
+function objectKeyForConfig(config: EffectiveAxisConfig, runId: string, relativePath: string): string {
+  if (config.contract_version === '0.2') {
+    return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization?.id}/packages/${config.project.slug}/${runId}/${relativePath}`;
+  }
+  return objectKeyFor(config.oss.prefix, config.project.slug, runId, relativePath);
 }
 
 function ossUri(bucket: string, objectKey: string): string {
@@ -996,7 +1503,7 @@ async function validatePackageManifest(
   repo: string,
   packageDir: string,
   runId: string,
-  config: AxisConfig,
+  config: EffectiveAxisConfig,
   localFiles: string[],
 ): Promise<{ manifest: PackageManifest; metadata: PackageMetadata }> {
   const manifestPath = path.join(packageDir, 'manifest.json');
@@ -1007,27 +1514,60 @@ async function validatePackageManifest(
   const manifest = await readJsonFile<PackageManifest>(manifestPath);
   const metadata = await readJsonFile<PackageMetadata>(metadataPath);
   if (manifest.schema !== 'axis.package.manifest') throw new Error('manifest.schema must be axis.package.manifest');
-  if (manifest.schema_version !== '0.1') throw new Error('manifest.schema_version must be "0.1"');
-  if (manifest.project?.slug !== config.project?.slug) throw new Error('manifest.project.slug must match .axis/config.yml');
-  if (manifest.project?.display_name !== config.project?.display_name) {
+  if (manifest.schema_version !== config.contract_version) {
+    throw new Error(`manifest.schema_version must be "${config.contract_version}"`);
+  }
+  if (manifest.project?.slug !== config.project.slug) throw new Error('manifest.project.slug must match .axis/config.yml');
+  if (manifest.project?.display_name !== config.project.display_name) {
     throw new Error('manifest.project.display_name must match .axis/config.yml');
   }
   if (manifest.run?.run_id !== runId) throw new Error('manifest.run.run_id must match --run-id');
-  if (manifest.package_id !== `${config.project?.slug}__${runId}`) throw new Error('manifest.package_id does not match project slug and run id');
+  if (manifest.package_id !== packageIdFor(config, runId)) throw new Error('manifest.package_id does not match resolved config and run id');
+
+  if (config.contract_version === '0.2') {
+    const expectedOrganization = organizationSnapshot(config);
+    const expectedOssProfile = ossProfileSnapshot(config);
+    if (
+      manifest.organization?.id !== expectedOrganization?.id
+      || manifest.organization?.slug !== expectedOrganization?.slug
+      || manifest.organization?.display_name !== expectedOrganization?.display_name
+      || metadata.organization?.id !== expectedOrganization?.id
+      || metadata.organization?.slug !== expectedOrganization?.slug
+      || metadata.organization?.display_name !== expectedOrganization?.display_name
+      || metadata.project?.slug !== config.project.slug
+      || metadata.project?.display_name !== config.project.display_name
+      || manifest.oss_profile?.name !== expectedOssProfile?.name
+      || manifest.oss_profile?.provider !== expectedOssProfile?.provider
+      || manifest.oss_profile?.bucket !== expectedOssProfile?.bucket
+      || manifest.oss_profile?.prefix !== expectedOssProfile?.prefix
+    ) {
+      throw new Error('manifest organization/project/oss snapshot does not match resolved config');
+    }
+    const expectedOrganizationIndex = `${normalizeOssPrefix(config.oss.prefix)}/orgs/${expectedOrganization?.id}/index/packages.jsonl`;
+    if (metadata.source_evidence?.run_id !== runId) {
+      throw new Error('metadata.source_evidence.run_id must match --run-id');
+    }
+    if (metadata.index_refs?.organization_index !== expectedOrganizationIndex) {
+      throw new Error('metadata.index_refs.organization_index must match resolved OSS target');
+    }
+    if (metadata.index_refs?.project_package_path !== ossPackagePath(config, runId)) {
+      throw new Error('metadata.index_refs.project_package_path must match resolved OSS target');
+    }
+  }
 
   assertReleaseChannel(manifest.release?.channel, 'manifest.release.channel');
   assertReleaseGate(manifest.release?.gate, 'manifest.release.gate');
   if (manifest.release.channel === 'public' && manifest.release.gate !== 'passed') {
     throw new Error('public release requires release.gate: passed');
   }
-  if (manifest.release.channel !== config.release?.channel) throw new Error('manifest.release.channel must match .axis/config.yml');
-  if (manifest.release.gate !== config.release?.gate) throw new Error('manifest.release.gate must match .axis/config.yml');
+  if (manifest.release.channel !== config.release.channel) throw new Error('manifest.release.channel must match .axis/config.yml');
+  if (manifest.release.gate !== config.release.gate) throw new Error('manifest.release.gate must match .axis/config.yml');
 
   if (manifest.publish?.provider !== 'aliyun-oss') throw new Error('manifest.publish.provider must be aliyun-oss');
   assertPublishStatus(manifest.publish?.status);
-  if (manifest.publish.bucket !== config.oss?.bucket) throw new Error('manifest.publish.bucket must match .axis/config.yml');
-  if (manifest.publish.prefix !== config.oss?.prefix) throw new Error('manifest.publish.prefix must match .axis/config.yml');
-  const expectedBaseUri = `oss://${config.oss?.bucket}/${config.oss?.prefix}/${config.project?.slug}/${runId}/`;
+  if (manifest.publish.bucket !== config.oss.bucket) throw new Error('manifest.publish.bucket must match resolved config');
+  if (manifest.publish.prefix !== config.oss.prefix) throw new Error('manifest.publish.prefix must match resolved config');
+  const expectedBaseUri = baseUriFor(config, runId);
   if (manifest.publish.base_uri !== expectedBaseUri) throw new Error('manifest.publish.base_uri does not match configured OSS target');
 
   if (!Array.isArray(manifest.files) || manifest.files.length === 0) throw new Error('manifest.files is required');
@@ -1089,13 +1629,13 @@ async function redactMarkdownFiles(
   return redactions;
 }
 
-function readOssCredentials(config: AxisConfig): OssCredentials {
+function readOssCredentials(config: EffectiveAxisConfig): OssCredentials {
   const envMap = {
-    endpoint: config.oss?.endpoint_env,
-    region: config.oss?.region_env,
-    accessKeyId: config.oss?.access_key_id_env,
-    accessKeySecret: config.oss?.access_key_secret_env,
-    securityToken: config.oss?.security_token_env,
+    endpoint: config.oss.endpoint_env,
+    region: config.oss.region_env,
+    accessKeyId: config.oss.access_key_id_env,
+    accessKeySecret: config.oss.access_key_secret_env,
+    securityToken: config.oss.security_token_env,
   };
   const missing: string[] = [];
   const readEnv = (name: string | undefined, required: boolean): string | undefined => {
@@ -1153,7 +1693,7 @@ class AliyunOssStorage implements OssStorageAdapter {
     put(name: string, file: string, options?: { meta?: Record<string, string> }): Promise<unknown>;
   };
 
-  constructor(config: AxisConfig, credentials: OssCredentials) {
+  constructor(config: EffectiveAxisConfig, credentials: OssCredentials) {
     const require = createRequire(import.meta.url);
     const OSS = require('ali-oss') as new (options: Record<string, string | undefined>) => AliyunOssStorage['client'];
     this.client = new OSS({
@@ -1162,7 +1702,7 @@ class AliyunOssStorage implements OssStorageAdapter {
       accessKeyId: credentials.accessKeyId,
       accessKeySecret: credentials.accessKeySecret,
       stsToken: credentials.securityToken,
-      bucket: config.oss?.bucket,
+      bucket: config.oss.bucket,
     });
   }
 
@@ -1191,10 +1731,10 @@ function isNotFoundError(error: unknown): boolean {
   return maybe.status === 404 || maybe.code === 'NoSuchKey' || maybe.name === 'NoSuchKeyError';
 }
 
-function storageAdapter(config: AxisConfig, credentials: OssCredentials): OssStorageAdapter {
+function storageAdapter(config: EffectiveAxisConfig, credentials: OssCredentials): OssStorageAdapter {
   const mockRoot = process.env.AXIS_OSS_MOCK_DIR;
   if (mockRoot) {
-    return new LocalMockOssStorage(path.resolve(mockRoot), config.oss?.bucket as string);
+    return new LocalMockOssStorage(path.resolve(mockRoot), config.oss.bucket);
   }
   return new AliyunOssStorage(config, credentials);
 }
@@ -1206,16 +1746,14 @@ function mediaTypeForPath(filePath: string, fallback: string): string {
   return 'application/octet-stream';
 }
 
-async function buildPublishFiles(packageDir: string, manifest: PackageManifest, config: AxisConfig, runId: string): Promise<PublishFile[]> {
-  const bucket = config.oss?.bucket as string;
-  const prefix = config.oss?.prefix as string;
-  const slug = config.project?.slug as string;
+async function buildPublishFiles(packageDir: string, manifest: PackageManifest, config: EffectiveAxisConfig, runId: string): Promise<PublishFile[]> {
+  const bucket = config.oss.bucket;
   const files: PublishFile[] = [];
   for (const entry of manifest.files ?? []) {
     const absolutePath = path.join(packageDir, entry.path);
     const content = await readFile(absolutePath);
     const stats = await stat(absolutePath);
-    const objectKey = objectKeyFor(prefix, slug, runId, entry.path);
+    const objectKey = objectKeyForConfig(config, runId, entry.path);
     files.push({
       path: entry.path,
       absolutePath,
@@ -1262,10 +1800,12 @@ function publishSummary(
     ok: true,
     mode,
     uploaded,
+    organization: manifest.organization,
     project: {
       slug: manifest.project?.slug,
       display_name: manifest.project?.display_name,
     },
+    oss_profile: manifest.oss_profile,
     asset_type: metadata.artifact?.type,
     run_id: manifest.run?.run_id,
     release: {
@@ -1302,17 +1842,18 @@ async function ossPublishCommand(): Promise<void> {
   if (!/^\d{8}T\d{6}Z-[a-z0-9-]+-[a-f0-9]{8}$/.test(runId)) {
     throw new Error('--run-id must match YYYYMMDDThhmmssZ-name-8hex');
   }
-  const { config, localDryRun } = await readPublishConfig(repo);
-  const { errors } = validateAxisConfig(config);
+  const { config: rawConfig, localDryRun, localOssEnvOverrides } = await readPublishConfig(repo);
+  const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig, { localOssEnvOverrides });
   if (errors.length > 0) {
     throw new Error(errors.join('\n'));
   }
+  if (!config) throw new Error('Unable to resolve Axis config');
 
   const dryRun = hasFlag('--dry-run') || localDryRun;
   const localOnly = hasFlag('--local-only');
   if (dryRun && localOnly) throw new Error('--dry-run and --local-only cannot be combined');
   const mode: PublishMode = dryRun ? 'dry_run' : localOnly ? 'local_only' : 'upload';
-  const packageDir = path.join(repo, config.package?.outbox_dir as string, 'v0.1', config.project?.slug as string, runId);
+  const packageDir = packageDirFor(repo, config, runId);
   if (!existsSync(packageDir)) {
     throw new Error(`outbox run not found: ${relativeToRepo(repo, packageDir)}`);
   }

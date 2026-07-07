@@ -212,6 +212,61 @@ skills:
   oss_publish: axis-oss-publish
 ```
 
+v0.2 项目使用 organization registry 解析 OSS profile。项目配置只声明 `organization.id`、`project.slug` 和 `oss.profile`；`metadata.json` / `manifest.json` 中的 organization、project、OSS、repo/run 字段由工具生成快照，不需要也不允许人工二次配置。
+
+`.axis/config.yml` 示例：
+
+```yaml
+contract_version: "0.2"
+organization:
+  id: org_axis_tools
+  registry: .axis/organizations.yml
+project:
+  slug: axis-tools
+  display_name: Axis Tools
+package:
+  outbox_dir: .axis/outbox
+release:
+  channel: private_beta
+  gate: not_requested
+oss:
+  provider: aliyun-oss
+  profile: private_beta_main
+skills:
+  project_init: axis-project-init
+  coding_capture: axis-coding-capture
+  test_report: axis-test-report
+  oss_publish: axis-oss-publish
+```
+
+`.axis/organizations.yml` 示例：
+
+```yaml
+schema: axis.organization_registry
+schema_version: "0.2"
+organizations:
+  - id: org_axis_tools
+    slug: axis-tools
+    display_name: Axis Tools
+    status: active
+    oss_profiles:
+      - name: private_beta_main
+        provider: aliyun-oss
+        bucket: axis-v02-private-beta-example
+        prefix: axis/v0.2
+        endpoint_env: ALIYUN_OSS_ENDPOINT
+        region_env: ALIYUN_OSS_REGION
+        access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID
+        access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET
+        security_token_env: ALIYUN_OSS_SECURITY_TOKEN
+    products:
+      - slug: axis-tools
+        display_name: Axis Tools
+        projects:
+          - slug: axis-tools
+            display_name: Axis Tools Repo
+```
+
 校验配置：
 
 ```bash
@@ -517,6 +572,61 @@ skills:
   coding_capture: axis-coding-capture
   test_report: axis-test-report
   oss_publish: axis-oss-publish
+```
+
+Axis v0.2 projects resolve OSS profiles through an organization registry. Project config only declares `organization.id`, `project.slug`, and `oss.profile`; organization, project, OSS, and repo/run fields in `metadata.json` and `manifest.json` are generated snapshots, not manually duplicated configuration.
+
+`.axis/config.yml` example:
+
+```yaml
+contract_version: "0.2"
+organization:
+  id: org_axis_tools
+  registry: .axis/organizations.yml
+project:
+  slug: axis-tools
+  display_name: Axis Tools
+package:
+  outbox_dir: .axis/outbox
+release:
+  channel: private_beta
+  gate: not_requested
+oss:
+  provider: aliyun-oss
+  profile: private_beta_main
+skills:
+  project_init: axis-project-init
+  coding_capture: axis-coding-capture
+  test_report: axis-test-report
+  oss_publish: axis-oss-publish
+```
+
+`.axis/organizations.yml` example:
+
+```yaml
+schema: axis.organization_registry
+schema_version: "0.2"
+organizations:
+  - id: org_axis_tools
+    slug: axis-tools
+    display_name: Axis Tools
+    status: active
+    oss_profiles:
+      - name: private_beta_main
+        provider: aliyun-oss
+        bucket: axis-v02-private-beta-example
+        prefix: axis/v0.2
+        endpoint_env: ALIYUN_OSS_ENDPOINT
+        region_env: ALIYUN_OSS_REGION
+        access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID
+        access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET
+        security_token_env: ALIYUN_OSS_SECURITY_TOKEN
+    products:
+      - slug: axis-tools
+        display_name: Axis Tools
+        projects:
+          - slug: axis-tools
+            display_name: Axis Tools Repo
 ```
 
 Validate config:
