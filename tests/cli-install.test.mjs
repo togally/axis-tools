@@ -212,13 +212,15 @@ await withTempDir(async (home) => {
 });
 
 await withTempDir(async (home) => {
+  const cleanRepo = path.join(home, 'clean-axis-tools');
   const codexHome = path.join(home, '.codex');
   const dashboard = path.join(codexHome, 'skills', 'axis-ali-dashboard');
+  await execFileAsync('git', ['clone', repoRoot, cleanRepo], { maxBuffer: 10 * 1024 * 1024 });
   await mkdir(dashboard, { recursive: true });
   await writeFile(path.join(dashboard, 'SKILL.md'), '# local edit\n', 'utf8');
 
   await assert.rejects(
-    () => runUpdateSkills(['--repo', repoRoot, '--agent', 'codex', '--no-pull', '--no-validate', '--json'], {
+    () => runUpdateSkills(['--repo', cleanRepo, '--agent', 'codex', '--no-pull', '--no-validate', '--json'], {
       env: {
         HOME: home,
         USERPROFILE: home,
@@ -228,4 +230,26 @@ await withTempDir(async (home) => {
     /Refusing to overwrite modified skill directory/,
   );
   assert.equal(await readFile(path.join(dashboard, 'SKILL.md'), 'utf8'), '# local edit\n');
+});
+
+await withTempDir(async (home) => {
+  const dirtyRepo = path.join(home, 'dirty-axis-tools');
+  const codexHome = path.join(home, '.codex');
+  await execFileAsync('git', ['clone', repoRoot, dirtyRepo], { maxBuffer: 10 * 1024 * 1024 });
+  await writeFile(path.join(dirtyRepo, 'LOCAL_EDIT.txt'), 'dirty\n', 'utf8');
+
+  await assert.rejects(
+    () => runUpdateSkills(['--repo', dirtyRepo, '--agent', 'codex', '--no-pull', '--no-validate', '--json'], {
+      env: {
+        HOME: home,
+        USERPROFILE: home,
+        CODEX_HOME: codexHome,
+      },
+    }),
+    /dirty|local changes|working tree/i,
+  );
+  await assert.rejects(
+    () => readFile(path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md'), 'utf8'),
+    /ENOENT/,
+  );
 });

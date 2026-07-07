@@ -65,6 +65,24 @@ async function validateSkill(skillDir, validator) {
   await run('python3', [validator, skillDir]);
 }
 
+async function isGitRepo(repo) {
+  try {
+    const { stdout } = await run('git', ['rev-parse', '--is-inside-work-tree'], { cwd: repo });
+    return stdout.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+async function assertCleanGitRepo(repo) {
+  const { stdout } = await run('git', ['status', '--porcelain'], { cwd: repo });
+  const dirtyEntries = stdout.trim().split(/\r?\n/).filter(Boolean);
+  if (dirtyEntries.length === 0) return;
+  const preview = dirtyEntries.slice(0, 5).join('; ');
+  const suffix = dirtyEntries.length > 5 ? `; ... ${dirtyEntries.length - 5} more` : '';
+  throw new Error(`Refusing to update dirty axis-tools repo at ${repo}. Commit, stash, or remove local changes first. Dirty entries: ${preview}${suffix}`);
+}
+
 async function main() {
   const repo = path.resolve(argValue('--repo') || defaultRepo());
   const agent = argValue('--agent') || 'codex';
@@ -88,6 +106,13 @@ async function main() {
 
   if (!existsSync(repo)) {
     throw new Error(`Axis tools repo not found: ${repo}`);
+  }
+
+  const gitRepo = await isGitRepo(repo);
+  if (gitRepo) {
+    await assertCleanGitRepo(repo);
+  } else if (!hasFlag('--no-pull')) {
+    throw new Error(`Axis tools repo is not a git checkout: ${repo}. Use --no-pull only for test or offline fixtures.`);
   }
 
   if (!hasFlag('--no-pull')) {
