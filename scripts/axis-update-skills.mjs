@@ -65,22 +65,54 @@ async function validateSkill(skillDir, validator) {
   await run('python3', [validator, skillDir]);
 }
 
+async function isGitRepo(repo) {
+  try {
+    const { stdout } = await run('git', ['rev-parse', '--is-inside-work-tree'], { cwd: repo });
+    return stdout.trim() === 'true';
+  } catch {
+    return false;
+  }
+}
+
+async function assertCleanGitRepo(repo) {
+  const { stdout } = await run('git', ['status', '--porcelain'], { cwd: repo });
+  const dirtyEntries = stdout.trim().split(/\r?\n/).filter(Boolean);
+  if (dirtyEntries.length === 0) return;
+  const preview = dirtyEntries.slice(0, 5).join('; ');
+  const suffix = dirtyEntries.length > 5 ? `; ... ${dirtyEntries.length - 5} more` : '';
+  throw new Error(`Refusing to update dirty axis-tools repo at ${repo}. Commit, stash, or remove local changes first. Dirty entries: ${preview}${suffix}`);
+}
+
 async function main() {
   const repo = path.resolve(argValue('--repo') || defaultRepo());
   const agent = argValue('--agent') || 'codex';
   const validator = path.resolve(argValue('--validator') || defaultValidator());
+  const backupDir = argValue('--backup-dir');
   const outputJson = hasFlag('--json');
+  const force = hasFlag('--force');
+  const dryRun = hasFlag('--dry-run');
   const result = {
     ok: false,
     repo,
     agent,
+    force,
+    dry_run: dryRun,
     pulled: false,
     installed: [],
+    inventory: [],
+    backup_dir: null,
     validated: [],
   };
 
   if (!existsSync(repo)) {
     throw new Error(`Axis tools repo not found: ${repo}`);
+  }
+
+  const gitRepo = await isGitRepo(repo);
+  if (gitRepo) {
+    await assertCleanGitRepo(repo);
+  } else if (!hasFlag('--no-pull')) {
+    throw new Error(`Axis tools repo is not a git checkout: ${repo}. Use --no-pull only for test or offline fixtures.`);
   }
 
   if (!hasFlag('--no-pull')) {
@@ -96,11 +128,17 @@ async function main() {
     throw new Error(`Axis CLI entry not found after build: ${cli}`);
   }
 
-  const install = await run(process.execPath, [cli, 'install', '--agent', agent, '--force'], { cwd: repo });
+  const installArgs = [cli, 'install', '--agent', agent];
+  if (dryRun) installArgs.push('--dry-run');
+  if (force) installArgs.push('--force');
+  if (backupDir) installArgs.push('--backup-dir', path.resolve(backupDir));
+  const install = await run(process.execPath, installArgs, { cwd: repo });
   const installResult = parseJsonOutput(install.stdout);
   result.installed = Array.isArray(installResult.installed) ? installResult.installed : [];
+  result.inventory = Array.isArray(installResult.inventory) ? installResult.inventory : [];
+  result.backup_dir = installResult.backup_dir ?? null;
 
-  if (!hasFlag('--no-validate')) {
+  if (!dryRun && !hasFlag('--no-validate')) {
     const seenTargets = new Set();
     for (const item of result.installed) {
       if (!item?.target) continue;

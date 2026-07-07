@@ -2,7 +2,7 @@
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdir, readlink, readdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
@@ -64,7 +64,8 @@ function printUsage() {
     console.log(`axis-tools
 
 Commands:
-  install [--agent <codex|claude-code|cc|all>] [--force]
+  install [--agent <codex|claude-code|cc|all>] [--dry-run] [--force] [--backup-dir <path>] [--rollback <backup-dir-or-manifest>]
+  inventory [--agent <codex|claude-code|cc|all>]
   project-init --repo <path> --project-slug <slug> --display-name <name> [--force]
   validate-config --repo <path>
   coding-capture --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
@@ -1154,10 +1155,14 @@ function selectedAgents(agent) {
         return ['codex', 'claude-code'];
     return [agent];
 }
+function agentSkillRoot(agent) {
+    if (agent === 'codex') {
+        return path.join(process.env.CODEX_HOME || path.join(homeDir(), '.codex'), 'skills');
+    }
+    return path.join(homeDir(), '.claude', 'skills');
+}
 function agentSkillDir(agent, skillName) {
-    if (agent === 'codex')
-        return path.join(homeDir(), '.codex', 'skills', skillName);
-    return path.join(homeDir(), '.claude', 'skills', skillName);
+    return path.join(agentSkillRoot(agent), skillName);
 }
 async function packagedSkillNames() {
     const root = skillsRoot();
@@ -1191,8 +1196,31 @@ async function collectRelativeFiles(root) {
     await visit(root);
     return files.sort();
 }
+async function lstatIfExists(target) {
+    try {
+        return await lstat(target);
+    }
+    catch (error) {
+        const fsError = error;
+        if (fsError.code === 'ENOENT')
+            return null;
+        throw error;
+    }
+}
+async function directoryFingerprint(root) {
+    const hash = createHash('sha256');
+    const files = await collectRelativeFiles(root);
+    for (const file of files) {
+        hash.update(file);
+        hash.update('\0');
+        hash.update(await readFile(path.join(root, file)));
+        hash.update('\0');
+    }
+    return hash.digest('hex');
+}
 async function directoriesIdentical(sourceDir, targetDir) {
-    if (!existsSync(targetDir))
+    const targetStats = await lstatIfExists(targetDir);
+    if (!targetStats || targetStats.isSymbolicLink())
         return false;
     const sourceFiles = await collectRelativeFiles(sourceDir);
     const targetFiles = await collectRelativeFiles(targetDir);
@@ -1210,42 +1238,242 @@ async function directoriesIdentical(sourceDir, targetDir) {
     }
     return true;
 }
-async function copySkillBundle(sourceDir, targetDir, force) {
-    await mkdir(path.dirname(targetDir), { recursive: true });
-    if (existsSync(targetDir)) {
-        if (await directoriesIdentical(sourceDir, targetDir))
-            return 'identical';
-        if (!force) {
-            throw new Error(`Refusing to overwrite modified skill directory at ${targetDir}. Re-run with --force to replace it.`);
-        }
-        await rm(targetDir, { recursive: true, force: true });
+async function inventorySkillBundle(skillName, agent, sourceDir, targetDir, force) {
+    const targetStats = await lstatIfExists(targetDir);
+    const exists = targetStats !== null;
+    const identical = exists && !targetStats.isSymbolicLink() && await directoriesIdentical(sourceDir, targetDir);
+    const source_sha256 = await directoryFingerprint(sourceDir);
+    const target_sha256 = exists && !targetStats.isSymbolicLink() && targetStats.isDirectory()
+        ? await directoryFingerprint(targetDir)
+        : null;
+    let action = 'copy';
+    let reason;
+    if (identical) {
+        action = 'skip';
+        reason = 'target is identical';
     }
-    await cp(sourceDir, targetDir, { recursive: true });
+    else if (exists && force) {
+        action = 'replace';
+        reason = 'force requested and backup will be created before replacement';
+    }
+    else if (exists) {
+        action = 'block';
+        reason = 'target exists and differs from packaged bundle';
+    }
+    return {
+        skill: skillName,
+        agent,
+        source: sourceDir,
+        target: targetDir,
+        target_root: agentSkillRoot(agent),
+        exists,
+        identical,
+        action,
+        source_sha256,
+        target_sha256,
+        ...(reason ? { reason } : {}),
+    };
+}
+function timestampForPath(date = new Date()) {
+    return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
+}
+function backupManifestPath(backupDirOrManifest) {
+    return path.basename(backupDirOrManifest) === 'manifest.json'
+        ? backupDirOrManifest
+        : path.join(backupDirOrManifest, 'manifest.json');
+}
+function backupRoot() {
+    const provided = getArg('--backup-dir');
+    if (provided)
+        return path.resolve(provided);
+    return path.join(homeDir(), '.axis', 'backups', 'axis-tools', timestampForPath());
+}
+function createBackupSession() {
+    return {
+        version: 1,
+        created_at: new Date().toISOString(),
+        dir: backupRoot(),
+        entries: [],
+    };
+}
+async function persistBackupManifest(session) {
+    await mkdir(session.dir, { recursive: true });
+    const manifest = {
+        version: 1,
+        created_at: session.created_at,
+        entries: session.entries,
+    };
+    await writeJsonFile(path.join(session.dir, 'manifest.json'), manifest);
+}
+async function backupExistingTarget(target, session) {
+    const targetStats = await lstatIfExists(target);
+    if (!targetStats) {
+        session.entries.push({ target, backup_path: null, type: 'missing' });
+        await persistBackupManifest(session);
+        return;
+    }
+    await mkdir(session.dir, { recursive: true });
+    const backupPath = path.join(session.dir, `${String(session.entries.length).padStart(3, '0')}-${path.basename(target)}`);
+    if (targetStats.isSymbolicLink()) {
+        session.entries.push({
+            target,
+            backup_path: null,
+            type: 'symlink',
+            symlink_target: await readlink(target),
+        });
+    }
+    else if (targetStats.isDirectory()) {
+        await cp(target, backupPath, { recursive: true });
+        session.entries.push({ target, backup_path: backupPath, type: 'directory' });
+    }
+    else {
+        await cp(target, backupPath);
+        session.entries.push({ target, backup_path: backupPath, type: 'file' });
+    }
+    await persistBackupManifest(session);
+}
+async function restoreBackupEntry(entry) {
+    await mkdir(path.dirname(entry.target), { recursive: true });
+    await rm(entry.target, { recursive: true, force: true });
+    if (entry.type === 'missing')
+        return;
+    if (entry.type === 'symlink') {
+        if (!entry.symlink_target)
+            throw new Error(`Backup entry missing symlink target for ${entry.target}`);
+        await symlink(entry.symlink_target, entry.target);
+        return;
+    }
+    if (!entry.backup_path)
+        throw new Error(`Backup entry missing backup path for ${entry.target}`);
+    await cp(entry.backup_path, entry.target, { recursive: entry.type === 'directory' });
+}
+async function rollbackBackupEntries(entries) {
+    const restored = [];
+    for (const entry of [...entries].reverse()) {
+        await restoreBackupEntry(entry);
+        restored.push(entry);
+    }
+    return restored;
+}
+async function copySkillBundle(skillName, sourceDir, targetDir, inventory, backupSession) {
+    await mkdir(path.dirname(targetDir), { recursive: true });
+    if (inventory.action === 'skip')
+        return 'identical';
+    if (inventory.action === 'block') {
+        throw new Error(`Refusing to overwrite modified skill directory at ${targetDir}. Re-run with --force to replace it.`);
+    }
+    const tempTarget = path.join(path.dirname(targetDir), `.axis-install-${path.basename(targetDir)}-${randomBytes(4).toString('hex')}`);
+    try {
+        if (inventory.action === 'replace') {
+            await backupExistingTarget(targetDir, backupSession);
+            if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === skillName) {
+                throw new Error(`Simulated install failure after backup for ${skillName}`);
+            }
+        }
+        await cp(sourceDir, tempTarget, { recursive: true });
+        await rm(targetDir, { recursive: true, force: true });
+        await rename(tempTarget, targetDir);
+    }
+    catch (error) {
+        await rm(tempTarget, { recursive: true, force: true });
+        throw error;
+    }
     return 'copied';
 }
-async function installPackagedSkills(agent, force) {
+async function buildInstallInventory(agent, force) {
     const names = await packagedSkillNames();
     if (names.length === 0) {
         throw new Error(`No packaged skills found under ${skillsRoot()}`);
     }
-    const installed = [];
+    const inventory = [];
     for (const skillName of names) {
         const source = path.join(skillsRoot(), skillName);
         for (const selectedAgent of selectedAgents(agent)) {
             const target = agentSkillDir(selectedAgent, skillName);
+            inventory.push(await inventorySkillBundle(skillName, selectedAgent, source, target, force));
+        }
+    }
+    return inventory;
+}
+function dryRunStatusFor(action) {
+    if (action === 'skip')
+        return 'identical';
+    if (action === 'replace')
+        return 'would_replace';
+    if (action === 'block')
+        return 'blocked';
+    return 'would_copy';
+}
+async function installPackagedSkills(agent, force, dryRun) {
+    const inventory = await buildInstallInventory(agent, force);
+    if (dryRun) {
+        return {
+            inventory,
+            installed: inventory.map((item) => ({
+                skill: item.skill,
+                agent: item.agent,
+                target: item.target,
+                status: dryRunStatusFor(item.action),
+            })),
+            backup_dir: null,
+        };
+    }
+    const backupSession = createBackupSession();
+    const installed = [];
+    try {
+        for (const item of inventory) {
             installed.push({
-                skill: skillName,
-                target,
-                status: await copySkillBundle(source, target, force),
+                skill: item.skill,
+                agent: item.agent,
+                target: item.target,
+                status: await copySkillBundle(item.skill, item.source, item.target, item, backupSession),
             });
         }
     }
-    return installed;
+    catch (error) {
+        await rollbackBackupEntries(backupSession.entries);
+        throw error;
+    }
+    if (backupSession.entries.length > 0) {
+        await persistBackupManifest(backupSession);
+    }
+    return {
+        inventory,
+        installed,
+        backup_dir: backupSession.entries.length > 0 ? backupSession.dir : null,
+    };
 }
 async function installCommand() {
+    const rollbackTarget = getArg('--rollback');
+    if (rollbackTarget) {
+        await rollbackCommand(path.resolve(rollbackTarget));
+        return;
+    }
     const agent = parseInstallAgentArg(getArg('--agent'));
-    const installed = await installPackagedSkills(agent, hasFlag('--force'));
-    console.log(JSON.stringify({ ok: true, agent, installed }, null, 2));
+    const dryRun = hasFlag('--dry-run');
+    const force = hasFlag('--force');
+    const result = await installPackagedSkills(agent, force, dryRun);
+    console.log(JSON.stringify({ ok: true, agent, dry_run: dryRun, force, ...result }, null, 2));
+}
+async function inventoryCommand() {
+    const agent = parseInstallAgentArg(getArg('--agent'));
+    const inventory = await buildInstallInventory(agent, hasFlag('--force'));
+    console.log(JSON.stringify({ ok: true, agent, inventory }, null, 2));
+}
+async function rollbackCommand(backupDirOrManifest) {
+    const manifestPath = backupManifestPath(backupDirOrManifest);
+    const manifest = await readJsonFile(manifestPath);
+    if (manifest.version !== 1 || !Array.isArray(manifest.entries)) {
+        throw new Error(`Invalid backup manifest: ${manifestPath}`);
+    }
+    const restored = await rollbackBackupEntries(manifest.entries);
+    console.log(JSON.stringify({
+        ok: true,
+        rollback: {
+            manifest: manifestPath,
+            restored,
+        },
+    }, null, 2));
 }
 async function main() {
     const command = process.argv[2];
@@ -1259,6 +1487,14 @@ async function main() {
             return;
         }
         await installCommand();
+        return;
+    }
+    if (command === 'inventory') {
+        if (isHelpFlag(process.argv[3])) {
+            printUsage();
+            return;
+        }
+        await inventoryCommand();
         return;
     }
     if (command === 'project-init') {

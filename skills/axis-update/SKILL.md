@@ -17,7 +17,7 @@ node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
 ```
 
 3. Use `--agent all` when the user wants both Codex and Claude Code skill directories updated.
-4. Use `--no-pull` only for tests, offline work, or when the user explicitly does not want a remote refresh.
+4. Use `--no-pull` only for tests, offline work, or when the user explicitly does not want a remote refresh. The helper still refuses a dirty git `--repo` before install when `--no-pull` is set.
 5. Use `--no-validate` only in tests with fake homes. Normal updates should run `quick_validate.py` against the installed skill bundles.
 6. Read the JSON result and report the installed skill names, target directories, and any validation failure.
 
@@ -25,6 +25,7 @@ node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
 
 - The update must install the full skill bundle, including `agents/`, `references/`, and `scripts/`.
 - The command should leave unrelated product repos untouched.
+- Dirty git source repos must be rejected before install, including `--repo <dirty> --no-pull --no-validate --json`.
 - If `git pull --ff-only` fails because of local changes, stop and report the dirty checkout instead of overwriting it.
 
 ## After Use Deposition
