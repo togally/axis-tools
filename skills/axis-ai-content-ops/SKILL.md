@@ -63,6 +63,42 @@ Produce only the outputs the user needs, but keep this default package in mind:
 - Next iteration:
 ```
 
+## Output Path Convention
+
+For every single content run, write artifacts under:
+
+```text
+content/{article-name}/
+```
+
+Use the user's article title as `{article-name}` when it is filesystem-safe. If the title is too long or contains awkward punctuation, normalize it lightly while preserving the literal meaning.
+
+Default structure:
+
+```text
+content/{article-name}/
+  README.md
+  content-stats.md
+  source/
+    mother-draft.md
+  wechat/
+    article-copy.md
+  xiaohongshu/
+    carousel-copy.md
+  zhihu/
+    answer.md
+  bilibili/
+    script.md
+  assets/
+    wechat/
+    xiaohongshu/
+    bilibili/
+  data/
+    publish-log.md
+```
+
+Only create platform folders that are actually used. Keep global logs or account-level files at the repository root, but create per-article slices under `content/{article-name}/data/`.
+
 ## Workflow
 
 1. Frame the content lane.
@@ -84,7 +120,7 @@ Produce only the outputs the user needs, but keep this default package in mind:
    Use low-friction cues such as "same name across platforms", "public experiment notes", "follow-up review", or "I will keep updating this process". Avoid manipulative calls like "private message for materials" unless the user explicitly chooses that strategy and platform rules allow it.
 
 6. Track publication.
-   Create or update a publish log with platform, title, status, URL or placeholder, publish time, hook, soft lead-in, and metric slots. If automation tools are available and the user asks for reminders, schedule 24h and 72h review checkpoints.
+   Create or update `content/{article-name}/data/publish-log.md` with platform, title, status, URL or placeholder, publish time, hook, soft lead-in, and metric slots. If there is also a global publish log, keep it as the cross-article index and mirror only the relevant per-article slice into the content folder. If automation tools are available and the user asks for reminders, schedule 24h and 72h review checkpoints.
 
 7. Review the data flywheel.
    At 24h and 72h, collect views, reads, likes, comments, saves, shares, follows, useful replies, and objections. Convert the result into next topics, wording adjustments, examples to retain, and reusable lessons.
@@ -96,6 +132,7 @@ Produce only the outputs the user needs, but keep this default package in mind:
 - The soft lead-in should be present but not louder than the content.
 - Strong factual claims must be sourced or softened.
 - The publish log must include 24h and 72h slots when the user is actively publishing.
+- Single-run artifacts must be placed under `content/{article-name}/` unless the user specifies another path.
 - Asset briefs must include positive direction and explicit "avoid" constraints.
 - Public-safe output must exclude account-private metrics, credentials, private URLs, cookies, and personal identifiers unless the user explicitly wants them in the current local artifact.
 
