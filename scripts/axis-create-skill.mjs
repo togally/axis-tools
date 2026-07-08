@@ -70,6 +70,13 @@ function ensureBilingualDescription(description) {
   return description;
 }
 
+function ensureBilingualText(value, fieldName) {
+  if (!/[A-Za-z]/.test(value) || !/[\u3400-\u9FFF]/.test(value)) {
+    throw new Error(`${fieldName} must be bilingual English and Chinese.`);
+  }
+  return value;
+}
+
 function yamlString(value) {
   return JSON.stringify(String(value));
 }
@@ -129,10 +136,10 @@ function ensurePublicSafeSkill({ name, description, body }) {
   }
 }
 
-function createOpenAiYaml({ name, displayName, shortDescription, defaultPrompt }) {
+function createOpenAiYaml({ name, shortDescription, defaultPrompt }) {
   return [
     'interface:',
-    `  display_name: ${yamlString(displayName)}`,
+    `  display_name: ${yamlString(name)}`,
     `  short_description: ${yamlString(shortDescription)}`,
     `  default_prompt: ${yamlString(defaultPrompt || `Use $${name} to run this Axis skill workflow.`)}`,
     '',
@@ -197,8 +204,7 @@ async function createLocalSkill() {
   const sourceRoot = path.resolve(argValue('--source-root') || path.join(defaultCodexHome(), 'skills'));
   const skillDir = path.join(sourceRoot, name);
   const agentsDir = path.join(skillDir, 'agents');
-  const displayName = argValue('--display-name') || name;
-  const shortDescription = argValue('--short-description') || description.slice(0, 78);
+  const shortDescription = ensureBilingualText(argValue('--short-description') || description, 'Skill short_description');
   const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this Axis workflow.`;
   const validator = path.resolve(argValue('--validator') || defaultValidator());
   ensurePublicSafeSkill({ name, description, body });
@@ -209,7 +215,7 @@ async function createLocalSkill() {
 
   await mkdir(agentsDir, { recursive: true });
   await writeFile(path.join(skillDir, 'SKILL.md'), createSkillMarkdown({ name, description, body }), 'utf8');
-  await writeFile(path.join(agentsDir, 'openai.yaml'), createOpenAiYaml({ name, displayName, shortDescription, defaultPrompt }), 'utf8');
+  await writeFile(path.join(agentsDir, 'openai.yaml'), createOpenAiYaml({ name, shortDescription, defaultPrompt }), 'utf8');
 
   if (!hasFlag('--no-validate')) {
     await validateSkill(skillDir, validator);

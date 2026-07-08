@@ -62,6 +62,7 @@ Rules:
 - The line must start with `Use when` so Codex trigger semantics remain predictable.
 - The same line must contain Chinese text; do not put the Chinese explanation only in the body.
 - For packaged skills maintained in `axis-tools`, keep `agents/openai.yaml` `short_description` bilingual too.
+- For packaged skills, `agents/openai.yaml` `display_name` must equal the skill name, such as `axis-example-skill`; do not use a marketing label or custom title there.
 - Keep both languages concise and public-safe.
 - The create and deposit helper scripts reject skills whose description is English-only or Chinese-only.
 
@@ -101,6 +102,8 @@ After using this skill, check whether this scan found a reusable improvement to 
 - Skill frontmatter must include `name` and a `description` beginning with `Use when`.
 - Skill `description` must be bilingual English and Chinese.
 - The generated `agents/openai.yaml` should include a `$skill-name` default prompt.
+- The generated `agents/openai.yaml` `display_name` must equal the exact skill name.
+- The generated `agents/openai.yaml` `short_description` must be bilingual English and Chinese.
 - Coding/design-type skills should include `Three-Step Work Contract`.
 - Coding/design-type skills should include `Light Adversarial Review`.
 - Validate with `quick_validate.py` unless running a fake-home unit test.

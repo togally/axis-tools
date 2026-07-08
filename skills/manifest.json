@@ -3,6 +3,15 @@
   "description": "Axis packaged skill bundles captured by scripts/axis-skill-deposit.mjs",
   "skills": [
     {
+      "name": "axis-ai-content-ops",
+      "description": "Use when turning one AI or technical source idea into platform-native content, soft lead-in copy, publish tracking, and 24h/72h review. / 用于把一个 AI 或技术选题沉淀为多平台原生内容、柔性引导、发布记录和 24h/72h 复盘流程。",
+      "path": "skills/axis-ai-content-ops",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-ali-dashboard",
       "description": "Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON or SLS drilldowns. / 用于创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和监控面板。",
       "path": "skills/axis-ali-dashboard",

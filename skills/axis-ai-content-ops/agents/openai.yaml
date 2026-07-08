@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-ai-content-ops"
+  short_description: "AI content ops / AI 内容发布复盘"
+  default_prompt: "Use $axis-ai-content-ops to turn this source idea into a platform-native content package and review workflow."
+
+policy:
+  allow_implicit_invocation: true
