@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-article-title"
+  short_description: "Use when generating and improving article titles with preference and feedback memory. / 用于结合偏好与数据反馈生成和优化文章标题。"
+  default_prompt: "Use $axis-article-title to generate or improve article titles and record reusable title preference or feedback learning."
+
+policy:
+  allow_implicit_invocation: true

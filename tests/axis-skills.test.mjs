@@ -238,6 +238,7 @@ const packagedSkillNames = [
   'axis-ali-dashboard',
   'axis-api-performance-tuning',
   'axis-arch-optimize',
+  'axis-article-title',
   'axis-benchmark',
   'axis-bugfix',
   'axis-business-domain-doc',
@@ -552,6 +553,29 @@ assert.match(architectureOptimizationBody, /contract tests/i);
 assert.match(architectureOptimizationBody, /migration/i);
 assert.doesNotMatch(architectureOptimizationBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 assert.equal(benchmarkSkill.files.includes('scripts/core_api_benchmark.py'), true);
+
+const articleTitleSkill = manifest.skills.find((skill) => skill.name === 'axis-article-title');
+assert.ok(articleTitleSkill);
+assert.match(articleTitleSkill.description, /article titles/i);
+assert.match(articleTitleSkill.description, /标题/);
+assert.deepEqual(articleTitleSkill.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+const articleTitleBody = await readFile(path.join(repoRoot, 'skills', 'axis-article-title', 'SKILL.md'), 'utf8');
+for (const requiredText of [
+  'Title Input Contract',
+  'Preference Memory',
+  'Candidate Generation',
+  'Title Scoring',
+  'Feedback Deposition',
+  'raw / candidate / stable',
+  'Do not overfit',
+  'content/<article-name>/data/title-feedback.md',
+  'knowledge/patterns/index.md',
+  'knowledge/platform-notes/index.md',
+  'public-safe',
+]) {
+  assert.match(articleTitleBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(articleTitleBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 
 await withTempDir(async (tmp) => {
   let authCalls = 0;

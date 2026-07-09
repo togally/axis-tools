@@ -33,6 +33,15 @@
       ]
     },
     {
+      "name": "axis-article-title",
+      "description": "Use when the user asks to generate, refine, score, or learn from article titles and title performance feedback. / 用于生成、优化、评分并沉淀文章标题偏好和发布数据反馈。",
+      "path": "skills/axis-article-title",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
       "name": "axis-benchmark",
       "description": "Use when the user asks to benchmark APIs, local modules, service dependencies, throughput, latency, concurrency, or capacity. / 用于对 API、本地模块、服务依赖链路、吞吐、延迟、并发或容量进行基准测试。",
       "path": "skills/axis-benchmark",
