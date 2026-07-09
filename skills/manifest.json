@@ -81,7 +81,7 @@
     },
     {
       "name": "axis-create-skill",
-      "description": "Use when the user asks to scan the conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created. / 用于扫描对话中的可复用技能机会并判断是否应创建公开安全的 Axis/Codex 技能。",
+      "description": "Use when the user asks to scan the conversation for reusable skill opportunities, decide whether a public Axis/Codex skill should be created, or assign the skill's reasoning level. / 用于扫描对话中的可复用技能机会、判断是否应创建公开安全的 Axis/Codex 技能，并按任务难度指定推理等级。",
       "path": "skills/axis-create-skill",
       "files": [
         "SKILL.md",

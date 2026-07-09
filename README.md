@@ -307,10 +307,14 @@ node scripts/axis-create-skill.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
   --name axis-example-skill \
-  --description "Use when API evidence should become a reusable public-safe workflow." \
+  --description "Use when API evidence should become a reusable public-safe workflow. / 用于把 API 证据沉淀为公开安全的可复用工作流。" \
+  --task-difficulty complex \
+  --reasoning-level high \
   --body-file /tmp/axis-example-skill.md \
   --deposit --commit --push --branch main
 ```
+
+`--task-difficulty` 可选 `light`、`standard`、`complex`、`critical`；`--reasoning-level` 可选 `low`、`medium`、`high`、`max`。不传时，创建器会根据 skill 名称、描述和正文自动推断，避免所有 skill 默认冲最高推理。
 
 把已有本地 Codex skill 沉淀到本仓库：
 
@@ -671,10 +675,14 @@ node scripts/axis-create-skill.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
   --name axis-example-skill \
-  --description "Use when API evidence should become a reusable public-safe workflow." \
+  --description "Use when API evidence should become a reusable public-safe workflow. / 用于把 API 证据沉淀为公开安全的可复用工作流。" \
+  --task-difficulty complex \
+  --reasoning-level high \
   --body-file /tmp/axis-example-skill.md \
   --deposit --commit --push --branch main
 ```
+
+`--task-difficulty` accepts `light`, `standard`, `complex`, or `critical`; `--reasoning-level` accepts `low`, `medium`, `high`, or `max`. When omitted, the creator infers them from the skill name, description, and body so new skills do not default to maximum reasoning by habit.
 
 Deposit an existing local Codex skill into this repository:
 

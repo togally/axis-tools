@@ -13,6 +13,18 @@ const publicRepoSensitivePattern =
   /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei)\b/i;
 const codingDesignSkillPattern =
   /\b(api|architecture|architectural|benchmark|bugfix|code|coding|database|dbdd|design|document|implementation|implementing|optimization|optimise|optimize|performance|refactor|schema|sql|tdd|test|testing|technical)\b/i;
+const lightSkillPattern =
+  /\b(title|copy|format|formatting|rewrite|rewriting|summary|summarize|summarise|extract|extraction|classify|classification|translate|translation|publish-record|feedback-review)\b/i;
+const criticalSkillPattern =
+  /\b(auth|authorization|credential|deploy|deployment|incident|legal|medical|migration|permission|production|release|rollback|security|secret|secrets|sensitive|schema|compliance)\b/i;
+const taskDifficulties = new Set(['light', 'standard', 'complex', 'critical']);
+const reasoningLevels = new Set(['low', 'medium', 'high', 'max']);
+const reasoningLevelByDifficulty = {
+  light: 'low',
+  standard: 'medium',
+  complex: 'high',
+  critical: 'max',
+};
 const afterUseDepositionSection = `
 ## After Use Deposition
 
@@ -34,6 +46,22 @@ const lightAdversarialReviewSection = `
 
 For coding, architecture, optimization, testing, database, or design-document workflows, use a lightly adversarial stance: verify the user's goal against code or evidence, surface hidden assumptions, name correctness and risk trade-offs, and challenge unsafe shortcuts before implementing or finalizing. Keep it constructive and below 30% of the interaction: preserve the user's explicit business wording, avoid debate for its own sake, and become decisive once evidence is sufficient.
 `;
+
+function modelReasoningLevelSection({ taskDifficulty, reasoningLevel }) {
+  return `
+## Model Reasoning Level
+
+Default task difficulty / 默认任务难度: \`${taskDifficulty}\`.
+Recommended reasoning level / 推荐推理等级: \`${reasoningLevel}\`.
+
+Use this as a starting point, not a blind override. Downshift when the task is simple, cheap to verify, or mostly formatting. Upshift only when the task has cross-file reasoning, ambiguous requirements, high error cost, or careful verification needs.
+
+- \`low\`: extraction, formatting, lightweight copy changes, and other low-risk repeatable work.
+- \`medium\`: normal analysis, writing, planning, and everyday repository inspection.
+- \`high\`: coding, debugging, architecture, database, benchmark, testing, and cross-document reasoning.
+- \`max\`: high-stakes migrations, production/security-sensitive work, long-running agentic workflows, or decisions that need explicit boundaries and rollback thinking.
+`;
+}
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -81,6 +109,13 @@ function yamlString(value) {
   return JSON.stringify(String(value));
 }
 
+function ensureChoice(value, choices, fieldName) {
+  if (!choices.has(value)) {
+    throw new Error(`${fieldName} must be one of: ${[...choices].join(', ')}.`);
+  }
+  return value;
+}
+
 function normalizeBody(body) {
   const text = body.trimEnd();
   return `${text}\n`;
@@ -111,16 +146,45 @@ function withLightAdversarialReview(body, context) {
   return `${body.trimEnd()}\n\n${lightAdversarialReviewSection.trim()}\n`;
 }
 
-function createSkillMarkdown({ name, description, body }) {
+function inferTaskDifficulty({ name, description, body }) {
+  const explicitDifficulty = argValue('--task-difficulty');
+  if (explicitDifficulty) {
+    return ensureChoice(explicitDifficulty, taskDifficulties, 'Task difficulty');
+  }
+  const haystack = [name, description, body].join('\n');
+  if (criticalSkillPattern.test(haystack)) return 'critical';
+  if (isCodingDesignSkill({ name, description, body })) return 'complex';
+  if (lightSkillPattern.test(haystack)) return 'light';
+  return 'standard';
+}
+
+function createModelReasoningProfile(context) {
+  const taskDifficulty = inferTaskDifficulty(context);
+  const explicitReasoningLevel = argValue('--reasoning-level');
+  const reasoningLevel = explicitReasoningLevel
+    ? ensureChoice(explicitReasoningLevel, reasoningLevels, 'Reasoning level')
+    : reasoningLevelByDifficulty[taskDifficulty];
+  return { taskDifficulty, reasoningLevel };
+}
+
+function withModelReasoningLevel(body, modelReasoning) {
+  if (/^## Model Reasoning Level\b/m.test(body)) {
+    return body;
+  }
+  return `${body.trimEnd()}\n\n${modelReasoningLevelSection(modelReasoning).trim()}\n`;
+}
+
+function createSkillMarkdown({ name, description, body, modelReasoning }) {
   const threeStepBody = withThreeStepWorkContract(body, { name, description });
   const enrichedBody = withLightAdversarialReview(threeStepBody, { name, description });
+  const reasoningBody = withModelReasoningLevel(enrichedBody, modelReasoning);
   return [
     '---',
     `name: ${name}`,
     `description: ${description}`,
     '---',
     '',
-    normalizeBody(withAfterUseDeposition(enrichedBody)).trimEnd(),
+    normalizeBody(withAfterUseDeposition(reasoningBody)).trimEnd(),
     '',
   ].join('\n');
 }
@@ -136,7 +200,7 @@ function ensurePublicSafeSkill({ name, description, body }) {
   }
 }
 
-function createOpenAiYaml({ name, shortDescription, defaultPrompt }) {
+function createOpenAiYaml({ name, shortDescription, defaultPrompt, modelReasoning }) {
   return [
     'interface:',
     `  display_name: ${yamlString(name)}`,
@@ -145,6 +209,10 @@ function createOpenAiYaml({ name, shortDescription, defaultPrompt }) {
     '',
     'policy:',
     '  allow_implicit_invocation: true',
+    '',
+    'model:',
+    `  reasoning_level: ${yamlString(modelReasoning.reasoningLevel)}`,
+    `  task_difficulty: ${yamlString(modelReasoning.taskDifficulty)}`,
     '',
   ].join('\n');
 }
@@ -207,6 +275,7 @@ async function createLocalSkill() {
   const shortDescription = ensureBilingualText(argValue('--short-description') || description, 'Skill short_description');
   const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this Axis workflow.`;
   const validator = path.resolve(argValue('--validator') || defaultValidator());
+  const modelReasoning = createModelReasoningProfile({ name, description, body });
   ensurePublicSafeSkill({ name, description, body });
 
   if (existsSync(skillDir) && !hasFlag('--force')) {
@@ -214,14 +283,14 @@ async function createLocalSkill() {
   }
 
   await mkdir(agentsDir, { recursive: true });
-  await writeFile(path.join(skillDir, 'SKILL.md'), createSkillMarkdown({ name, description, body }), 'utf8');
-  await writeFile(path.join(agentsDir, 'openai.yaml'), createOpenAiYaml({ name, shortDescription, defaultPrompt }), 'utf8');
+  await writeFile(path.join(skillDir, 'SKILL.md'), createSkillMarkdown({ name, description, body, modelReasoning }), 'utf8');
+  await writeFile(path.join(agentsDir, 'openai.yaml'), createOpenAiYaml({ name, shortDescription, defaultPrompt, modelReasoning }), 'utf8');
 
   if (!hasFlag('--no-validate')) {
     await validateSkill(skillDir, validator);
   }
 
-  return { name, sourceRoot, skillDir };
+  return { name, sourceRoot, skillDir, modelReasoning };
 }
 
 async function depositSkill({ name, sourceRoot }) {

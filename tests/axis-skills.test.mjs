@@ -199,18 +199,52 @@ await withTempDir(async (tmp) => {
   assert.equal(localSkillBody.includes('no more than 30%'), true);
   assert.equal(localSkillBody.includes('Light Adversarial Review'), true);
   assert.equal(localSkillBody.includes('challenge unsafe shortcuts'), true);
+  assert.equal(localSkillBody.includes('Model Reasoning Level'), true);
+  assert.equal(localSkillBody.includes('Default task difficulty / 默认任务难度: `complex`.'), true);
+  assert.equal(localSkillBody.includes('Recommended reasoning level / 推荐推理等级: `high`.'), true);
   assert.equal(localSkillBody.includes('After Use Deposition'), true);
   assert.equal(localSkillBody.includes('push to the remote repository when permissions allow'), true);
   const createdOpenAiYaml = await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8');
   assert.match(createdOpenAiYaml, /^\s*display_name: "axis-demo-created"$/m);
   assert.doesNotMatch(createdOpenAiYaml, /^\s*display_name: "Axis Demo Created"$/m);
   assert.match(createdOpenAiYaml, /Create demo Axis skill \/ 创建演示 Axis 技能/);
+  assert.match(createdOpenAiYaml, /^\s*reasoning_level: "high"$/m);
+  assert.match(createdOpenAiYaml, /^\s*task_difficulty: "complex"$/m);
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
   assert.equal(manifest.skills[0].name, 'axis-demo-created');
   const { stdout: committed } = await execFileAsync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo });
   assert.match(committed, /skills\/axis-demo-created\/SKILL.md/);
   assert.match(committed, /skills\/manifest.json/);
+});
+
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'local-skills');
+  await mkdir(sourceRoot, { recursive: true });
+  await execFileAsync(process.execPath, [
+    createScript,
+    '--source-root',
+    sourceRoot,
+    '--name',
+    'axis-critical-release',
+    '--description',
+    'Use when release and rollback evidence must become a reusable workflow. / 用于把发布与回滚证据沉淀为可复用工作流。',
+    '--body',
+    '# Axis Critical Release\\n\\nUse this skill for release evidence review.\\n',
+    '--task-difficulty',
+    'critical',
+    '--reasoning-level',
+    'max',
+    '--no-validate',
+  ]);
+
+  const skillDir = path.join(sourceRoot, 'axis-critical-release');
+  const body = await readFile(path.join(skillDir, 'SKILL.md'), 'utf8');
+  assert.match(body, /Default task difficulty \/ 默认任务难度: `critical`/);
+  assert.match(body, /Recommended reasoning level \/ 推荐推理等级: `max`/);
+  const openAiYaml = await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(openAiYaml, /^\s*reasoning_level: "max"$/m);
+  assert.match(openAiYaml, /^\s*task_difficulty: "critical"$/m);
 });
 
 await withTempDir(async (tmp) => {
@@ -672,6 +706,8 @@ assert.match(createSkillMd, /Bilingual Description Rule/);
 assert.match(createSkillMd, /Three-Step Work Contract/);
 assert.match(createSkillMd, /co-create the requirement with the user/i);
 assert.match(createSkillMd, /Light Adversarial Review/);
+assert.match(createSkillMd, /Model Reasoning Level/);
+assert.match(createSkillMd, /推理等级/);
 assert.match(createSkillMd, /Coding\/design-type skills should include/i);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
