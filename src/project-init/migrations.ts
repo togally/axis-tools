@@ -140,15 +140,21 @@ function validateMappingSafety(mapping: ProtocolMigration): void {
     }
   }
 
-  const structuralRenameSources = new Set(
-    mapping.operations
-      .filter((operation): operation is Extract<MigrationOperation, { op: 'copy' }> => operation.op === 'copy')
-      .filter((operation) => operation.from !== operation.to)
-      .map((operation) => operation.from),
-  );
+  const structuralRenameTargets = new Map<string, string[]>();
+  for (const operation of mapping.operations) {
+    if (operation.op !== 'copy' || operation.from === operation.to) continue;
+    const targets = structuralRenameTargets.get(operation.from) ?? [];
+    targets.push(operation.to);
+    structuralRenameTargets.set(operation.from, targets);
+  }
   for (const operation of mapping.operations) {
     if (operation.op !== 'drop' || operation.redact !== false) continue;
-    if (isCredentialLikePath(operation.from) || !structuralRenameSources.has(operation.from)) {
+    const targets = structuralRenameTargets.get(operation.from);
+    if (
+      isCredentialLikePath(operation.from)
+      || !targets
+      || targets.some(isCredentialLikePath)
+    ) {
       throw new Error(operation.from);
     }
   }

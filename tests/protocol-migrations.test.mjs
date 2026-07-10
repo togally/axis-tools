@@ -169,6 +169,66 @@ await withTempDir(async (mappingsDir) => {
 });
 
 await withTempDir(async (mappingsDir) => {
+  await cp(path.join(fixtureDir, '0.1-to-0.2.yml'), path.join(mappingsDir, '0.1-to-0.2.yml'));
+  const localOssProvider = 'local-aliyun-oss';
+  const localOssBucket = 'local-safe-bucket';
+  const localOssPrefix = 'axis/local';
+  const result = await migrateDraft({
+    sourceVersion: '0.1',
+    latestVersion: '0.2',
+    draft: {
+      local: {
+        oss: {
+          provider: localOssProvider,
+          bucket: localOssBucket,
+          prefix: localOssPrefix,
+          endpoint_env: 'LOCAL_OSS_ENDPOINT',
+          region_env: 'LOCAL_OSS_REGION',
+          access_key_id_env: 'LOCAL_OSS_ACCESS_KEY_ID',
+          access_key_secret_env: 'LOCAL_OSS_ACCESS_KEY_SECRET',
+          security_token_env: 'LOCAL_OSS_SECURITY_TOKEN',
+        },
+      },
+    },
+    mappingsDir,
+  });
+
+  assert.deepEqual(result.draft.local, {
+    oss: {
+      endpoint_env: 'LOCAL_OSS_ENDPOINT',
+      region_env: 'LOCAL_OSS_REGION',
+      access_key_id_env: 'LOCAL_OSS_ACCESS_KEY_ID',
+      access_key_secret_env: 'LOCAL_OSS_ACCESS_KEY_SECRET',
+      security_token_env: 'LOCAL_OSS_SECURITY_TOKEN',
+    },
+  });
+  assert.deepEqual(result.dropped, [
+    {
+      sourcePath: 'local.oss.provider',
+      sourceVersion: '0.1',
+      reason: 'Local OSS provider overrides are not supported in 0.2.',
+      redacted: true,
+    },
+    {
+      sourcePath: 'local.oss.bucket',
+      sourceVersion: '0.1',
+      reason: 'Local OSS bucket overrides are not supported in 0.2.',
+      redacted: true,
+    },
+    {
+      sourcePath: 'local.oss.prefix',
+      sourceVersion: '0.1',
+      reason: 'Local OSS prefix overrides are not supported in 0.2.',
+      redacted: true,
+    },
+  ]);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    new RegExp(`${localOssProvider}|${localOssBucket}|${localOssPrefix}`),
+  );
+});
+
+await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, 'invalid.yml', [
     'schema: axis.protocol_migration',
     'schema_version: 1',
@@ -563,6 +623,60 @@ await withTempDir(async (mappingsDir) => {
   assert.equal(result, undefined);
   assert.doesNotMatch(errorMessage, new RegExp(credentialValue));
 });
+
+for (const { name, source, target, sourceValue } of [
+  {
+    name: 'credential-like-structural-source',
+    source: 'local.oss.access_key_secret_env',
+    target: 'local.oss.legacy_access_key_secret_env',
+    sourceValue: 'LOCAL_OSS_ACCESS_KEY_SECRET',
+  },
+  {
+    name: 'credential-like-structural-target',
+    source: 'local.oss.provider',
+    target: 'local.oss.accesskey_alias',
+    sourceValue: 'local-aliyun-oss',
+  },
+]) {
+  await withTempDir(async (mappingsDir) => {
+    await writeMapping(mappingsDir, `${name}.yml`, [
+      'schema: axis.protocol_migration',
+      'schema_version: 1',
+      'from_version: "0.0"',
+      'to_version: "0.1"',
+      'operations:',
+      '  - op: copy',
+      `    from: ${source}`,
+      `    to: ${target}`,
+      '  - op: drop',
+      `    from: ${source}`,
+      '    reason: Structural renames cannot cross credential-like paths.',
+      '    redact: false',
+      '',
+    ].join('\n'));
+
+    let errorMessage = '';
+    let result;
+    await assert.rejects(
+      async () => {
+        result = await migrateDraft({
+          sourceVersion: '0.0',
+          latestVersion: '0.1',
+          draft: { local: { oss: source.includes('access_key')
+            ? { access_key_secret_env: sourceValue }
+            : { provider: sourceValue } } },
+          mappingsDir,
+        });
+      },
+      (error) => {
+        errorMessage = String(error);
+        return error instanceof Error && error.message === source;
+      },
+    );
+    assert.equal(result, undefined);
+    assert.doesNotMatch(errorMessage, new RegExp(sourceValue));
+  });
+}
 
 for (const segment of ['__proto__', 'constructor', 'prototype']) {
   for (const field of ['from', 'to']) {

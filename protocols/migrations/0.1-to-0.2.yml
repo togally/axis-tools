@@ -82,6 +82,15 @@ operations:
     to: oss_profile.name
     prompt: Select an OSS profile from the organization registry.
   - op: drop
+    from: local.oss.provider
+    reason: Local OSS provider overrides are not supported in 0.2.
+  - op: drop
+    from: local.oss.bucket
+    reason: Local OSS bucket overrides are not supported in 0.2.
+  - op: drop
+    from: local.oss.prefix
+    reason: Local OSS prefix overrides are not supported in 0.2.
+  - op: drop
     from: local.inline_target
     reason: Local inline targets are not supported in 0.2.
   - op: drop
