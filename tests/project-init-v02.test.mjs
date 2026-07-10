@@ -21,6 +21,9 @@ import {
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
 const schemaPath = path.resolve('schemas/project-init-inspection.schema.json');
+const answersSchemaPath = path.resolve('schemas/project-init-answers.schema.json');
+const { inspectProjectInit } = await import('../dist/project-init/inspection.js');
+const { renderProjectFiles, validateAnswers } = await import('../dist/project-init/render.js');
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), 'axis-project-init-v02-'));
@@ -71,6 +74,50 @@ function file(result, role) {
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
+}
+
+function own(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
+
+function answersFor(inspection, changes = {}) {
+  const decisions = inspection.fields.map((entry) => {
+    if (own(changes, entry.key)) {
+      return { key: entry.key, value: changes[entry.key], decision: 'change' };
+    }
+    if (entry.resolution === 'remove') {
+      return { key: entry.key, value: null, decision: 'change' };
+    }
+    if (entry.resolution === 'stored' && own(entry, 'current_value')) {
+      return { key: entry.key, value: entry.current_value, decision: 'keep' };
+    }
+    if (entry.resolution === 'mapped' && own(entry, 'mapped_value')) {
+      return { key: entry.key, value: entry.mapped_value, decision: 'accept_mapping' };
+    }
+    if (entry.resolution === 'recommended' && own(entry, 'recommendation')) {
+      return { key: entry.key, value: entry.recommendation, decision: 'accept_recommendation' };
+    }
+    return { key: entry.key, value: null, decision: 'change' };
+  });
+  return {
+    schema: 'axis.project_init_answers',
+    schema_version: 1,
+    repo: inspection.repo,
+    latest_contract_version: inspection.latest_contract_version,
+    selectors: structuredClone(inspection.selectors),
+    files: structuredClone(inspection.files),
+    decisions,
+    final_confirmation: true,
+  };
+}
+
+function sourceFiles({ mainConfig = null, localConfig = null, targetRegistry = null, gitignore = null } = {}) {
+  return {
+    main_config: mainConfig,
+    local_config: localConfig,
+    target_registry: targetRegistry,
+    gitignore,
+  };
 }
 
 {
@@ -301,6 +348,230 @@ function sha256(value) {
   await withTempDir(async (repo) => {
     const result = await inspect(repo);
     assert.equal(validate(result), true, JSON.stringify(validate.errors));
+  });
+}
+
+{
+  const schema = JSON.parse(await readFile(answersSchemaPath, 'utf8'));
+  const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
+  await withTempDir(async (repo) => {
+    const inspection = await inspectProjectInit({ repo });
+    const answers = answersFor(inspection);
+    assert.equal(validate(answers), true, JSON.stringify(validate.errors));
+    assert.deepEqual(validateAnswers(inspection, answers), answers);
+    assert.equal(renderProjectFiles({
+      inspection,
+      answers,
+      sourceFiles: sourceFiles(),
+    }).local_config, null);
+    assert.deepEqual(
+      answers.decisions.map((entry) => entry.key),
+      inspection.fields.map((entry) => entry.key),
+    );
+
+    const unknown = structuredClone(answers);
+    unknown.extra = true;
+    assert.throws(() => validateAnswers(inspection, unknown), /schema|additional|unknown/i);
+
+    const duplicate = structuredClone(answers);
+    duplicate.decisions[1] = structuredClone(duplicate.decisions[0]);
+    assert.throws(() => validateAnswers(inspection, duplicate), /missing|duplicate|decision/i);
+
+    const missing = structuredClone(answers);
+    missing.decisions.pop();
+    assert.throws(() => validateAnswers(inspection, missing), /missing|decision/i);
+
+    const wrongSelector = structuredClone(answers);
+    wrongSelector.selectors.oss_profile = 'other-profile';
+    assert.throws(() => validateAnswers(inspection, wrongSelector), /selector|inspection/i);
+
+    const wrongFingerprint = structuredClone(answers);
+    wrongFingerprint.files[0].sha256 = '0'.repeat(64);
+    assert.throws(() => validateAnswers(inspection, wrongFingerprint), /fingerprint|file|inspection/i);
+
+    const secretProperty = structuredClone(answers);
+    secretProperty.decisions[0].secret_value = 'do-not-accept';
+    assert.throws(() => validateAnswers(inspection, secretProperty), /schema|secret|unknown/i);
+
+    const nonV02 = structuredClone(answers);
+    nonV02.latest_contract_version = '0.1';
+    assert.throws(() => validateAnswers(inspection, nonV02), /0\.2|version/i);
+  });
+}
+
+{
+  await withTempDir(async (repo) => {
+    const sourceRegistryPath = '.axis/source-organizations.yml';
+    const targetRegistryPath = '.axis/target-organizations.yml';
+    const mainConfig = v02Config({
+      registry: sourceRegistryPath,
+      organizationId: 'org_source',
+      profile: 'primary',
+    }) + [
+      'extensions:',
+      // YAML 1.2 parses `yes` as a string; this extension is intentionally boolean.
+      '  keep_me: true',
+      '',
+    ].join('\n');
+    const sourceRegistry = registryYaml([organization({
+      id: 'org_source',
+      slug: 'source-org',
+      displayName: 'Source Organization',
+      profiles: [profile({ name: 'primary', bucket: 'source-bucket' })],
+    })]);
+    const targetRegistry = [
+      'schema: axis.organization_registry',
+      'schema_version: "0.2"',
+      'registry_extension: keep-me',
+      'organizations:',
+      '  - id: org_target',
+      '    slug: target-org',
+      '    display_name: Target Organization',
+      '    status: active',
+      '    organization_extension: keep-org',
+      '    oss_profiles:',
+      '      - name: secondary',
+      '        provider: aliyun-oss',
+      '        bucket: target-bucket',
+      '        prefix: target/prefix',
+      '        endpoint_env: TARGET_OSS_ENDPOINT',
+      '        region_env: TARGET_OSS_REGION',
+      '        access_key_id_env: TARGET_OSS_ACCESS_KEY_ID',
+      '        access_key_secret_env: TARGET_OSS_ACCESS_KEY_SECRET',
+      '        profile_extension: keep-profile',
+      '      - name: other',
+      '        provider: aliyun-oss',
+      '        bucket: other-bucket',
+      '        prefix: other/prefix',
+      '        endpoint_env: OTHER_OSS_ENDPOINT',
+      '        region_env: OTHER_OSS_REGION',
+      '        access_key_id_env: OTHER_OSS_ACCESS_KEY_ID',
+      '        access_key_secret_env: OTHER_OSS_ACCESS_KEY_SECRET',
+      '    projects:',
+      '      - slug: existing-project',
+      '        display_name: Existing Project',
+      '        project_extension: keep-project',
+      '    products:',
+      '      - name: existing-product',
+      '  - id: org_other',
+      '    slug: other-org',
+      '    display_name: Other Organization',
+      '    status: active',
+      '    oss_profiles: []',
+      '    projects: []',
+      '',
+    ].join('\n');
+    const localConfig = [
+      'contract_version: "0.2"',
+      'local:',
+      '  dry_run: true',
+      '  custom_local: keep-local',
+      '  oss:',
+      '    endpoint_env: LOCAL_OSS_ENDPOINT',
+      '',
+    ].join('\n');
+    await writeRepoFile(repo, '.axis/config.yml', mainConfig);
+    await writeRepoFile(repo, sourceRegistryPath, sourceRegistry);
+    await writeRepoFile(repo, targetRegistryPath, targetRegistry);
+    await writeRepoFile(repo, '.axis/config.local.yml', localConfig);
+    await writeRepoFile(repo, '.gitignore', '# existing\n.axis/outbox/\n');
+
+    const inspection = await inspectProjectInit({
+      repo,
+      registryPath: targetRegistryPath,
+      organizationId: 'org_target',
+      ossProfile: 'secondary',
+      environment: {},
+    });
+    const answers = validateAnswers(inspection, answersFor(inspection, {
+      'organization.id': 'org_target',
+      'organization.registry': targetRegistryPath,
+      'oss_profile.name': 'secondary',
+      'organization.display_name': 'Target Organization Updated',
+      'local.oss.endpoint_env': null,
+      'project.display_name': 'Renamed Project',
+    }));
+    const rendered = renderProjectFiles({
+      inspection,
+      answers,
+      sourceFiles: sourceFiles({
+        mainConfig,
+        localConfig,
+        targetRegistry,
+        gitignore: '# existing\n.axis/outbox/\n',
+      }),
+    });
+    const main = (await import('yaml')).parse(rendered.main_config);
+    const local = (await import('yaml')).parse(rendered.local_config);
+    const registry = (await import('yaml')).parse(rendered.target_registry);
+    assert.equal(main.contract_version, '0.2');
+    assert.equal(main.organization.id, 'org_target');
+    assert.equal(main.organization.registry, targetRegistryPath);
+    assert.equal(main.oss.profile, 'secondary');
+    assert.equal(main.extensions.keep_me, true);
+    assert.equal(local.contract_version, '0.2');
+    assert.equal(local.local.dry_run, true);
+    assert.equal(local.local.custom_local, 'keep-local');
+    assert.equal(Object.hasOwn(local.local.oss, 'endpoint_env'), false);
+    assert.equal(registry.registry_extension, 'keep-me');
+    assert.equal(registry.organizations[0].organization_extension, 'keep-org');
+    assert.equal(registry.organizations[0].display_name, 'Target Organization Updated');
+    assert.equal(registry.organizations[0].oss_profiles[0].profile_extension, 'keep-profile');
+    assert.equal(registry.organizations[0].oss_profiles[1].name, 'other');
+    assert.equal(registry.organizations[0].projects[0].project_extension, 'keep-project');
+    assert.equal(registry.organizations[0].projects.some((project) => project.slug === 'demo-project' && project.display_name === 'Renamed Project'), true);
+    assert.equal(registry.organizations[0].products[0].name, 'existing-product');
+    assert.equal(registry.organizations[1].id, 'org_other');
+    assert.equal(sourceRegistry, await readFile(path.join(repo, sourceRegistryPath), 'utf8'));
+    assert.equal(rendered.local_config !== null, true);
+    assert.deepEqual(renderProjectFiles({
+      inspection,
+      answers,
+      sourceFiles: sourceFiles({
+        mainConfig: rendered.main_config,
+        localConfig: rendered.local_config,
+        targetRegistry: rendered.target_registry,
+        gitignore: rendered.gitignore,
+      }),
+    }), rendered);
+    assert.equal(rendered.gitignore, '# existing\n.axis/outbox/\n.axis/config.local.yml\n');
+  });
+}
+
+{
+  await withTempDir(async (repo) => {
+    await ensureAxisDir(repo);
+    const mainConfig = v01Config({ bucket: 'legacy-bucket', prefix: 'axis/legacy' });
+    const localConfig = [
+      'contract_version: "0.1"',
+      'local:',
+      '  dry_run: true',
+      '  credential_blob: secret-value',
+      '  oss:',
+      '    endpoint_env: LOCAL_ENDPOINT',
+      '',
+    ].join('\n');
+    await writeRepoFile(repo, '.axis/config.yml', mainConfig);
+    await writeRepoFile(repo, '.axis/config.local.yml', localConfig);
+    const inspection = await inspectProjectInit({ repo, environment: {} });
+    const answers = validateAnswers(inspection, answersFor(inspection));
+    const rendered = renderProjectFiles({
+      inspection,
+      answers,
+      sourceFiles: sourceFiles({ mainConfig, localConfig, targetRegistry: null, gitignore: null }),
+    });
+    const main = (await import('yaml')).parse(rendered.main_config);
+    const local = (await import('yaml')).parse(rendered.local_config);
+    const registry = (await import('yaml')).parse(rendered.target_registry);
+    assert.equal(main.contract_version, '0.2');
+    assert.equal(Object.hasOwn(main.oss, 'bucket'), false);
+    assert.equal(local.contract_version, '0.2');
+    assert.equal(local.local.dry_run, true);
+    assert.equal(local.local.credential_blob, undefined);
+    assert.equal(local.local.oss.endpoint_env, 'LOCAL_ENDPOINT');
+    assert.equal(registry.schema_version, '0.2');
+    assert.equal(registry.organizations.length, 1);
+    assert.equal(rendered.local_config !== null, true);
   });
 }
 

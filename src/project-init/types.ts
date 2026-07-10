@@ -1,3 +1,5 @@
+import type { InspectionFile, ProjectInitInspection } from './inspection.js';
+
 export type Draft = Record<string, unknown>;
 
 export interface CopyOperation {
@@ -75,4 +77,38 @@ export interface MigrateDraftResult {
   unresolved: UnresolvedPrompt[];
   dropped: DroppedEntry[];
   provenance: Record<string, ProvenanceEntry>;
+}
+
+export type ProjectInitAnswerDecision = 'keep' | 'accept_mapping' | 'accept_recommendation' | 'change';
+
+export interface ProjectInitAnswer {
+  key: string;
+  value: string | number | boolean | null;
+  decision: ProjectInitAnswerDecision;
+}
+
+export interface ProjectInitAnswers {
+  schema: 'axis.project_init_answers';
+  schema_version: 1;
+  repo: string;
+  latest_contract_version: '0.2';
+  selectors: ProjectInitInspection['selectors'];
+  files: InspectionFile[];
+  decisions: ProjectInitAnswer[];
+  final_confirmation: true;
+}
+
+export interface ProjectSourceFiles {
+  main_config: string | null;
+  local_config: string | null;
+  target_registry: string | null;
+  gitignore: string | null;
+  source_registry?: string | null;
+}
+
+export interface RenderedProjectFiles {
+  main_config: string;
+  local_config: string | null;
+  target_registry: string;
+  gitignore: string;
 }

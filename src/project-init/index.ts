@@ -10,3 +10,11 @@ export type {
   ProjectInitInspection,
   ProjectInitInspectionOptions,
 } from './inspection.js';
+export { renderProjectFiles, validateAnswers } from './render.js';
+export type {
+  ProjectInitAnswer,
+  ProjectInitAnswerDecision,
+  ProjectInitAnswers,
+  ProjectSourceFiles,
+  RenderedProjectFiles,
+} from './types.js';
