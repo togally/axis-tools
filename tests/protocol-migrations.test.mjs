@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const { migrateDraft } = await import('../dist/project-init/migrations.js');
 const fixtureDir = path.resolve('tests/fixtures/protocol-migrations');
+const transitiveRedactionFixtureDir = path.join(fixtureDir, 'transitive-redaction-bypass');
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), 'axis-protocol-migrations-'));
@@ -15,9 +16,9 @@ async function withTempDir(fn) {
   }
 }
 
-async function copyFixtureChain(mappingsDir) {
-  await cp(path.join(fixtureDir, '0.0-to-0.1.yml'), path.join(mappingsDir, '0.0-to-0.1.yml'));
-  await cp(path.join(fixtureDir, '0.1-to-0.2.yml'), path.join(mappingsDir, '0.1-to-0.2.yml'));
+async function copyFixtureChain(mappingsDir, sourceDir = fixtureDir) {
+  await cp(path.join(sourceDir, '0.0-to-0.1.yml'), path.join(mappingsDir, '0.0-to-0.1.yml'));
+  await cp(path.join(sourceDir, '0.1-to-0.2.yml'), path.join(mappingsDir, '0.1-to-0.2.yml'));
 }
 
 async function writeMapping(mappingsDir, filename, content) {
@@ -268,6 +269,30 @@ await withTempDir(async (mappingsDir) => {
       result = await migrateDraft({
         sourceVersion: '0.0',
         latestVersion: '0.1',
+        draft: { local: { credential_blob: copiedSecret } },
+        mappingsDir,
+      });
+    },
+    (error) => {
+      errorMessage = String(error);
+      return error instanceof Error && error.message === 'local.credential_blob';
+    },
+  );
+  assert.equal(result, undefined);
+  assert.doesNotMatch(errorMessage, new RegExp(copiedSecret));
+});
+
+await withTempDir(async (mappingsDir) => {
+  const copiedSecret = 'transitive-alias-secret-must-not-leak';
+  await copyFixtureChain(mappingsDir, transitiveRedactionFixtureDir);
+
+  let errorMessage = '';
+  let result;
+  await assert.rejects(
+    async () => {
+      result = await migrateDraft({
+        sourceVersion: '0.0',
+        latestVersion: '0.2',
         draft: { local: { credential_blob: copiedSecret } },
         mappingsDir,
       });
@@ -637,8 +662,144 @@ await withTempDir(async (mappingsDir) => {
 
   await assert.rejects(
     () => migrateDraft({ sourceVersion: '0.0', latestVersion: '0.1', draft: legacyDraft(), mappingsDir }),
-    /conflicting writes to target: project\.slug/i,
+    /conflicting writes to targets: project\.slug/i,
   );
+});
+
+for (const parentOperation of ['set', 'copy', 'prompt']) {
+  for (const childOperation of ['set', 'copy', 'prompt']) {
+    for (const operations of [
+      [
+        { operation: parentOperation, target: 'project' },
+        { operation: childOperation, target: 'project.slug' },
+      ],
+      [
+        { operation: childOperation, target: 'project.slug' },
+        { operation: parentOperation, target: 'project' },
+      ],
+    ]) {
+      await withTempDir(async (mappingsDir) => {
+        const operationYaml = operations.map(({ operation, target }) => {
+          if (operation === 'copy') {
+            return [
+              '  - op: copy',
+              '    from: source.value',
+              `    to: ${target}`,
+            ];
+          }
+          if (operation === 'prompt') {
+            return [
+              '  - op: prompt',
+              `    to: ${target}`,
+              '    prompt: Provide a safe project value.',
+            ];
+          }
+          return [
+            '  - op: set',
+            `    to: ${target}`,
+            '    value: safe-value',
+          ];
+        }).flat();
+        await writeMapping(mappingsDir, 'ancestor-descendant-conflict.yml', [
+          'schema: axis.protocol_migration',
+          'schema_version: 1',
+          'from_version: "0.0"',
+          'to_version: "0.1"',
+          'operations:',
+          ...operationYaml,
+          '',
+        ].join('\n'));
+
+        await assert.rejects(
+          () => migrateDraft({
+            sourceVersion: '0.0',
+            latestVersion: '0.1',
+            draft: { source: { value: 'safe-source-value' } },
+            mappingsDir,
+          }),
+          (error) => error instanceof Error
+            && error.message === 'conflicting writes to targets: project, project.slug',
+        );
+      });
+    }
+  }
+}
+
+for (const firstOperation of ['set', 'copy', 'prompt']) {
+  for (const secondOperation of ['set', 'copy', 'prompt']) {
+    await withTempDir(async (mappingsDir) => {
+      const operationYaml = [firstOperation, secondOperation].map((operation) => {
+        if (operation === 'copy') {
+          return [
+            '  - op: copy',
+            '    from: source.value',
+            '    to: project.slug',
+          ];
+        }
+        if (operation === 'prompt') {
+          return [
+            '  - op: prompt',
+            '    to: project.slug',
+            '    prompt: Provide a safe project value.',
+          ];
+        }
+        return [
+          '  - op: set',
+          '    to: project.slug',
+          '    value: safe-value',
+        ];
+      }).flat();
+      await writeMapping(mappingsDir, 'equal-target-conflict.yml', [
+        'schema: axis.protocol_migration',
+        'schema_version: 1',
+        'from_version: "0.0"',
+        'to_version: "0.1"',
+        'operations:',
+        ...operationYaml,
+        '',
+      ].join('\n'));
+
+      await assert.rejects(
+        () => migrateDraft({
+          sourceVersion: '0.0',
+          latestVersion: '0.1',
+          draft: { source: { value: 'safe-source-value' } },
+          mappingsDir,
+        }),
+        (error) => error instanceof Error
+          && error.message === 'conflicting writes to targets: project.slug',
+      );
+    });
+  }
+}
+
+await withTempDir(async (mappingsDir) => {
+  await writeMapping(mappingsDir, 'sibling-writes.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: set',
+    '    to: project.name',
+    '    value: Safe Project',
+    '  - op: copy',
+    '    from: source.slug',
+    '    to: project.slug',
+    '  - op: prompt',
+    '    to: project.description',
+    '    prompt: Provide a safe project description.',
+    '',
+  ].join('\n'));
+
+  const result = await migrateDraft({
+    sourceVersion: '0.0',
+    latestVersion: '0.1',
+    draft: { source: { slug: 'safe-project' } },
+    mappingsDir,
+  });
+  assert.deepEqual(result.draft, { project: { name: 'Safe Project', slug: 'safe-project' } });
+  assert.deepEqual(result.unresolved.map((prompt) => prompt.target), ['project.description']);
 });
 
 console.log('protocol migration tests passed');

@@ -12,6 +12,7 @@ import type {
   MigrationOperation,
   ProtocolMigration,
   ProvenanceEntry,
+  ProvenanceOrigin,
   UnresolvedPrompt,
 } from './types.js';
 
@@ -120,35 +121,94 @@ async function loadMappings(mappingsDir: string): Promise<ProtocolMigration[]> {
 }
 
 function validateMappingSafety(mapping: ProtocolMigration): void {
-  const redactedDroppedSources = new Set<string>();
-  const copiedSources = new Set<string>();
   for (const operation of mapping.operations) {
     if (operation.op === 'drop') {
       assertSafePath(operation.from);
-      if (!isRecord(operation) || operation.redact !== false) {
-        redactedDroppedSources.add(operation.from);
-      }
+      continue;
     }
-  }
-
-  for (const operation of mapping.operations) {
     if (operation.op === 'copy') {
       assertSafePath(operation.from);
       assertSafePath(operation.to);
-      copiedSources.add(operation.from);
       continue;
     }
     if (operation.op === 'set' || operation.op === 'prompt') {
       assertSafePath(operation.to);
-      continue;
     }
   }
+}
 
-  const copiedRedactedSources = [...redactedDroppedSources].filter((source) => (
-    [...copiedSources].some((copiedSource) => pathsOverlap(source, copiedSource))
+function entryOrigins(entry: ProvenanceEntry): ProvenanceOrigin[] {
+  return entry.origins ?? [{ sourceVersion: entry.sourceVersion, sourcePath: entry.sourcePath }];
+}
+
+function originForDescendant(
+  targetPath: string,
+  requestedPath: string,
+  origin: ProvenanceOrigin,
+): ProvenanceOrigin {
+  if (!requestedPath.startsWith(`${targetPath}.`) || origin.sourcePath.startsWith('$mapping.')) {
+    return origin;
+  }
+  return {
+    sourceVersion: origin.sourceVersion,
+    sourcePath: `${origin.sourcePath}.${requestedPath.slice(targetPath.length + 1)}`,
+  };
+}
+
+function resolveCanonicalOrigins(
+  requestedPath: string,
+  provenance: Record<string, ProvenanceEntry>,
+  fallbackVersion: string,
+): ProvenanceOrigin[] {
+  assertSafePath(requestedPath);
+  const origins = Object.entries(provenance)
+    .filter(([targetPath]) => pathsOverlap(targetPath, requestedPath))
+    .flatMap(([targetPath, entry]) => entryOrigins(entry).map((origin) => (
+      originForDescendant(targetPath, requestedPath, origin)
+    )));
+  if (origins.length === 0) {
+    return [{ sourceVersion: fallbackVersion, sourcePath: requestedPath }];
+  }
+  const unique = new Map<string, ProvenanceOrigin>();
+  for (const origin of origins) {
+    unique.set(`${origin.sourceVersion}\u0000${origin.sourcePath}`, origin);
+  }
+  return [...unique.values()].sort((left, right) => (
+    left.sourcePath.localeCompare(right.sourcePath) || left.sourceVersion.localeCompare(right.sourceVersion)
   ));
-  if (copiedRedactedSources.length > 0) {
-    throw new Error(copiedRedactedSources.join(', '));
+}
+
+function provenanceEntryFor(origins: ProvenanceOrigin[]): ProvenanceEntry {
+  const [first] = origins;
+  return origins.length === 1 ? first : { ...first, origins };
+}
+
+function rejectRedactedCopyOrigins(
+  mapping: ProtocolMigration,
+  provenance: Record<string, ProvenanceEntry>,
+): void {
+  const copyOrigins = mapping.operations
+    .filter((operation): operation is Extract<MigrationOperation, { op: 'copy' }> => operation.op === 'copy')
+    .flatMap((operation) => resolveCanonicalOrigins(
+      operation.from,
+      provenance,
+      mapping.from_version,
+    ));
+  const unsafeDropOrigins = new Set<string>();
+  for (const operation of mapping.operations) {
+    if (operation.op !== 'drop' || operation.redact === false) continue;
+    for (const dropOrigin of resolveCanonicalOrigins(
+      operation.from,
+      provenance,
+      mapping.from_version,
+    )) {
+      if (copyOrigins.some((copyOrigin) => pathsOverlap(dropOrigin.sourcePath, copyOrigin.sourcePath))) {
+        unsafeDropOrigins.add(dropOrigin.sourcePath);
+      }
+    }
+  }
+  if (unsafeDropOrigins.size > 0) {
+    throw new Error([...unsafeDropOrigins].sort().join(', '));
   }
 }
 
@@ -195,7 +255,9 @@ function applyMapping(
   provenance: Record<string, ProvenanceEntry>,
 ): Draft {
   const output: Draft = {};
+  const outputProvenance: Record<string, ProvenanceEntry> = {};
   const writtenTargets = new Set<string>();
+  rejectRedactedCopyOrigins(mapping, provenance);
   mapping.operations.forEach((operation: MigrationOperation, operationIndex) => {
     if (operation.op === 'drop') {
       if (getPath(input, operation.from).found) {
@@ -209,8 +271,12 @@ function applyMapping(
       return;
     }
 
-    if (writtenTargets.has(operation.to)) {
-      throw new Error(`conflicting writes to target: ${operation.to}`);
+    const conflictingTarget = [...writtenTargets]
+      .filter((target) => pathsOverlap(target, operation.to))
+      .sort()[0];
+    if (conflictingTarget) {
+      const targets = [...new Set([conflictingTarget, operation.to])].sort();
+      throw new Error(`conflicting writes to targets: ${targets.join(', ')}`);
     }
     writtenTargets.add(operation.to);
 
@@ -227,19 +293,22 @@ function applyMapping(
       const source = getPath(input, operation.from);
       if (!source.found) return;
       setPath(output, operation.to, source.value);
-      provenance[operation.to] = provenance[operation.from] ?? {
-        sourceVersion: mapping.from_version,
-        sourcePath: operation.from,
-      };
+      outputProvenance[operation.to] = provenanceEntryFor(resolveCanonicalOrigins(
+        operation.from,
+        provenance,
+        mapping.from_version,
+      ));
       return;
     }
 
     setPath(output, operation.to, operation.value);
-    provenance[operation.to] = {
+    outputProvenance[operation.to] = {
       sourceVersion: mapping.from_version,
       sourcePath: `$mapping.operations[${operationIndex}].value`,
     };
   });
+  for (const target of Object.keys(provenance)) delete provenance[target];
+  Object.assign(provenance, outputProvenance);
   return output;
 }
 

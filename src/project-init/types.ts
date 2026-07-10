@@ -53,9 +53,13 @@ export interface DroppedEntry {
   redacted: boolean;
 }
 
-export interface ProvenanceEntry {
+export interface ProvenanceOrigin {
   sourceVersion: string;
   sourcePath: string;
+}
+
+export interface ProvenanceEntry extends ProvenanceOrigin {
+  origins?: ProvenanceOrigin[];
 }
 
 export interface MigrateDraftOptions {
