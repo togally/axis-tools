@@ -336,6 +336,8 @@ function applyMapping(
 }
 
 export async function migrateDraft(options: MigrateDraftOptions): Promise<MigrateDraftResult> {
+  parseVersion(options.sourceVersion);
+  parseVersion(options.latestVersion);
   const mappings = await loadMappings(options.mappingsDir);
   const { mappings: chainMappings, chain } = buildChain(
     mappings,

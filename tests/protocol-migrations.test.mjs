@@ -5,6 +5,7 @@ import path from 'node:path';
 
 const { migrateDraft } = await import('../dist/project-init/migrations.js');
 const fixtureDir = path.resolve('tests/fixtures/protocol-migrations');
+const protocolMappingsDir = path.resolve('protocols/migrations');
 const transitiveRedactionFixtureDir = path.join(fixtureDir, 'transitive-redaction-bypass');
 
 async function withTempDir(fn) {
@@ -64,6 +65,61 @@ function legacyDraft() {
       credential_blob: 'legacy-secret-value',
     },
   };
+}
+
+{
+  const result = await migrateDraft({
+    sourceVersion: '0.1',
+    latestVersion: '0.2',
+    draft: {
+      project: { display_name: 'Shipped Mapping Demo', slug: 'shipped-mapping-demo' },
+      oss: { provider: 'aliyun-oss', bucket: 'shipped-mapping-bucket', prefix: 'axis/shipped' },
+      local: {
+        oss: {
+          provider: 'local-aliyun-oss',
+          bucket: 'local-mapping-bucket',
+          prefix: 'axis/local-mapping',
+          endpoint_env: 'LOCAL_OSS_ENDPOINT',
+          access_key_id_env: 'LOCAL_OSS_ACCESS_KEY_ID',
+        },
+      },
+    },
+    mappingsDir: protocolMappingsDir,
+  });
+
+  assert.deepEqual(result.chain, [{ fromVersion: '0.1', toVersion: '0.2' }]);
+  assert.deepEqual(result.draft, {
+    contract_version: '0.2',
+    project: { display_name: 'Shipped Mapping Demo', slug: 'shipped-mapping-demo' },
+    oss_profile: { provider: 'aliyun-oss', bucket: 'shipped-mapping-bucket', prefix: 'axis/shipped' },
+    local: {
+      oss: {
+        endpoint_env: 'LOCAL_OSS_ENDPOINT',
+        access_key_id_env: 'LOCAL_OSS_ACCESS_KEY_ID',
+      },
+    },
+  });
+  assert.deepEqual(result.dropped.map((entry) => entry.sourcePath), [
+    'local.oss.provider',
+    'local.oss.bucket',
+    'local.oss.prefix',
+  ]);
+}
+
+for (const { sourceVersion, latestVersion, invalidVersion } of [
+  { sourceVersion: 'invalid', latestVersion: '0.2', invalidVersion: 'invalid' },
+  { sourceVersion: '0.1', latestVersion: 'invalid', invalidVersion: 'invalid' },
+  { sourceVersion: 'invalid', latestVersion: 'invalid', invalidVersion: 'invalid' },
+]) {
+  await assert.rejects(
+    () => migrateDraft({
+      sourceVersion,
+      latestVersion,
+      draft: {},
+      mappingsDir: protocolMappingsDir,
+    }),
+    new RegExp(`invalid protocol version: ${invalidVersion}`),
+  );
 }
 
 await withTempDir(async (mappingsDir) => {

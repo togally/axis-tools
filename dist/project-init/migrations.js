@@ -267,6 +267,8 @@ function applyMapping(input, mapping, unresolved, dropped, provenance) {
     return output;
 }
 export async function migrateDraft(options) {
+    parseVersion(options.sourceVersion);
+    parseVersion(options.latestVersion);
     const mappings = await loadMappings(options.mappingsDir);
     const { mappings: chainMappings, chain } = buildChain(mappings, options.sourceVersion, options.latestVersion);
     const unresolved = [];
