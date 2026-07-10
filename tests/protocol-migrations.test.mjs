@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -16,15 +16,7 @@ async function withTempDir(fn) {
 }
 
 async function copyFixtureChain(mappingsDir) {
-  const firstMapping = await readFile(path.join(fixtureDir, '0.0-to-0.1.yml'), 'utf8');
-  await writeMapping(
-    mappingsDir,
-    '0.0-to-0.1.yml',
-    firstMapping.replace(
-      /\n  - op: drop\n    from: project\.name\n    reason: project\.name was renamed to project\.display_name\.\n$/,
-      '\n',
-    ),
-  );
+  await cp(path.join(fixtureDir, '0.0-to-0.1.yml'), path.join(mappingsDir, '0.0-to-0.1.yml'));
   await cp(path.join(fixtureDir, '0.1-to-0.2.yml'), path.join(mappingsDir, '0.1-to-0.2.yml'));
 }
 
@@ -135,9 +127,17 @@ await withTempDir(async (mappingsDir) => {
     [
       'local.credential_blob',
       'local.inline_target',
+      'project.name',
     ],
   );
-  assert.equal(result.dropped.every((entry) => entry.redacted === true), true);
+  assert.deepEqual(
+    result.dropped.map((entry) => [entry.sourcePath, entry.redacted]).sort(),
+    [
+      ['local.credential_blob', true],
+      ['local.inline_target', true],
+      ['project.name', true],
+    ],
+  );
   assert.deepEqual(result.provenance['project.display_name'], {
     sourceVersion: '0.0',
     sourcePath: 'project.name',
@@ -178,6 +178,26 @@ await withTempDir(async (mappingsDir) => {
 });
 
 await withTempDir(async (mappingsDir) => {
+  await writeMapping(mappingsDir, 'invalid-copy-redact.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: copy',
+    '    from: project.name',
+    '    to: project.display_name',
+    '    redact: false',
+    '',
+  ].join('\n'));
+
+  await assert.rejects(
+    () => migrateDraft({ sourceVersion: '0.0', latestVersion: '0.1', draft: legacyDraft(), mappingsDir }),
+    /schema validation failed/i,
+  );
+});
+
+await withTempDir(async (mappingsDir) => {
   const copiedSecret = 'copied-then-dropped-secret';
   await writeMapping(mappingsDir, 'unsafe-copy.yml', [
     'schema: axis.protocol_migration',
@@ -207,7 +227,7 @@ await withTempDir(async (mappingsDir) => {
     },
     (error) => {
       errorMessage = String(error);
-      return /copied migration drop sources: local\.credential_blob/i.test(errorMessage);
+      return error instanceof Error && error.message === 'local.credential_blob';
     },
   );
   assert.equal(result, undefined);
@@ -244,7 +264,7 @@ await withTempDir(async (mappingsDir) => {
     },
     (error) => {
       errorMessage = String(error);
-      return /copied migration drop sources: local\.credential_blob/i.test(errorMessage);
+      return error instanceof Error && error.message === 'local.credential_blob';
     },
   );
   assert.equal(result, undefined);
@@ -281,7 +301,7 @@ await withTempDir(async (mappingsDir) => {
     },
     (error) => {
       errorMessage = String(error);
-      return errorMessage === 'Error: copied migration drop sources: local.api_token';
+      return error instanceof Error && error.message === 'local.api_token';
     },
   );
   assert.equal(result, undefined);
@@ -289,7 +309,8 @@ await withTempDir(async (mappingsDir) => {
 });
 
 await withTempDir(async (mappingsDir) => {
-  await writeMapping(mappingsDir, 'drop-only.yml', [
+  const copiedToken = 'dropped-then-copied-token-must-not-leak';
+  await writeMapping(mappingsDir, 'unsafe-neutral-reverse-copy.yml', [
     'schema: axis.protocol_migration',
     'schema_version: 1',
     'from_version: "0.0"',
@@ -297,19 +318,56 @@ await withTempDir(async (mappingsDir) => {
     'operations:',
     '  - op: drop',
     '    from: local.api_token',
+    '    reason: This source cannot cross protocol boundaries.',
+    '  - op: copy',
+    '    from: local.api_token',
+    '    to: retained.note',
+    '',
+  ].join('\n'));
+
+  let errorMessage = '';
+  let result;
+  await assert.rejects(
+    async () => {
+      result = await migrateDraft({
+        sourceVersion: '0.0',
+        latestVersion: '0.1',
+        draft: { local: { api_token: copiedToken } },
+        mappingsDir,
+      });
+    },
+    (error) => {
+      errorMessage = String(error);
+      return error instanceof Error && error.message === 'local.api_token';
+    },
+  );
+  assert.equal(result, undefined);
+  assert.doesNotMatch(errorMessage, new RegExp(copiedToken));
+});
+
+await withTempDir(async (mappingsDir) => {
+  await writeMapping(mappingsDir, 'non-sensitive-drop-only.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: drop',
+    '    from: project.name',
     '    reason: The retired field is not part of the target protocol.',
+    '    redact: false',
     '',
   ].join('\n'));
 
   const result = await migrateDraft({
     sourceVersion: '0.0',
     latestVersion: '0.1',
-    draft: { local: { api_token: 'drop-only-token' } },
+    draft: { project: { name: 'drop-only-name' } },
     mappingsDir,
   });
   assert.deepEqual(result.draft, {});
-  assert.deepEqual(result.dropped.map((entry) => entry.sourcePath), ['local.api_token']);
-  assert.doesNotMatch(JSON.stringify(result), /drop-only-token/);
+  assert.deepEqual(result.dropped.map((entry) => entry.sourcePath), ['project.name']);
+  assert.doesNotMatch(JSON.stringify(result), /drop-only-name/);
 });
 
 for (const segment of ['__proto__', 'constructor', 'prototype']) {

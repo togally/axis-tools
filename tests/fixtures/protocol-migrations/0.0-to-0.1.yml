@@ -81,3 +81,4 @@ operations:
   - op: drop
     from: project.name
     reason: project.name was renamed to project.display_name.
+    redact: false

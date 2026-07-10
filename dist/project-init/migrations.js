@@ -95,12 +95,14 @@ async function loadMappings(mappingsDir) {
     return mappings;
 }
 function validateMappingSafety(mapping) {
-    const droppedSources = new Set();
+    const redactedDroppedSources = new Set();
     const copiedSources = new Set();
     for (const operation of mapping.operations) {
         if (operation.op === 'drop') {
             assertSafePath(operation.from);
-            droppedSources.add(operation.from);
+            if (!isRecord(operation) || operation.redact !== false) {
+                redactedDroppedSources.add(operation.from);
+            }
         }
     }
     for (const operation of mapping.operations) {
@@ -115,9 +117,9 @@ function validateMappingSafety(mapping) {
             continue;
         }
     }
-    const copiedDroppedSources = [...droppedSources].filter((source) => copiedSources.has(source));
-    if (copiedDroppedSources.length > 0) {
-        throw new Error(`copied migration drop sources: ${copiedDroppedSources.join(', ')}`);
+    const copiedRedactedSources = [...redactedDroppedSources].filter((source) => copiedSources.has(source));
+    if (copiedRedactedSources.length > 0) {
+        throw new Error(copiedRedactedSources.join(', '));
     }
 }
 function buildChain(mappings, sourceVersion, latestVersion) {
