@@ -50,6 +50,7 @@ function legacyDraft() {
     local: {
       outbox_dir: '.axis/local-outbox',
       dry_run: true,
+      redaction_patterns_file: '.axis/redaction-patterns.txt',
       environment_name: 'staging',
       oss: {
         endpoint_env: 'LOCAL_OSS_ENDPOINT',
@@ -104,6 +105,7 @@ await withTempDir(async (mappingsDir) => {
     local: {
       outbox_dir: '.axis/local-outbox',
       dry_run: true,
+      redaction_patterns_file: '.axis/redaction-patterns.txt',
       environment_name: 'staging',
       oss: {
         endpoint_env: 'LOCAL_OSS_ENDPOINT',
@@ -137,9 +139,13 @@ await withTempDir(async (mappingsDir) => {
     sourceVersion: '0.0',
     sourcePath: 'oss.bucket',
   });
+  assert.deepEqual(result.provenance['local.redaction_patterns_file'], {
+    sourceVersion: '0.0',
+    sourcePath: 'local.redaction_patterns_file',
+  });
   assert.deepEqual(result.provenance.contract_version, {
     sourceVersion: '0.1',
-    sourcePath: '$mapping.operations[21].value',
+    sourcePath: '$mapping.operations[22].value',
   });
   assert.doesNotMatch(JSON.stringify(result), /legacy-inline-target|legacy-secret-value/);
 });
@@ -163,6 +169,73 @@ await withTempDir(async (mappingsDir) => {
     /schema validation failed/i,
   );
 });
+
+await withTempDir(async (mappingsDir) => {
+  const copiedSecret = 'copied-then-dropped-secret';
+  await writeMapping(mappingsDir, 'unsafe-copy.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: copy',
+    '    from: local.credential_blob',
+    '    to: organization.credential_alias',
+    '  - op: drop',
+    '    from: local.credential_blob',
+    '    reason: Credential-like values must not cross protocol boundaries.',
+    '',
+  ].join('\n'));
+
+  let errorMessage = '';
+  let result;
+  await assert.rejects(
+    async () => {
+      result = await migrateDraft({
+        sourceVersion: '0.0',
+        latestVersion: '0.1',
+        draft: { local: { credential_blob: copiedSecret } },
+        mappingsDir,
+      });
+    },
+    (error) => {
+      errorMessage = String(error);
+      return /copied source is later dropped/i.test(errorMessage);
+    },
+  );
+  assert.equal(result, undefined);
+  assert.doesNotMatch(errorMessage, new RegExp(copiedSecret));
+});
+
+for (const segment of ['__proto__', 'constructor', 'prototype']) {
+  for (const field of ['from', 'to']) {
+    await withTempDir(async (mappingsDir) => {
+      const operation = field === 'from'
+        ? [`    from: local.${segment}.axis_polluted`, '    to: project.slug']
+        : ['    from: project.name', `    to: local.${segment}.axis_polluted`];
+      await writeMapping(mappingsDir, `${segment}-${field}.yml`, [
+        'schema: axis.protocol_migration',
+        'schema_version: 1',
+        'from_version: "0.0"',
+        'to_version: "0.1"',
+        'operations:',
+        '  - op: copy',
+        ...operation,
+        '',
+      ].join('\n'));
+
+      try {
+        await assert.rejects(
+          () => migrateDraft({ sourceVersion: '0.0', latestVersion: '0.1', draft: legacyDraft(), mappingsDir }),
+          /schema validation failed|unsafe protocol path/i,
+        );
+        assert.equal(({}).axis_polluted, undefined);
+      } finally {
+        delete Object.prototype.axis_polluted;
+      }
+    });
+  }
+}
 
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, '0.0-to-0.1.yml', [

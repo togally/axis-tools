@@ -23,6 +23,18 @@ const schemaPath = path.resolve(
 const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
+const unsafePathSegments = new Set(['__proto__', 'constructor', 'prototype']);
+
+function assertSafePath(dottedPath: string): void {
+  if (dottedPath.split('.').some((segment) => unsafePathSegments.has(segment))) {
+    throw new Error('unsafe protocol path');
+  }
+}
+
+function isUnsafeLocalSource(dottedPath: string): boolean {
+  return dottedPath.startsWith('local.')
+    && /(?:credential|secret|password|private_key|inline)/i.test(dottedPath);
+}
 
 function parseVersion(version: string): number[] {
   const parts = version.split('.').map(Number);
@@ -41,6 +53,7 @@ function isAdjacentVersion(fromVersion: string, toVersion: string): boolean {
 }
 
 function getPath(draft: Draft, dottedPath: string): { found: boolean; value?: unknown } {
+  assertSafePath(dottedPath);
   let current: unknown = draft;
   for (const segment of dottedPath.split('.')) {
     if (!isRecord(current) || !(segment in current)) return { found: false };
@@ -50,6 +63,7 @@ function getPath(draft: Draft, dottedPath: string): { found: boolean; value?: un
 }
 
 function setPath(draft: Draft, dottedPath: string, value: unknown): void {
+  assertSafePath(dottedPath);
   const segments = dottedPath.split('.');
   let current = draft;
   for (const segment of segments.slice(0, -1)) {
@@ -97,9 +111,31 @@ async function loadMappings(mappingsDir: string): Promise<ProtocolMigration[]> {
       throw new Error(`invalid protocol migration mapping: ${filename}`);
     }
     if (!validate(parsed)) throw new Error(`schema validation failed for protocol migration: ${filename}`);
-    mappings.push(parsed as ProtocolMigration);
+    const mapping = parsed as ProtocolMigration;
+    validateMappingSafety(mapping);
+    mappings.push(mapping);
   }
   return mappings;
+}
+
+function validateMappingSafety(mapping: ProtocolMigration): void {
+  const copiedSources = new Set<string>();
+  for (const operation of mapping.operations) {
+    if (operation.op === 'copy') {
+      assertSafePath(operation.from);
+      assertSafePath(operation.to);
+      copiedSources.add(operation.from);
+      continue;
+    }
+    if (operation.op === 'set' || operation.op === 'prompt') {
+      assertSafePath(operation.to);
+      continue;
+    }
+    assertSafePath(operation.from);
+    if (copiedSources.has(operation.from) && isUnsafeLocalSource(operation.from)) {
+      throw new Error(`unsafe copied source is later dropped: ${operation.from}`);
+    }
+  }
 }
 
 function buildChain(

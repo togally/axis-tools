@@ -17,8 +17,18 @@
   },
   "$defs": {
     "path": {
-      "type": "string",
-      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+      "allOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+        },
+        {
+          "not": {
+            "type": "string",
+            "pattern": "(^|\\.)(?:__proto__|constructor|prototype)(?:\\.|$)"
+          }
+        }
+      ]
     },
     "operation": {
       "oneOf": [

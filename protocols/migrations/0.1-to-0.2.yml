@@ -49,6 +49,9 @@ operations:
     from: local.dry_run
     to: local.dry_run
   - op: copy
+    from: local.redaction_patterns_file
+    to: local.redaction_patterns_file
+  - op: copy
     from: local.environment_name
     to: local.environment_name
   - op: copy

@@ -5,6 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 const schemaPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../schemas/protocol-migration.schema.json');
 const isRecord = (value) => (typeof value === 'object' && value !== null && !Array.isArray(value));
+const unsafePathSegments = new Set(['__proto__', 'constructor', 'prototype']);
+function assertSafePath(dottedPath) {
+    if (dottedPath.split('.').some((segment) => unsafePathSegments.has(segment))) {
+        throw new Error('unsafe protocol path');
+    }
+}
+function isUnsafeLocalSource(dottedPath) {
+    return dottedPath.startsWith('local.')
+        && /(?:credential|secret|password|private_key|inline)/i.test(dottedPath);
+}
 function parseVersion(version) {
     const parts = version.split('.').map(Number);
     if (parts.length < 2 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
@@ -21,6 +31,7 @@ function isAdjacentVersion(fromVersion, toVersion) {
         && to.at(-1) === from.at(-1) + 1;
 }
 function getPath(draft, dottedPath) {
+    assertSafePath(dottedPath);
     let current = draft;
     for (const segment of dottedPath.split('.')) {
         if (!isRecord(current) || !(segment in current))
@@ -30,6 +41,7 @@ function getPath(draft, dottedPath) {
     return { found: true, value: current };
 }
 function setPath(draft, dottedPath, value) {
+    assertSafePath(dottedPath);
     const segments = dottedPath.split('.');
     let current = draft;
     for (const segment of segments.slice(0, -1)) {
@@ -80,9 +92,30 @@ async function loadMappings(mappingsDir) {
         }
         if (!validate(parsed))
             throw new Error(`schema validation failed for protocol migration: ${filename}`);
-        mappings.push(parsed);
+        const mapping = parsed;
+        validateMappingSafety(mapping);
+        mappings.push(mapping);
     }
     return mappings;
+}
+function validateMappingSafety(mapping) {
+    const copiedSources = new Set();
+    for (const operation of mapping.operations) {
+        if (operation.op === 'copy') {
+            assertSafePath(operation.from);
+            assertSafePath(operation.to);
+            copiedSources.add(operation.from);
+            continue;
+        }
+        if (operation.op === 'set' || operation.op === 'prompt') {
+            assertSafePath(operation.to);
+            continue;
+        }
+        assertSafePath(operation.from);
+        if (copiedSources.has(operation.from) && isUnsafeLocalSource(operation.from)) {
+            throw new Error(`unsafe copied source is later dropped: ${operation.from}`);
+        }
+    }
 }
 function buildChain(mappings, sourceVersion, latestVersion) {
     const bySource = new Map();
