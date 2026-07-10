@@ -1,0 +1,71 @@
+schema: axis.protocol_migration
+schema_version: "0.1"
+from_version: "0.1"
+to_version: "0.2"
+operations:
+  - op: copy
+    from: project.slug
+    to: project.slug
+  - op: copy
+    from: project.display_name
+    to: project.display_name
+  - op: copy
+    from: package.outbox_dir
+    to: package.outbox_dir
+  - op: copy
+    from: release.channel
+    to: release.channel
+  - op: copy
+    from: release.gate
+    to: release.gate
+  - op: copy
+    from: oss.provider
+    to: oss.provider
+  - op: copy
+    from: local.outbox_dir
+    to: local.outbox_dir
+  - op: copy
+    from: local.dry_run
+    to: local.dry_run
+  - op: copy
+    from: local.environment_name
+    to: local.environment_name
+  - op: set
+    to: contract_version
+    value: "0.2"
+  - op: prompt
+    to: organization.id
+    prompt: Select an organization id from the registry.
+  - op: prompt
+    to: organization.registry
+    prompt: Select the organization registry path.
+  - op: prompt
+    to: oss.profile
+    prompt: Select an OSS profile from the organization registry.
+  - op: drop
+    from: oss.bucket
+    reason: OSS bucket selection moves to the selected profile.
+  - op: drop
+    from: oss.prefix
+    reason: OSS prefix selection moves to the selected profile.
+  - op: drop
+    from: oss.endpoint_env
+    reason: OSS endpoint overrides are not supported in 0.2.
+  - op: drop
+    from: oss.region_env
+    reason: OSS region overrides are not supported in 0.2.
+  - op: drop
+    from: oss.access_key_id_env
+    reason: Credential selectors move to the selected profile.
+  - op: drop
+    from: oss.access_key_secret_env
+    reason: Credential selectors move to the selected profile.
+  - op: drop
+    from: oss.security_token_env
+    reason: Credential selectors move to the selected profile.
+  - op: drop
+    from: local.inline_target
+    reason: Local inline targets are not supported in 0.2.
+  - op: drop
+    from: local.credential_blob
+    reason: Local credential-like values are not supported in 0.2.

@@ -1,0 +1,65 @@
+schema: axis.protocol_migration
+schema_version: "0.1"
+from_version: "0.0"
+to_version: "0.1"
+operations:
+  - op: copy
+    from: project.name
+    to: project.display_name
+  - op: copy
+    from: project.slug
+    to: project.slug
+  - op: copy
+    from: package.outbox_dir
+    to: package.outbox_dir
+  - op: copy
+    from: release.channel
+    to: release.channel
+  - op: copy
+    from: release.gate
+    to: release.gate
+  - op: copy
+    from: oss.provider
+    to: oss.provider
+  - op: copy
+    from: oss.bucket
+    to: oss.bucket
+  - op: copy
+    from: oss.prefix
+    to: oss.prefix
+  - op: copy
+    from: oss.endpoint_env
+    to: oss.endpoint_env
+  - op: copy
+    from: oss.region_env
+    to: oss.region_env
+  - op: copy
+    from: oss.access_key_id_env
+    to: oss.access_key_id_env
+  - op: copy
+    from: oss.access_key_secret_env
+    to: oss.access_key_secret_env
+  - op: copy
+    from: oss.security_token_env
+    to: oss.security_token_env
+  - op: copy
+    from: local.outbox_dir
+    to: local.outbox_dir
+  - op: copy
+    from: local.dry_run
+    to: local.dry_run
+  - op: copy
+    from: local.environment_name
+    to: local.environment_name
+  - op: copy
+    from: local.inline_target
+    to: local.inline_target
+  - op: copy
+    from: local.credential_blob
+    to: local.credential_blob
+  - op: set
+    to: contract_version
+    value: "0.1"
+  - op: drop
+    from: project.name
+    reason: project.name was renamed to project.display_name.
