@@ -22,6 +22,7 @@ export interface DropOperation {
   op: 'drop';
   from: string;
   reason: string;
+  redact?: boolean;
 }
 
 export type MigrationOperation = CopyOperation | SetOperation | PromptOperation | DropOperation;
@@ -49,7 +50,7 @@ export interface DroppedEntry {
   sourcePath: string;
   sourceVersion: string;
   reason: string;
-  redacted: true;
+  redacted: boolean;
 }
 
 export interface ProvenanceEntry {

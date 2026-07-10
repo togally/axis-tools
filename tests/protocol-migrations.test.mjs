@@ -131,12 +131,22 @@ await withTempDir(async (mappingsDir) => {
     ],
   );
   assert.deepEqual(
-    result.dropped.map((entry) => [entry.sourcePath, entry.redacted]).sort(),
-    [
-      ['local.credential_blob', true],
-      ['local.inline_target', true],
-      ['project.name', true],
-    ],
+    result.dropped.find((entry) => entry.sourcePath === 'project.name'),
+    {
+      sourcePath: 'project.name',
+      sourceVersion: '0.0',
+      reason: 'project.name was renamed to project.display_name.',
+      redacted: false,
+    },
+  );
+  assert.deepEqual(
+    result.dropped.find((entry) => entry.sourcePath === 'local.credential_blob'),
+    {
+      sourcePath: 'local.credential_blob',
+      sourceVersion: '0.1',
+      reason: 'Local credential-like values are not supported in 0.2.',
+      redacted: true,
+    },
   );
   assert.deepEqual(result.provenance['project.display_name'], {
     sourceVersion: '0.0',

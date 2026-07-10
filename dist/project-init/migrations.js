@@ -162,7 +162,7 @@ function applyMapping(input, mapping, unresolved, dropped, provenance) {
                     sourcePath: operation.from,
                     sourceVersion: mapping.from_version,
                     reason: operation.reason,
-                    redacted: true,
+                    redacted: operation.redact !== false,
                 });
             }
             return;

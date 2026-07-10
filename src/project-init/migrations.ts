@@ -195,7 +195,7 @@ function applyMapping(
           sourcePath: operation.from,
           sourceVersion: mapping.from_version,
           reason: operation.reason,
-          redacted: true,
+          redacted: operation.redact !== false,
         });
       }
       return;
