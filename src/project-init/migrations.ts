@@ -31,11 +31,6 @@ function assertSafePath(dottedPath: string): void {
   }
 }
 
-function isUnsafeLocalSource(dottedPath: string): boolean {
-  return dottedPath.startsWith('local.')
-    && /(?:credential|secret|password|private_key|inline)/i.test(dottedPath);
-}
-
 function parseVersion(version: string): number[] {
   const parts = version.split('.').map(Number);
   if (parts.length < 2 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
@@ -120,6 +115,7 @@ async function loadMappings(mappingsDir: string): Promise<ProtocolMigration[]> {
 
 function validateMappingSafety(mapping: ProtocolMigration): void {
   const droppedSources = new Set<string>();
+  const copiedSources = new Set<string>();
   for (const operation of mapping.operations) {
     if (operation.op === 'drop') {
       assertSafePath(operation.from);
@@ -131,15 +127,18 @@ function validateMappingSafety(mapping: ProtocolMigration): void {
     if (operation.op === 'copy') {
       assertSafePath(operation.from);
       assertSafePath(operation.to);
-      if (droppedSources.has(operation.from) && isUnsafeLocalSource(operation.from)) {
-        throw new Error(`unsafe copied source is later dropped: ${operation.from}`);
-      }
+      copiedSources.add(operation.from);
       continue;
     }
     if (operation.op === 'set' || operation.op === 'prompt') {
       assertSafePath(operation.to);
       continue;
     }
+  }
+
+  const copiedDroppedSources = [...droppedSources].filter((source) => copiedSources.has(source));
+  if (copiedDroppedSources.length > 0) {
+    throw new Error(`copied migration drop sources: ${copiedDroppedSources.join(', ')}`);
   }
 }
 
