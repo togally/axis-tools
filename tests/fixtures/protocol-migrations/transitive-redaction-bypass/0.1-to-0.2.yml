@@ -1,0 +1,14 @@
+schema: axis.protocol_migration
+schema_version: 1
+from_version: "0.1"
+to_version: "0.2"
+operations:
+  - op: copy
+    from: aliases.credential_blob
+    to: retained.credential_alias
+  - op: copy
+    from: aliases
+    to: retained.aliases
+  - op: drop
+    from: local.credential_blob
+    reason: Local credential-like values must not cross protocol boundaries.

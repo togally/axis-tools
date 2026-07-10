@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axis-tools.example/schemas/protocol-migration.schema.json",
+  "title": "Axis protocol migration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "schema_version", "from_version", "to_version", "operations"],
+  "properties": {
+    "schema": { "const": "axis.protocol_migration" },
+    "schema_version": { "type": "integer", "const": 1 },
+    "from_version": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$" },
+    "to_version": { "type": "string", "pattern": "^[0-9]+(?:\\.[0-9]+)+$" },
+    "operations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/operation" }
+    }
+  },
+  "$defs": {
+    "path": {
+      "allOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)*$"
+        },
+        {
+          "not": {
+            "type": "string",
+            "pattern": "(^|\\.)(?:__proto__|constructor|prototype)(?:\\.|$)"
+          }
+        }
+      ]
+    },
+    "operation": {
+      "oneOf": [
+        { "$ref": "#/$defs/copy" },
+        { "$ref": "#/$defs/set" },
+        { "$ref": "#/$defs/prompt" },
+        { "$ref": "#/$defs/drop" }
+      ]
+    },
+    "copy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "from", "to"],
+      "properties": {
+        "op": { "const": "copy" },
+        "from": { "$ref": "#/$defs/path" },
+        "to": { "$ref": "#/$defs/path" }
+      }
+    },
+    "set": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "to", "value"],
+      "properties": {
+        "op": { "const": "set" },
+        "to": { "$ref": "#/$defs/path" },
+        "value": {}
+      }
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "to", "prompt"],
+      "properties": {
+        "op": { "const": "prompt" },
+        "to": { "$ref": "#/$defs/path" },
+        "prompt": { "type": "string", "minLength": 1 }
+      }
+    },
+    "drop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "from", "reason"],
+      "properties": {
+        "op": { "const": "drop" },
+        "from": { "$ref": "#/$defs/path" },
+        "reason": { "type": "string", "minLength": 1 },
+        "redact": { "type": "boolean" }
+      }
+    }
+  }
+}

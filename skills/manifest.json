@@ -63,7 +63,7 @@
     },
     {
       "name": "axis-coding-capture",
-      "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.1 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.1 执行报告和经验卡片。",
+      "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.2 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.2 执行报告和经验卡片。",
       "path": "skills/axis-coding-capture",
       "files": [
         "SKILL.md",
@@ -109,7 +109,7 @@
     },
     {
       "name": "axis-oss-publish",
-      "description": "Use when an Axis v0.1 local outbox package must be validated, redacted locally, dry-run checked, or uploaded to the controlled Aliyun OSS prefix. / 用于校验、脱敏、本地预演或上传 Axis v0.1 outbox 包到受控阿里云 OSS 前缀。",
+      "description": "Use when an Axis v0.2 local outbox package must be validated, redacted locally, dry-run checked, or uploaded to the configured Aliyun OSS profile. / 用于校验、脱敏、本地预演或上传 Axis v0.2 outbox 包到配置的阿里云 OSS profile。",
       "path": "skills/axis-oss-publish",
       "files": [
         "SKILL.md",
@@ -118,7 +118,7 @@
     },
     {
       "name": "axis-project-init",
-      "description": "Use when starting an Axis v0.1 project that needs .axis/config.yml, .axis/outbox/ ignore rules, and private_beta release metadata before capture or OSS publish. / 用于初始化 Axis v0.1 项目的配置、outbox 忽略规则和 private_beta 发布元数据。",
+      "description": "Use when a repository needs conversational Axis v0.2 configuration, migration from an older protocol, or confirmation of organization and OSS profile settings. / 用于通过对话式流程为项目配置 Axis v0.2、迁移旧协议并确认组织和 OSS profile。",
       "path": "skills/axis-project-init",
       "files": [
         "SKILL.md",
@@ -163,7 +163,7 @@
     },
     {
       "name": "axis-test-report",
-      "description": "Use when build, lint, test, benchmark, pressure-test, or verification work needs a public-safe Axis v0.1 test report package in the local outbox. / 用于将构建、lint、测试、压测或验证结果采集为公开安全的 Axis v0.1 测试报告包。",
+      "description": "Use when build, lint, test, benchmark, pressure-test, or verification work needs a public-safe Axis v0.2 test report package in the local outbox. / 用于将构建、lint、测试、压测或验证结果采集为公开安全的 Axis v0.2 测试报告包。",
       "path": "skills/axis-test-report",
       "files": [
         "SKILL.md",

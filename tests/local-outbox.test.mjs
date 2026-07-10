@@ -31,16 +31,65 @@ async function run(args, options = {}) {
 }
 
 async function initializeProject(repo, extraArgs = []) {
+  const { stdout: inspectStdout } = await run([
+    'project-init',
+    '--repo',
+    repo,
+    '--inspect',
+    '--json',
+    ...extraArgs,
+  ]);
+  const inspection = JSON.parse(inspectStdout);
+  const decisions = inspection.fields.map((entry) => {
+    const value = Object.hasOwn(entry, 'current_value')
+      ? entry.current_value
+      : Object.hasOwn(entry, 'mapped_value')
+        ? entry.mapped_value
+        : entry.recommendation ?? null;
+    const decision = entry.resolution === 'stored'
+      ? 'keep'
+      : entry.resolution === 'mapped'
+        ? 'accept_mapping'
+        : entry.resolution === 'recommended'
+          ? 'accept_recommendation'
+          : 'change';
+    return { key: entry.key, value, decision };
+  });
+  for (const decision of decisions) {
+    if (decision.key === 'organization.id') decision.value = 'org_axis_tools';
+    if (decision.key === 'oss_profile.name') decision.value = 'private_beta_main';
+    if (decision.key === 'project.slug') decision.value = 'demo-project';
+    if (decision.key === 'project.display_name') decision.value = 'Demo Project';
+    if (decision.key === 'organization.id' || decision.key === 'oss_profile.name' || decision.key === 'project.slug' || decision.key === 'project.display_name') {
+      decision.decision = 'change';
+    }
+  }
+  const answersPath = path.join(repo, 'project-init-answers.json');
+  await writeFile(answersPath, `${JSON.stringify({
+    schema: 'axis.project_init_answers',
+    schema_version: 1,
+    repo: inspection.repo,
+    latest_contract_version: inspection.latest_contract_version,
+    selectors: inspection.selectors,
+    files: inspection.files,
+    decisions,
+    final_confirmation: true,
+  }, null, 2)}\n`, 'utf8');
   const { stdout } = await run([
     'project-init',
     '--repo',
     repo,
-    '--project-slug',
-    'demo-project',
-    '--display-name',
-    'Demo Project',
-    ...extraArgs,
-  ]);
+    '--answers-file',
+    answersPath,
+    '--apply',
+  ], {
+    env: {
+      ALIYUN_OSS_ENDPOINT: 'https://oss.example.invalid',
+      ALIYUN_OSS_REGION: 'oss-cn-hangzhou',
+      ALIYUN_OSS_ACCESS_KEY_ID: 'LTAI_TEST_ACCESS_KEY_ID',
+      ALIYUN_OSS_ACCESS_KEY_SECRET: 'test-secret-value',
+    },
+  });
   return JSON.parse(stdout);
 }
 
@@ -208,17 +257,23 @@ await withTempDir(async (repo) => {
 
   assert.equal(result.ok, true);
   assert.equal(result.config_path, '.axis/config.yml');
-  assert.deepEqual(result.ignored_paths, ['.axis/config.local.yml', '.axis/outbox/']);
+  assert.equal(result.contract_version, '0.2');
+  assert.equal(result.registry_path, '.axis/organizations.yml');
 
   const config = await readFile(path.join(repo, '.axis', 'config.yml'), 'utf8');
-  assert.match(config, /contract_version: "0\.1"/);
+  assert.match(config, /contract_version: "0\.2"/);
+  assert.match(config, /organization:/);
+  assert.match(config, /id: org_axis_tools/);
+  assert.match(config, /profile: private_beta_main/);
   assert.match(config, /slug: demo-project/);
   assert.match(config, /display_name: Demo Project/);
   assert.match(config, /outbox_dir: \.axis\/outbox/);
   assert.match(config, /channel: private_beta/);
   assert.match(config, /gate: not_requested/);
-  assert.match(config, /endpoint_env: ALIYUN_OSS_ENDPOINT/);
-  assert.match(config, /access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET/);
+
+  const registry = await readFile(path.join(repo, '.axis', 'organizations.yml'), 'utf8');
+  assert.match(registry, /endpoint_env: ALIYUN_OSS_ENDPOINT/);
+  assert.match(registry, /access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET/);
 
   const gitignore = await readFile(path.join(repo, '.gitignore'), 'utf8');
   assert.match(gitignore, /^\.axis\/config\.local\.yml$/m);
@@ -248,6 +303,21 @@ await withTempDir(async (repo) => {
   ]);
   assert.doesNotMatch(stdout, /super-secret-value|secret-endpoint/);
   assert.doesNotMatch(stderr, /super-secret-value|secret-endpoint/);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(path.join(repo, '.axis'), { recursive: true });
+  await writeFile(path.join(repo, '.axis', 'config.yml'), 'contract_version: "0.1"\n', 'utf8');
+  for (const args of [
+    ['validate-config', '--repo', repo],
+    ['coding-capture', '--repo', repo],
+    ['test-report', '--repo', repo],
+    ['oss-publish', '--repo', repo, '--run-id', '20260710T010101Z-test-report-abcdef12'],
+  ]) {
+    const error = await run(args).catch((caught) => caught);
+    assert.equal(error.code, 1);
+    assert.match(error.stderr, /Axis v0\.1 is expired; migrate with project-init/);
+  }
 });
 
 await withTempDir(async (repo) => {
@@ -294,7 +364,7 @@ await withTempDir(async (repo) => {
   const result = JSON.parse(stdout);
   assert.equal(result.ok, true);
   assert.equal(result.asset_type, 'test_report');
-  assert.equal(result.package_dir, '.axis/outbox/v0.1/demo-project/20260703T121530Z-test-report-a1b2c3d4');
+  assert.equal(result.package_dir, '.axis/outbox/v0.2/org_axis_tools/demo-project/20260703T121530Z-test-report-a1b2c3d4');
   assert.deepEqual(result.files.sort(), ['experience.md', 'manifest.json', 'metadata.json', 'report.md']);
   assert.doesNotMatch(stdout, /super-secret-value/);
 
@@ -303,14 +373,14 @@ await withTempDir(async (repo) => {
 
   const manifest = await readJson(path.join(packageDir, 'manifest.json'));
   assert.equal(manifest.schema, 'axis.package.manifest');
-  assert.equal(manifest.schema_version, '0.1');
-  assert.equal(manifest.package_id, 'demo-project__20260703T121530Z-test-report-a1b2c3d4');
+  assert.equal(manifest.schema_version, '0.2');
+  assert.equal(manifest.package_id, 'org_axis_tools__demo-project__20260703T121530Z-test-report-a1b2c3d4');
   assert.equal(manifest.project.slug, 'demo-project');
   assert.equal(manifest.producer.skill, 'axis-test-report');
   assert.equal(manifest.release.channel, 'private_beta');
   assert.equal(manifest.release.gate, 'not_requested');
   assert.equal(manifest.publish.status, 'local_ready');
-  assert.equal(manifest.publish.base_uri, 'oss://axis-v01-beta-packages-example/axis/v0.1/private-beta/packages/demo-project/20260703T121530Z-test-report-a1b2c3d4/');
+  assert.equal(manifest.publish.base_uri, 'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/packages/demo-project/20260703T121530Z-test-report-a1b2c3d4/');
   assert.deepEqual(manifest.files.map((file) => file.path).sort(), ['experience.md', 'manifest.json', 'metadata.json', 'report.md']);
   for (const file of manifest.files) {
     assert.match(file.path, /^[^/]+$/);
@@ -320,10 +390,10 @@ await withTempDir(async (repo) => {
   const reportEntry = manifest.files.find((file) => file.path === 'report.md');
   assert.ok(reportEntry);
   assert.deepEqual(manifest.protocols, {
-    document_protocol: '0.1',
-    workflow_protocol: '0.1',
-    experience_protocol: '0.1',
-    agent_execution_protocol: '0.1',
+    document_protocol: '0.2',
+    workflow_protocol: '0.2',
+    experience_protocol: '0.2',
+    agent_execution_protocol: '0.2',
   });
   assert.deepEqual(manifest.document_refs, [
     {
@@ -366,7 +436,7 @@ await withTempDir(async (repo) => {
 
   const metadata = await readJson(path.join(packageDir, 'metadata.json'));
   assert.equal(metadata.schema, 'axis.package.metadata');
-  assert.equal(metadata.schema_version, '0.1');
+  assert.equal(metadata.schema_version, '0.2');
   assert.equal(metadata.artifact.type, 'test_report');
   assert.equal(metadata.artifact.status, 'passed');
   assert.equal(metadata.skill.name, 'axis-test-report');
@@ -462,13 +532,13 @@ await withTempDir(async (repo) => {
   assert.equal(result.run_id, runId);
   assert.deepEqual(result.release, { channel: 'private_beta', gate: 'not_requested' });
   assert.equal(result.publish.status, 'local_ready');
-  assert.equal(result.target_prefix, `oss://axis-v01-beta-packages-example/axis/v0.1/private-beta/packages/demo-project/${runId}/`);
+  assert.equal(result.target_prefix, `oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/packages/demo-project/${runId}/`);
   assert.deepEqual(result.files.map((file) => file.path).sort(), ['experience.md', 'manifest.json', 'metadata.json', 'report.md']);
   assert.equal(result.upload_order.at(-1).path, 'manifest.json');
   assert.doesNotMatch(stdout, /dry-run-secret-value|LTAI_TEST_ACCESS_KEY_ID|oss-example-endpoint/);
   assert.doesNotMatch(stderr, /dry-run-secret-value|LTAI_TEST_ACCESS_KEY_ID|oss-example-endpoint/);
 
-  const manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
+  const manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.2', 'org_axis_tools', 'demo-project', runId, 'manifest.json'));
   assert.equal(manifest.publish.status, 'local_ready');
 });
 
@@ -550,10 +620,11 @@ await withTempDir(async (repo) => {
   const mockDir = path.join(repo, 'mock-oss');
   const objectPrefix = path.join(
     mockDir,
-    'axis-v01-beta-packages-example',
+    'axis-v02-private-beta-example',
     'axis',
-    'v0.1',
-    'private-beta',
+    'v0.2',
+    'orgs',
+    'org_axis_tools',
     'packages',
     'demo-project',
     runId,
@@ -573,7 +644,7 @@ await withTempDir(async (repo) => {
 
   assert.equal(firstError.code, 1);
   assert.match(firstError.stderr, /remote object differs: .*report\.md/);
-  let manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
+  let manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.2', 'org_axis_tools', 'demo-project', runId, 'manifest.json'));
   assert.equal(manifest.publish.status, 'failed');
 
   await rm(path.join(objectPrefix, 'report.md'), { force: true });
@@ -591,7 +662,7 @@ await withTempDir(async (repo) => {
   assert.equal(existsSync(path.join(objectPrefix, 'manifest.json')), true);
   const remoteManifest = await readJson(path.join(objectPrefix, 'manifest.json'));
   assert.equal(remoteManifest.publish.status, 'published');
-  manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.1', 'demo-project', runId, 'manifest.json'));
+  manifest = await readJson(path.join(repo, '.axis', 'outbox', 'v0.2', 'org_axis_tools', 'demo-project', runId, 'manifest.json'));
   assert.equal(manifest.publish.status, 'published');
 });
 

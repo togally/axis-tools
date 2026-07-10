@@ -6,6 +6,7 @@ const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 
 const requiredFiles = [
   '.axis/config.yml',
+  '.axis/organizations.yml',
   'schemas/skill.meta.schema.json',
   'schemas/asset.meta.schema.json',
   'schemas/catalog.schema.json',
@@ -13,6 +14,11 @@ const requiredFiles = [
   'catalog/assets.public.yaml',
   'catalog/taxonomy.yaml',
   'docs/v0.2-project-knowledge-doc-protocol.md',
+  'docs/v0.2-contract.md',
+  'schemas/protocol-migration.schema.json',
+  'schemas/project-init-inspection.schema.json',
+  'schemas/project-init-answers.schema.json',
+  'protocols/migrations/0.1-to-0.2.yml',
   'templates/skill/SKILL.md',
   'templates/skill/skill.meta.yaml',
   'templates/doc-asset/asset.md',
@@ -81,20 +87,17 @@ assert.match(taxonomy, /public_safe/);
 
 const axisConfig = await readRequired('.axis/config.yml');
 for (const requiredText of [
-  'contract_version: "0.1"',
+  'contract_version: "0.2"',
+  'organization:',
+  'id: org_axis_tools',
+  'registry: .axis/organizations.yml',
   'slug: axis-tools',
   'display_name: axis-tools',
   'outbox_dir: .axis/outbox',
   'channel: private_beta',
   'gate: not_requested',
   'provider: aliyun-oss',
-  'bucket: axis-v01-beta-packages-example',
-  'prefix: axis/v0.1/private-beta/packages',
-  'endpoint_env: ALIYUN_OSS_ENDPOINT',
-  'region_env: ALIYUN_OSS_REGION',
-  'access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID',
-  'access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET',
-  'security_token_env: ALIYUN_OSS_SECURITY_TOKEN',
+  'profile: private_beta_main',
   'project_init: axis-project-init',
   'coding_capture: axis-coding-capture',
   'test_report: axis-test-report',
@@ -103,6 +106,20 @@ for (const requiredText of [
   assert.match(axisConfig, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 assert.doesNotMatch(axisConfig, /(?:access_key|secret|token|password)\s*:\s*[^_\s][^\n]+/i);
+
+const registry = await readRequired('.axis/organizations.yml');
+for (const requiredText of [
+  'schema: axis.organization_registry',
+  'schema_version: "0.2"',
+  'id: org_axis_tools',
+  'name: private_beta_main',
+  'bucket: axis-v02-private-beta-example',
+  'prefix: axis/v0.2',
+  'endpoint_env: ALIYUN_OSS_ENDPOINT',
+  'access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET',
+]) {
+  assert.match(registry, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
 
 const v02Protocol = await readRequired('docs/v0.2-project-knowledge-doc-protocol.md');
 for (const requiredText of [
@@ -129,6 +146,31 @@ for (const requiredText of [
 }
 assert.doesNotMatch(v02Protocol, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(v02Protocol, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|codeup)\b/i);
+
+const v02Contract = await readRequired('docs/v0.2-contract.md');
+for (const requiredText of [
+  'Axis v0.2 Contract',
+  'v0.1 is expired',
+  'project-init --inspect --json',
+  'answers-file',
+  'organization registry',
+  'environment variable names',
+  'adjacent',
+  '0.1-to-0.2',
+  'recovery',
+]) {
+  assert.match(v02Contract, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+
+for (const expiredDoc of ['docs/v0.1-contract.md', 'docs/v0.1-doc-as-code-protocols.md']) {
+  assert.match(await readRequired(expiredDoc), /expired/i, `${expiredDoc} should be marked expired`);
+}
+const deprecation = await readRequired('governance/DEPRECATION.md');
+assert.match(deprecation, /0\.1.*expired|expired.*0\.1/i);
+assert.match(deprecation, /immediate predecessor|adjacent.*mapping|mapping.*adjacent/i);
+const migration = await readRequired('protocols/migrations/0.1-to-0.2.yml');
+assert.match(migration, /from_version:\s*["']0\.1["']/);
+assert.match(migration, /to_version:\s*["']0\.2["']/);
 
 const publicSkeletonFiles = await Promise.all(
   (await Promise.all([

@@ -1,0 +1,8 @@
+schema: axis.protocol_migration
+schema_version: 1
+from_version: "0.0"
+to_version: "0.1"
+operations:
+  - op: copy
+    from: local.credential_blob
+    to: aliases.credential_blob

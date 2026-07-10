@@ -15,5 +15,6 @@ coverage/
 .codex/
 .codex-status/
 .gstack/
+.worktrees/
 .axis/config.local.yml
 .axis/outbox/
