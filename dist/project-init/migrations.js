@@ -99,21 +99,25 @@ async function loadMappings(mappingsDir) {
     return mappings;
 }
 function validateMappingSafety(mapping) {
-    const copiedSources = new Set();
+    const droppedSources = new Set();
+    for (const operation of mapping.operations) {
+        if (operation.op === 'drop') {
+            assertSafePath(operation.from);
+            droppedSources.add(operation.from);
+        }
+    }
     for (const operation of mapping.operations) {
         if (operation.op === 'copy') {
             assertSafePath(operation.from);
             assertSafePath(operation.to);
-            copiedSources.add(operation.from);
+            if (droppedSources.has(operation.from) && isUnsafeLocalSource(operation.from)) {
+                throw new Error(`unsafe copied source is later dropped: ${operation.from}`);
+            }
             continue;
         }
         if (operation.op === 'set' || operation.op === 'prompt') {
             assertSafePath(operation.to);
             continue;
-        }
-        assertSafePath(operation.from);
-        if (copiedSources.has(operation.from) && isUnsafeLocalSource(operation.from)) {
-            throw new Error(`unsafe copied source is later dropped: ${operation.from}`);
         }
     }
 }

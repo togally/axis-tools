@@ -207,6 +207,43 @@ await withTempDir(async (mappingsDir) => {
   assert.doesNotMatch(errorMessage, new RegExp(copiedSecret));
 });
 
+await withTempDir(async (mappingsDir) => {
+  const copiedSecret = 'dropped-then-copied-secret';
+  await writeMapping(mappingsDir, 'unsafe-reverse-copy.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: drop',
+    '    from: local.credential_blob',
+    '    reason: Credential-like values must not cross protocol boundaries.',
+    '  - op: copy',
+    '    from: local.credential_blob',
+    '    to: retained.note',
+    '',
+  ].join('\n'));
+
+  let errorMessage = '';
+  let result;
+  await assert.rejects(
+    async () => {
+      result = await migrateDraft({
+        sourceVersion: '0.0',
+        latestVersion: '0.1',
+        draft: { local: { credential_blob: copiedSecret } },
+        mappingsDir,
+      });
+    },
+    (error) => {
+      errorMessage = String(error);
+      return /copied source is later dropped/i.test(errorMessage);
+    },
+  );
+  assert.equal(result, undefined);
+  assert.doesNotMatch(errorMessage, new RegExp(copiedSecret));
+});
+
 for (const segment of ['__proto__', 'constructor', 'prototype']) {
   for (const field of ['from', 'to']) {
     await withTempDir(async (mappingsDir) => {
