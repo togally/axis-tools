@@ -9,6 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { inspectProjectInit } from './project-init/index.js';
 
 type InstallAgentChoice = 'codex' | 'claude-code' | 'all';
 type InstallStatus = 'copied' | 'identical' | 'would_copy' | 'would_replace' | 'blocked';
@@ -355,7 +356,9 @@ function printUsage(): void {
 Commands:
   install [--agent <codex|claude-code|cc|all>] [--dry-run] [--force] [--backup-dir <path>] [--rollback <backup-dir-or-manifest>]
   inventory [--agent <codex|claude-code|cc|all>]
-  project-init --repo <path> --project-slug <slug> --display-name <name> [--force]
+  project-init --repo <path> --inspect --json [--registry-path <relative-path>] [--organization-id <id>] [--oss-profile <name>]
+  project-init --repo <path> --answers-file <path> --apply
+  project-init --repo <path> --recover
   validate-config --repo <path>
   coding-capture --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
   test-report --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
@@ -845,25 +848,37 @@ async function ensureGitignore(repo: string): Promise<void> {
 
 async function projectInitCommand(): Promise<void> {
   const repo = repoArg();
-  const slug = requireArg('--project-slug');
-  const displayName = requireArg('--display-name');
-  assertSlug(slug);
-  const configPath = path.join(repo, '.axis', 'config.yml');
-  await mkdir(path.dirname(configPath), { recursive: true });
-  if (existsSync(configPath) && !hasFlag('--force')) {
-    throw new Error('.axis/config.yml already exists. Re-run with --force to overwrite it.');
+  const inspect = hasFlag('--inspect');
+  const apply = hasFlag('--apply');
+  const recover = hasFlag('--recover');
+  const hasSelector = Boolean(getArg('--registry-path') || getArg('--organization-id') || getArg('--oss-profile'));
+  const hasAnswersFile = Boolean(getArg('--answers-file'));
+
+  if (inspect && apply) throw new Error('--inspect and --apply cannot combine');
+  if (recover && (hasAnswersFile || inspect || apply)) throw new Error('--recover cannot combine with other project-init modes');
+  if (hasSelector && !inspect) throw new Error('project-init selectors are only valid with --inspect');
+  if (apply && !hasAnswersFile) throw new Error('--answers-file is required with --apply');
+  if (hasFlag('--json') && !inspect) throw new Error('--json is only valid with --inspect');
+
+  if (inspect) {
+    if (!hasFlag('--json')) throw new Error('--json is required with --inspect');
+    const result = await inspectProjectInit({
+      repo,
+      registryPath: getArg('--registry-path'),
+      organizationId: getArg('--organization-id'),
+      ossProfile: getArg('--oss-profile'),
+    });
+    console.log(JSON.stringify(result, null, 2));
+    return;
   }
-  await writeFile(configPath, defaultConfigYaml(slug, displayName), 'utf8');
-  await ensureGitignore(repo);
-  console.log(JSON.stringify({
-    ok: true,
-    config_path: '.axis/config.yml',
-    ignored_paths: ignoredLocalPaths,
-    release: {
-      channel: 'private_beta',
-      gate: 'not_requested',
-    },
-  }, null, 2));
+
+  if (recover) throw new Error('--recover is not available until project-init apply support is enabled');
+  if (apply) throw new Error('--apply is not available until project-init answers support is enabled');
+  if (getArg('--project-slug') || getArg('--display-name') || hasFlag('--force')) {
+    throw new Error('Axis v0.1 project-init is expired; use project-init --inspect --json and the v0.2 answers-file flow');
+  }
+  throw new Error('project-init requires --inspect --json for v0.2 configuration');
+
 }
 
 async function validateConfigCommand(): Promise<void> {
