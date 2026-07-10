@@ -1,4 +1,7 @@
-contract_version: "0.1"
+contract_version: "0.2"
+organization:
+  id: org_axis_tools
+  registry: .axis/organizations.yml
 project:
   slug: axis-tools
   display_name: axis-tools
@@ -9,13 +12,7 @@ release:
   gate: not_requested
 oss:
   provider: aliyun-oss
-  bucket: axis-v01-beta-packages-example
-  prefix: axis/v0.1/private-beta/packages
-  endpoint_env: ALIYUN_OSS_ENDPOINT
-  region_env: ALIYUN_OSS_REGION
-  access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID
-  access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET
-  security_token_env: ALIYUN_OSS_SECURITY_TOKEN
+  profile: private_beta_main
 skills:
   project_init: axis-project-init
   coding_capture: axis-coding-capture

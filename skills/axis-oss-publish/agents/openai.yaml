@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-oss-publish"
-  short_description: "Publish v0.1 outbox packages / 发布 v0.1 outbox 包"
-  default_prompt: "Use $axis-oss-publish to validate and publish an Axis v0.1 local outbox package to Aliyun OSS."
+  short_description: "Publish v0.2 outbox packages / 发布 v0.2 outbox 包"
+  default_prompt: "Use $axis-oss-publish to validate and publish an Axis v0.2 local outbox package to the configured Aliyun OSS profile."
 
 policy:
   allow_implicit_invocation: true

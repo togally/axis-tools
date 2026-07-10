@@ -282,6 +282,14 @@ function renderMainConfig(
     const value = values.get(fieldKey);
     if (value !== null && value !== undefined) setIfDifferent(document, pathSegments, value);
   }
+  for (const [key, skill] of [
+    ['project_init', 'axis-project-init'],
+    ['coding_capture', 'axis-coding-capture'],
+    ['test_report', 'axis-test-report'],
+    ['oss_publish', 'axis-oss-publish'],
+  ]) {
+    setIfDifferent(document, ['skills', key], skill);
+  }
   setIfDifferent(document, ['oss', 'provider'], values.get('oss_profile.provider'));
   setIfDifferent(document, ['oss', 'profile'], profileName);
   for (const key of legacyOssFields) deleteIfPresent(document, ['oss', key]);

@@ -1,4 +1,4 @@
-import { Ajv } from 'ajv';
+import Ajv2020Module from 'ajv/dist/2020.js';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> => (
   typeof value === 'object' && value !== null && !Array.isArray(value)
 );
 const unsafePathSegments = new Set(['__proto__', 'constructor', 'prototype']);
+type AjvConstructor = new (options: { allErrors: boolean; strict: boolean }) => {
+  compile: (schema: object) => (input: unknown) => boolean;
+};
+const Ajv2020 = Ajv2020Module as unknown as AjvConstructor;
 
 function assertSafePath(dottedPath: string): void {
   if (dottedPath.split('.').some((segment) => unsafePathSegments.has(segment))) {
@@ -106,7 +110,7 @@ function detectCycle(mappings: ProtocolMigration[]): void {
 
 async function loadMappings(mappingsDir: string): Promise<ProtocolMigration[]> {
   const schema = JSON.parse(await readFile(schemaPath, 'utf8')) as object;
-  const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);
+  const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
   const filenames = (await readdir(mappingsDir))
     .filter((filename) => filename.endsWith('.yml') || filename.endsWith('.yaml'))
     .sort();

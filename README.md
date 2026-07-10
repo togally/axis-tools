@@ -33,9 +33,10 @@ bundles locally and keep public-safe execution records consistent.
 
 ```text
 axis-tools/
-├── .axis/config.yml        # Axis v0.1 public-safe repo config for local outbox validation
+├── .axis/config.yml        # Axis v0.2 public-safe repo config for local outbox validation
+├── .axis/organizations.yml # Organization registry and OSS profile names
 ├── catalog/                 # 公共安全 catalog 示例和索引
-├── docs/                    # Axis v0.1 合同、doc-as-code 协议和 v0.2 项目知识协议
+├── docs/                    # Axis v0.2 contract, project knowledge, and expired v0.1 references
 ├── governance/              # 贡献、安全、评审和废弃规则
 ├── schemas/                 # skill、asset、catalog、taxonomy JSON Schema
 ├── scripts/                 # 安装、刷新、创建、沉淀 helper scripts
@@ -71,7 +72,7 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 缺陷与架构 | `axis-arch-optimize` | 局部方法修复需要上升为共享架构能力、中间件、适配器或横切模块。 |
 | 研发实现 | `axis-test-driven-development` | 实现功能、修复缺陷、重构或行为变更前，先明确测试和验收口径。 |
 | 测试验证 | `axis-testing` | 测试真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作。 |
-| 测试验证 | `axis-test-report` | 将 build、lint、test、benchmark 或压测验证结果采集为 Axis v0.1 测试报告包。 |
+| 测试验证 | `axis-test-report` | 将 build、lint、test、benchmark 或压测验证结果采集为 Axis v0.2 测试报告包。 |
 | 文档设计 | `axis-development-doc` | 生成概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。 |
 | 文档设计 | `axis-tech-design-doc` | 撰写、优化或定稿技术设计文档和方案设计。 |
 | 文档设计 | `axis-db-design-doc` | 生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。 |
@@ -79,9 +80,9 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 项目知识 | `axis-business-domain-doc` | 根据 `business_inventory` 中的一个业务项生成业务域业务文档和技术文档。 |
 | 项目知识 | `axis-doc-drift-capture` | 任务或 PR 完成后记录 task_execution_record、version_iteration_record 和文档漂移影响范围。 |
 | 评审 | `axis-review-summary` | 在深入评审 PR、变更集或文档集前，生成待审文件摘要和风险定位。 |
-| 项目初始化 | `axis-project-init` | 初始化 Axis v0.1 项目的 `.axis/config.yml`、outbox 忽略规则和 private-beta 发布元数据。 |
+| 项目初始化 | `axis-project-init` | 对话式检查、迁移并确认 Axis v0.2 项目的组织、OSS profile 和 outbox 配置。 |
 | 留档与发布 | `axis-coding-capture` | 将编码、重构、缺陷修复或架构工作采集为执行报告和经验卡片。 |
-| 留档与发布 | `axis-oss-publish` | 校验、脱敏、dry-run 或上传 Axis v0.1 outbox 包到受控阿里云 OSS 前缀。 |
+| 留档与发布 | `axis-oss-publish` | 校验、脱敏、dry-run 或上传 Axis v0.2 outbox 包到配置的阿里云 OSS profile。 |
 | Skill 生命周期 | `axis-create-skill` | 扫描对话中的可复用技能机会，并判断是否适合创建公开安全的 Axis/Codex skill。 |
 | Skill 生命周期 | `axis-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
 | 代码平台 | `axis-yunxiao-codeup` | 通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。 |
@@ -169,49 +170,20 @@ node scripts/axis-update-skills.mjs --repo ~/axis-tools --agent codex --no-pull 
 
 ### 配置 Axis 项目
 
-普通 skill 安装后无需全局配置。涉及 Axis v0.1 outbox、测试报告、执行报告或 OSS 发布时，需要在目标项目中初始化 Axis 配置。
+普通 skill 安装后无需全局配置。涉及 Axis v0.2 outbox、测试报告、执行报告或 OSS 发布时，需要在目标项目中完成对话式配置。
 
-创建项目配置：
+配置项目时，Skill 会先索要目标仓库路径，再逐字段展示检查结果。存量值由用户确认沿用或切换；旧协议字段先按相邻版本映射给出，再由用户确认。
 
 ```bash
-axis project-init --repo /path/to/project --project-slug demo-project --display-name "Demo Project"
+axis project-init --repo /path/to/project --inspect --json
+axis project-init --repo /path/to/project --answers-file /tmp/project-init-answers.json --apply
 ```
 
-该命令会创建：
+缺失的环境变量只展示变量名和 shell 设置命令，不索要密钥值。用户在自己的 shell 中设置后，Skill 会重新检查并等待确认。apply 会创建或更新：
 
 ```text
 .axis/config.yml
 .gitignore
-```
-
-`.axis/config.yml` 只保存公开安全配置，例如项目 slug、显示名、outbox 路径、release channel、OSS bucket/prefix 和凭据环境变量名。凭据值不允许写入文件。
-
-示例：
-
-```yaml
-contract_version: "0.1"
-project:
-  slug: demo-project
-  display_name: Demo Project
-package:
-  outbox_dir: .axis/outbox
-release:
-  channel: private_beta
-  gate: not_requested
-oss:
-  provider: aliyun-oss
-  bucket: axis-v01-beta-packages-example
-  prefix: axis/v0.1/private-beta/packages
-  endpoint_env: ALIYUN_OSS_ENDPOINT
-  region_env: ALIYUN_OSS_REGION
-  access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID
-  access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET
-  security_token_env: ALIYUN_OSS_SECURITY_TOKEN
-skills:
-  project_init: axis-project-init
-  coding_capture: axis-coding-capture
-  test_report: axis-test-report
-  oss_publish: axis-oss-publish
 ```
 
 v0.2 项目使用 organization registry 解析 OSS profile。项目配置只声明 `organization.id`、`project.slug` 和 `oss.profile`；`metadata.json` / `manifest.json` 中的 organization、project、OSS、repo/run 字段由工具生成快照，不需要也不允许人工二次配置。
@@ -397,9 +369,10 @@ Use this repository when:
 
 ```text
 axis-tools/
-├── .axis/config.yml        # Axis v0.1 public-safe repo config for local outbox validation
+├── .axis/config.yml        # Axis v0.2 public-safe repo config for local outbox validation
+├── .axis/organizations.yml # Organization registry and OSS profile names
 ├── catalog/                 # Public-safe catalog examples and indexes
-├── docs/                    # Axis v0.1 contract, doc-as-code protocols, and v0.2 project knowledge protocol
+├── docs/                    # Axis v0.2 contract, project knowledge, and expired v0.1 references
 ├── governance/              # Contribution, security, review, and deprecation rules
 ├── schemas/                 # JSON Schema for skills, assets, catalogs, and taxonomy
 ├── scripts/                 # Install, refresh, create, and deposit helper scripts
@@ -435,7 +408,7 @@ See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-aud
 | Bugfix and architecture | `axis-arch-optimize` | Promote local method fixes into shared architecture capabilities, middleware, adapters, or cross-cutting modules. |
 | Implementation | `axis-test-driven-development` | Define tests and acceptance criteria before implementing features, bugfixes, refactors, or behavior changes. |
 | Testing and verification | `axis-testing` | Test backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. |
-| Testing and verification | `axis-test-report` | Capture build, lint, test, benchmark, or pressure-test evidence as an Axis v0.1 test report package. |
+| Testing and verification | `axis-test-report` | Capture build, lint, test, benchmark, or pressure-test evidence as an Axis v0.2 test report package. |
 | Documentation and design | `axis-development-doc` | Generate overview design, detailed design, database design, API docs, test plans, deployment docs, or Word documents. |
 | Documentation and design | `axis-tech-design-doc` | Write, refine, or finalize technical design and solution design documents. |
 | Documentation and design | `axis-db-design-doc` | Generate database design documents, data dictionaries, schema design, ER docs, or Word DBDD files. |
@@ -443,9 +416,9 @@ See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-aud
 | Project knowledge | `axis-business-domain-doc` | Generate domain business and technical documents for one business item from `business_inventory`. |
 | Project knowledge | `axis-doc-drift-capture` | Record task execution, version iteration impact, and affected documents after a task or PR completes. |
 | Review | `axis-review-summary` | Summarize review scope and risk before a deep PR, change-set, or document-set review. |
-| Project setup | `axis-project-init` | Initialize Axis v0.1 `.axis/config.yml`, outbox ignore rules, and private-beta release metadata. |
+| Project setup | `axis-project-init` | Conversationally inspect, migrate, and confirm Axis v0.2 organization, OSS profile, and outbox configuration. |
 | Deposition and release | `axis-coding-capture` | Capture coding, refactor, bugfix, or architecture work as execution reports and experience cards. |
-| Deposition and release | `axis-oss-publish` | Validate, redact, dry-run, or upload Axis v0.1 outbox packages to a controlled Alibaba Cloud OSS prefix. |
+| Deposition and release | `axis-oss-publish` | Validate, redact, dry-run, or upload Axis v0.2 outbox packages to a configured Alibaba Cloud OSS profile. |
 | Skill lifecycle | `axis-create-skill` | Scan conversations for reusable skill opportunities and decide whether to create a public-safe Axis/Codex skill. |
 | Skill lifecycle | `axis-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
 | Code platform | `axis-yunxiao-codeup` | Query Codeup repositories, create merge requests, or support Git review through Yunxiao Codeup OpenAPI. |
@@ -533,49 +506,20 @@ Add `--no-validate` when installation is enough.
 
 ### Configure an Axis Project
 
-Most skills do not need global configuration after installation. Axis v0.1 outbox, test-report, execution-report, and OSS publishing workflows need an Axis config in the target project.
+Most skills do not need global configuration after installation. Axis v0.2 outbox, test-report, execution-report, and OSS publishing workflows need conversational project configuration.
 
-Create project config:
+The Skill asks for the target repository path, shows stored or mapped fields one by one, confirms selector changes, recommends environment variable names, and checks presence without collecting secret values.
 
 ```bash
-axis project-init --repo /path/to/project --project-slug demo-project --display-name "Demo Project"
+axis project-init --repo /path/to/project --inspect --json
+axis project-init --repo /path/to/project --answers-file /tmp/project-init-answers.json --apply
 ```
 
-The command creates:
+The apply flow creates or updates:
 
 ```text
 .axis/config.yml
 .gitignore
-```
-
-`.axis/config.yml` stores public-safe configuration only, such as project slug, display name, outbox path, release channel, OSS bucket/prefix, and credential environment-variable names. Credential values must not be written to files.
-
-Example:
-
-```yaml
-contract_version: "0.1"
-project:
-  slug: demo-project
-  display_name: Demo Project
-package:
-  outbox_dir: .axis/outbox
-release:
-  channel: private_beta
-  gate: not_requested
-oss:
-  provider: aliyun-oss
-  bucket: axis-v01-beta-packages-example
-  prefix: axis/v0.1/private-beta/packages
-  endpoint_env: ALIYUN_OSS_ENDPOINT
-  region_env: ALIYUN_OSS_REGION
-  access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID
-  access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET
-  security_token_env: ALIYUN_OSS_SECURITY_TOKEN
-skills:
-  project_init: axis-project-init
-  coding_capture: axis-coding-capture
-  test_report: axis-test-report
-  oss_publish: axis-oss-publish
 ```
 
 Axis v0.2 projects resolve OSS profiles through an organization registry. Project config only declares `organization.id`, `project.slug`, and `oss.profile`; organization, project, OSS, and repo/run fields in `metadata.json` and `manifest.json` are generated snapshots, not manually duplicated configuration.

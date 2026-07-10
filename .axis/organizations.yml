@@ -1,0 +1,20 @@
+schema: axis.organization_registry
+schema_version: "0.2"
+organizations:
+  - id: org_axis_tools
+    slug: axis-tools
+    display_name: Axis Tools
+    status: active
+    oss_profiles:
+      - name: private_beta_main
+        provider: aliyun-oss
+        bucket: axis-v02-private-beta-example
+        prefix: axis/v0.2
+        endpoint_env: ALIYUN_OSS_ENDPOINT
+        region_env: ALIYUN_OSS_REGION
+        access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID
+        access_key_secret_env: ALIYUN_OSS_ACCESS_KEY_SECRET
+        security_token_env: ALIYUN_OSS_SECURITY_TOKEN
+    projects:
+      - slug: axis-tools
+        display_name: Axis Tools

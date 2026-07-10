@@ -69,6 +69,14 @@ function normalizeIdentifier(value) {
         .replace(/[^a-z0-9]+/g, '_')
         .replace(/^_+|_+$/g, '') || 'project';
 }
+function normalizeProjectSlug(value) {
+    return value
+        .normalize('NFKD')
+        .replace(/[^\x00-\x7F]/g, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'demo-project';
+}
 function displayNameFromSlug(slug) {
     return slug
         .replace(/[-_]+/g, ' ')
@@ -429,7 +437,7 @@ export async function inspectProjectInit(options) {
     }
     const organizations = registryOrganizations(targetRegistry.value);
     const usedOrganizationIds = new Set(organizations.map((organization) => String(organization.id)));
-    const fallbackProjectSlug = normalizeIdentifier(path.basename(repo).replace(/-[a-z0-9]{6}$/i, ''));
+    const fallbackProjectSlug = normalizeProjectSlug(path.basename(repo).replace(/-[a-z0-9]{6}$/i, ''));
     const projectSlug = typeof getPath(migrated, 'project.slug').value === 'string'
         ? String(getPath(migrated, 'project.slug').value)
         : fallbackProjectSlug;
@@ -450,6 +458,10 @@ export async function inspectProjectInit(options) {
     const resolvedOrganizationId = organizationId ?? (candidates.length === 1 ? String(candidates[0].organization.id) : recommendedOrganizationId);
     const organization = selectedOrganization(targetRegistry.value, resolvedOrganizationId);
     const profile = selectedProfile(organization, profileName);
+    if (!organization)
+        applyRecommendation(recommendations, 'organization.id', resolvedOrganizationId);
+    if (!profile && profileName)
+        applyRecommendation(recommendations, 'oss_profile.name', profileName);
     applyRecommendation(recommendations, 'project.slug', projectSlug);
     applyRecommendation(recommendations, 'project.display_name', projectDisplayName);
     applyRecommendation(recommendations, 'package.outbox_dir', defaultOutboxDir);

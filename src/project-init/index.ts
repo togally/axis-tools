@@ -18,3 +18,5 @@ export type {
   ProjectSourceFiles,
   RenderedProjectFiles,
 } from './types.js';
+export { applyTransaction, journalRelativePath, recoverTransaction } from './transaction.js';
+export type { ApplyTransactionOptions, TransactionFile, TransactionHooks } from './transaction.js';

@@ -2,6 +2,10 @@
 
 Deprecation keeps public assets discoverable without letting stale guidance look current.
 
+Axis v0.1 is expired for normal CLI operations. It may be parsed only as migration input; users must inspect, confirm the mapped v0.2 fields, satisfy the environment-name gate, and apply the transaction before capture or publish.
+
+Every new protocol version must include an adjacent mapping from its immediate predecessor. Cross-version migration chains are executed one adjacent mapping at a time until the latest version is reached.
+
 ## Status Values
 
 - `draft`: Not ready for broad reuse.

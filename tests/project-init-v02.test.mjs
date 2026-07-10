@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { access, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -24,6 +24,7 @@ const schemaPath = path.resolve('schemas/project-init-inspection.schema.json');
 const answersSchemaPath = path.resolve('schemas/project-init-answers.schema.json');
 const { inspectProjectInit } = await import('../dist/project-init/inspection.js');
 const { renderProjectFiles, validateAnswers } = await import('../dist/project-init/render.js');
+const { applyProjectInit, recoverProjectInit } = await import('../dist/project-init/index.js');
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), 'axis-project-init-v02-'));
@@ -118,6 +119,44 @@ function sourceFiles({ mainConfig = null, localConfig = null, targetRegistry = n
     target_registry: targetRegistry,
     gitignore,
   };
+}
+
+async function writeAnswers(repo, answers) {
+  const answersPath = path.join(repo, 'project-init-answers.json');
+  await writeFile(answersPath, `${JSON.stringify(answers, null, 2)}\n`, 'utf8');
+  return answersPath;
+}
+
+function completeEnvironment() {
+  return {
+    [defaultEnv.endpoint_env]: 'https://oss.example.invalid',
+    [defaultEnv.region_env]: 'region-value',
+    [defaultEnv.access_key_id_env]: 'access-key-id-value',
+    [defaultEnv.access_key_secret_env]: 'access-key-secret-value',
+  };
+}
+
+function journalEntry({ role, filePath, oldText, newText, backupPath }) {
+  return {
+    role,
+    path: filePath,
+    original: oldText === null
+      ? { state: 'absent', sha256: null, backup: null }
+      : { state: 'present', sha256: sha256(oldText), backup: backupPath },
+    next: newText === null
+      ? { state: 'absent', sha256: null }
+      : { state: 'present', sha256: sha256(newText) },
+  };
+}
+
+async function writeRecoveryJournal(repo, state, entries, transactionId = 'test-recovery') {
+  await writeRepoFile(repo, journalPath, `${JSON.stringify({
+    schema: 'axis.project_init_journal',
+    schema_version: 1,
+    transaction_id: transactionId,
+    state,
+    files: entries,
+  }, null, 2)}\n`);
 }
 
 {
@@ -572,6 +611,21 @@ function sourceFiles({ mainConfig = null, localConfig = null, targetRegistry = n
     assert.equal(registry.schema_version, '0.2');
     assert.equal(registry.organizations.length, 1);
     assert.equal(rendered.local_config !== null, true);
+  });
+}
+
+{
+  await withTempDir(async (repo) => {
+    const environment = completeEnvironment();
+    const inspection = await inspectProjectInit({ repo, environment });
+    const answersPath = await writeAnswers(repo, answersFor(inspection));
+    const { stdout } = await run(['project-init', '--repo', repo, '--answers-file', answersPath, '--apply'], { env: environment });
+    const result = JSON.parse(stdout);
+    assert.equal(result.ok, true);
+    assert.equal(result.contract_version, '0.2');
+    assert.equal((await readFile(path.join(repo, '.axis', 'config.yml'), 'utf8')).includes('contract_version: "0.2"'), true);
+    assert.equal((await readFile(path.join(repo, '.axis', 'organizations.yml'), 'utf8')).includes('schema_version: "0.2"'), true);
+    await assert.rejects(() => readFile(path.join(repo, journalPath), 'utf8'), { code: 'ENOENT' });
   });
 }
 

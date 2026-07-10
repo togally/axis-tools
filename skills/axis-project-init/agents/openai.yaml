@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-project-init"
-  short_description: "Initialize v0.1 package config / 初始化 v0.1 包配置"
-  default_prompt: "Use $axis-project-init to initialize Axis v0.1 project config and capture the local outbox handoff."
+  short_description: "Configure v0.2 projects conversationally / 对话式配置 v0.2 项目"
+  default_prompt: "Use $axis-project-init to inspect, confirm, migrate, and apply Axis v0.2 project configuration for a target repository."
 
 policy:
   allow_implicit_invocation: true

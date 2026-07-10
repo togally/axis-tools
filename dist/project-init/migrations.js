@@ -1,4 +1,4 @@
-import { Ajv } from 'ajv';
+import Ajv2020Module from 'ajv/dist/2020.js';
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,6 +6,7 @@ import { parse } from 'yaml';
 const schemaPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../schemas/protocol-migration.schema.json');
 const isRecord = (value) => (typeof value === 'object' && value !== null && !Array.isArray(value));
 const unsafePathSegments = new Set(['__proto__', 'constructor', 'prototype']);
+const Ajv2020 = Ajv2020Module;
 function assertSafePath(dottedPath) {
     if (dottedPath.split('.').some((segment) => unsafePathSegments.has(segment))) {
         throw new Error('unsafe protocol path');
@@ -84,7 +85,7 @@ function detectCycle(mappings) {
 }
 async function loadMappings(mappingsDir) {
     const schema = JSON.parse(await readFile(schemaPath, 'utf8'));
-    const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);
+    const validate = new Ajv2020({ allErrors: true, strict: true }).compile(schema);
     const filenames = (await readdir(mappingsDir))
         .filter((filename) => filename.endsWith('.yml') || filename.endsWith('.yaml'))
         .sort();
