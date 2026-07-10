@@ -106,20 +106,45 @@ function legacyDraft() {
   ]);
 }
 
-for (const { sourceVersion, latestVersion, invalidVersion } of [
-  { sourceVersion: 'invalid', latestVersion: '0.2', invalidVersion: 'invalid' },
-  { sourceVersion: '0.1', latestVersion: 'invalid', invalidVersion: 'invalid' },
-  { sourceVersion: 'invalid', latestVersion: 'invalid', invalidVersion: 'invalid' },
-]) {
-  await assert.rejects(
-    () => migrateDraft({
-      sourceVersion,
-      latestVersion,
-      draft: {},
-      mappingsDir: protocolMappingsDir,
-    }),
-    new RegExp(`invalid protocol version: ${invalidVersion}`),
-  );
+for (const invalidVersion of ['invalid', '0..1', '0.1.']) {
+  for (const { sourceVersion, latestVersion } of [
+    { sourceVersion: invalidVersion, latestVersion: '0.2' },
+    { sourceVersion: '0.1', latestVersion: invalidVersion },
+    { sourceVersion: invalidVersion, latestVersion: invalidVersion },
+  ]) {
+    await assert.rejects(
+      () => migrateDraft({
+        sourceVersion,
+        latestVersion,
+        draft: {},
+        mappingsDir: protocolMappingsDir,
+      }),
+      new RegExp(`invalid protocol version: ${invalidVersion}`),
+    );
+  }
+}
+
+for (const malformedVersion of ['0..1', '0.1.']) {
+  for (const field of ['from_version', 'to_version']) {
+    await withTempDir(async (mappingsDir) => {
+      await writeMapping(mappingsDir, 'malformed-version.yml', [
+        'schema: axis.protocol_migration',
+        'schema_version: 1',
+        `from_version: "${field === 'from_version' ? malformedVersion : '0.0'}"`,
+        `to_version: "${field === 'to_version' ? malformedVersion : '0.1'}"`,
+        'operations:',
+        '  - op: set',
+        '    to: contract_version',
+        '    value: "0.1"',
+        '',
+      ].join('\n'));
+
+      await assert.rejects(
+        () => migrateDraft({ sourceVersion: '0.0', latestVersion: '0.1', draft: {}, mappingsDir }),
+        /schema validation failed/i,
+      );
+    });
+  }
 }
 
 await withTempDir(async (mappingsDir) => {

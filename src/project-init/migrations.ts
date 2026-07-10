@@ -43,6 +43,9 @@ function isCredentialLikePath(dottedPath: string): boolean {
 }
 
 function parseVersion(version: string): number[] {
+  if (!/^[0-9]+(?:\.[0-9]+)+$/.test(version)) {
+    throw new Error(`invalid protocol version: ${version}`);
+  }
   const parts = version.split('.').map(Number);
   if (parts.length < 2 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
     throw new Error(`invalid protocol version: ${version}`);

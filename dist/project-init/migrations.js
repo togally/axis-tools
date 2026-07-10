@@ -20,6 +20,9 @@ function isCredentialLikePath(dottedPath) {
     return /credential|secret|token|password|access_?key/i.test(dottedPath);
 }
 function parseVersion(version) {
+    if (!/^[0-9]+(?:\.[0-9]+)+$/.test(version)) {
+        throw new Error(`invalid protocol version: ${version}`);
+    }
     const parts = version.split('.').map(Number);
     if (parts.length < 2 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
         throw new Error(`invalid protocol version: ${version}`);
