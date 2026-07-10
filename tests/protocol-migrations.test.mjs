@@ -51,6 +51,13 @@ function legacyDraft() {
       outbox_dir: '.axis/local-outbox',
       dry_run: true,
       environment_name: 'staging',
+      oss: {
+        endpoint_env: 'LOCAL_OSS_ENDPOINT',
+        region_env: 'LOCAL_OSS_REGION',
+        access_key_id_env: 'LOCAL_OSS_ACCESS_KEY_ID',
+        access_key_secret_env: 'LOCAL_OSS_ACCESS_KEY_SECRET',
+        security_token_env: 'LOCAL_OSS_SECURITY_TOKEN',
+      },
       inline_target: 'https://legacy-inline-target.invalid',
       credential_blob: 'legacy-secret-value',
     },
@@ -84,19 +91,33 @@ await withTempDir(async (mappingsDir) => {
       channel: 'private_beta',
       gate: 'not_requested',
     },
-    oss: {
+    oss_profile: {
       provider: 'aliyun-oss',
+      bucket: 'legacy-public-safe-bucket',
+      prefix: 'axis/v0.1',
+      endpoint_env: 'LEGACY_OSS_ENDPOINT',
+      region_env: 'LEGACY_OSS_REGION',
+      access_key_id_env: 'LEGACY_OSS_ACCESS_KEY_ID',
+      access_key_secret_env: 'LEGACY_OSS_ACCESS_KEY_SECRET',
+      security_token_env: 'LEGACY_OSS_SECURITY_TOKEN',
     },
     local: {
       outbox_dir: '.axis/local-outbox',
       dry_run: true,
       environment_name: 'staging',
+      oss: {
+        endpoint_env: 'LOCAL_OSS_ENDPOINT',
+        region_env: 'LOCAL_OSS_REGION',
+        access_key_id_env: 'LOCAL_OSS_ACCESS_KEY_ID',
+        access_key_secret_env: 'LOCAL_OSS_ACCESS_KEY_SECRET',
+        security_token_env: 'LOCAL_OSS_SECURITY_TOKEN',
+      },
     },
   });
   assert.deepEqual(result.unresolved.map((prompt) => prompt.target), [
     'organization.id',
     'organization.registry',
-    'oss.profile',
+    'oss_profile.name',
   ]);
   assert.equal(result.unresolved.every((prompt) => prompt.sourceVersion === '0.1'), true);
   assert.deepEqual(
@@ -104,13 +125,6 @@ await withTempDir(async (mappingsDir) => {
     [
       'local.credential_blob',
       'local.inline_target',
-      'oss.access_key_id_env',
-      'oss.access_key_secret_env',
-      'oss.bucket',
-      'oss.endpoint_env',
-      'oss.prefix',
-      'oss.region_env',
-      'oss.security_token_env',
       'project.name',
     ],
   );
@@ -119,13 +133,13 @@ await withTempDir(async (mappingsDir) => {
     sourceVersion: '0.0',
     sourcePath: 'project.name',
   });
-  assert.deepEqual(result.provenance['local.environment_name'], {
+  assert.deepEqual(result.provenance['oss_profile.bucket'], {
     sourceVersion: '0.0',
-    sourcePath: 'local.environment_name',
+    sourcePath: 'oss.bucket',
   });
   assert.deepEqual(result.provenance.contract_version, {
     sourceVersion: '0.1',
-    sourcePath: '$mapping.operations[8].value',
+    sourcePath: '$mapping.operations[21].value',
   });
   assert.doesNotMatch(JSON.stringify(result), /legacy-inline-target|legacy-secret-value/);
 });
@@ -133,7 +147,7 @@ await withTempDir(async (mappingsDir) => {
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, 'invalid.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.1"',
     'operations:',
@@ -153,7 +167,7 @@ await withTempDir(async (mappingsDir) => {
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, '0.0-to-0.1.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.1"',
     'operations:',
@@ -172,7 +186,7 @@ await withTempDir(async (mappingsDir) => {
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, 'skip.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.2"',
     'operations:',
@@ -191,7 +205,7 @@ await withTempDir(async (mappingsDir) => {
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, 'first.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.1"',
     'operations:',
@@ -202,7 +216,7 @@ await withTempDir(async (mappingsDir) => {
   ].join('\n'));
   await writeMapping(mappingsDir, 'second.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.1"',
     'operations:',
@@ -221,7 +235,7 @@ await withTempDir(async (mappingsDir) => {
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, 'forward.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.1"',
     'operations:',
@@ -232,7 +246,7 @@ await withTempDir(async (mappingsDir) => {
   ].join('\n'));
   await writeMapping(mappingsDir, 'backward.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.1"',
     'to_version: "0.0"',
     'operations:',
@@ -251,7 +265,7 @@ await withTempDir(async (mappingsDir) => {
 await withTempDir(async (mappingsDir) => {
   await writeMapping(mappingsDir, 'conflict.yml', [
     'schema: axis.protocol_migration',
-    'schema_version: "0.1"',
+    'schema_version: 1',
     'from_version: "0.0"',
     'to_version: "0.1"',
     'operations:',

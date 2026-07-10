@@ -1,5 +1,5 @@
 schema: axis.protocol_migration
-schema_version: "0.1"
+schema_version: 1
 from_version: "0.0"
 to_version: "0.1"
 operations:
@@ -51,6 +51,21 @@ operations:
   - op: copy
     from: local.environment_name
     to: local.environment_name
+  - op: copy
+    from: local.oss.endpoint_env
+    to: local.oss.endpoint_env
+  - op: copy
+    from: local.oss.region_env
+    to: local.oss.region_env
+  - op: copy
+    from: local.oss.access_key_id_env
+    to: local.oss.access_key_id_env
+  - op: copy
+    from: local.oss.access_key_secret_env
+    to: local.oss.access_key_secret_env
+  - op: copy
+    from: local.oss.security_token_env
+    to: local.oss.security_token_env
   - op: copy
     from: local.inline_target
     to: local.inline_target
