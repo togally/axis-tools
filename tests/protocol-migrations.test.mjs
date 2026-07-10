@@ -281,6 +281,117 @@ await withTempDir(async (mappingsDir) => {
   assert.doesNotMatch(errorMessage, new RegExp(copiedSecret));
 });
 
+for (const { name, operations } of [
+  {
+    name: 'unsafe-ancestor-copy',
+    operations: [
+      '  - op: copy',
+      '    from: local',
+      '    to: retained',
+      '  - op: drop',
+      '    from: local.credential_blob',
+      '    reason: Credential-like values must not cross protocol boundaries.',
+    ],
+  },
+  {
+    name: 'unsafe-ancestor-reverse-copy',
+    operations: [
+      '  - op: drop',
+      '    from: local.credential_blob',
+      '    reason: Credential-like values must not cross protocol boundaries.',
+      '  - op: copy',
+      '    from: local',
+      '    to: retained',
+    ],
+  },
+  {
+    name: 'unsafe-descendant-copy',
+    operations: [
+      '  - op: copy',
+      '    from: local.credential_blob.value',
+      '    to: retained',
+      '  - op: drop',
+      '    from: local.credential_blob',
+      '    reason: Credential-like values must not cross protocol boundaries.',
+    ],
+  },
+  {
+    name: 'unsafe-descendant-reverse-copy',
+    operations: [
+      '  - op: drop',
+      '    from: local.credential_blob',
+      '    reason: Credential-like values must not cross protocol boundaries.',
+      '  - op: copy',
+      '    from: local.credential_blob.value',
+      '    to: retained',
+    ],
+  },
+]) {
+  await withTempDir(async (mappingsDir) => {
+    const copiedSecret = `${name}-secret`;
+    await writeMapping(mappingsDir, `${name}.yml`, [
+      'schema: axis.protocol_migration',
+      'schema_version: 1',
+      'from_version: "0.0"',
+      'to_version: "0.1"',
+      'operations:',
+      ...operations,
+      '',
+    ].join('\n'));
+
+    let errorMessage = '';
+    let result;
+    await assert.rejects(
+      async () => {
+        result = await migrateDraft({
+          sourceVersion: '0.0',
+          latestVersion: '0.1',
+          draft: {
+            local: {
+              credential_blob: { value: copiedSecret },
+              unrelated_value: 'retain-sibling-behavior',
+            },
+          },
+          mappingsDir,
+        });
+      },
+      (error) => {
+        errorMessage = String(error);
+        return error instanceof Error && error.message === 'local.credential_blob';
+      },
+    );
+    assert.equal(result, undefined);
+    assert.doesNotMatch(errorMessage, new RegExp(copiedSecret));
+  });
+}
+
+await withTempDir(async (mappingsDir) => {
+  const copiedSecret = 'sibling-copy-must-not-be-rejected';
+  await writeMapping(mappingsDir, 'safe-sibling-copy.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: drop',
+    '    from: local.credential_blob',
+    '    reason: Credential-like values must not cross protocol boundaries.',
+    '  - op: copy',
+    '    from: local.environment_name',
+    '    to: retained.environment_name',
+    '',
+  ].join('\n'));
+
+  const result = await migrateDraft({
+    sourceVersion: '0.0',
+    latestVersion: '0.1',
+    draft: { local: { credential_blob: copiedSecret, environment_name: 'staging' } },
+    mappingsDir,
+  });
+  assert.deepEqual(result.draft, { retained: { environment_name: 'staging' } });
+  assert.doesNotMatch(JSON.stringify(result), new RegExp(copiedSecret));
+});
+
 await withTempDir(async (mappingsDir) => {
   const copiedToken = 'neutral-name-token-must-not-leak';
   await writeMapping(mappingsDir, 'unsafe-neutral-copy.yml', [

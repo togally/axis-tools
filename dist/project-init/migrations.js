@@ -11,6 +11,11 @@ function assertSafePath(dottedPath) {
         throw new Error('unsafe protocol path');
     }
 }
+function pathsOverlap(left, right) {
+    assertSafePath(left);
+    assertSafePath(right);
+    return left === right || left.startsWith(`${right}.`) || right.startsWith(`${left}.`);
+}
 function parseVersion(version) {
     const parts = version.split('.').map(Number);
     if (parts.length < 2 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
@@ -117,7 +122,7 @@ function validateMappingSafety(mapping) {
             continue;
         }
     }
-    const copiedRedactedSources = [...redactedDroppedSources].filter((source) => copiedSources.has(source));
+    const copiedRedactedSources = [...redactedDroppedSources].filter((source) => ([...copiedSources].some((copiedSource) => pathsOverlap(source, copiedSource))));
     if (copiedRedactedSources.length > 0) {
         throw new Error(copiedRedactedSources.join(', '));
     }
