@@ -492,6 +492,7 @@ await withTempDir(async (mappingsDir) => {
 });
 
 await withTempDir(async (mappingsDir) => {
+  const droppedName = 'drop-only-name-must-not-leak';
   await writeMapping(mappingsDir, 'non-sensitive-drop-only.yml', [
     'schema: axis.protocol_migration',
     'schema_version: 1',
@@ -505,15 +506,62 @@ await withTempDir(async (mappingsDir) => {
     '',
   ].join('\n'));
 
-  const result = await migrateDraft({
-    sourceVersion: '0.0',
-    latestVersion: '0.1',
-    draft: { project: { name: 'drop-only-name' } },
-    mappingsDir,
-  });
-  assert.deepEqual(result.draft, {});
-  assert.deepEqual(result.dropped.map((entry) => entry.sourcePath), ['project.name']);
-  assert.doesNotMatch(JSON.stringify(result), /drop-only-name/);
+  let errorMessage = '';
+  let result;
+  await assert.rejects(
+    async () => {
+      result = await migrateDraft({
+        sourceVersion: '0.0',
+        latestVersion: '0.1',
+        draft: { project: { name: droppedName } },
+        mappingsDir,
+      });
+    },
+    (error) => {
+      errorMessage = String(error);
+      return error instanceof Error && error.message === 'project.name';
+    },
+  );
+  assert.equal(result, undefined);
+  assert.doesNotMatch(errorMessage, new RegExp(droppedName));
+});
+
+await withTempDir(async (mappingsDir) => {
+  const credentialValue = 'credential-rename-must-not-leak';
+  await writeMapping(mappingsDir, 'credential-rename.yml', [
+    'schema: axis.protocol_migration',
+    'schema_version: 1',
+    'from_version: "0.0"',
+    'to_version: "0.1"',
+    'operations:',
+    '  - op: copy',
+    '    from: local.credential_blob',
+    '    to: local.legacy_credential_blob',
+    '  - op: drop',
+    '    from: local.credential_blob',
+    '    reason: Credential-like values must not cross protocol boundaries.',
+    '    redact: false',
+    '',
+  ].join('\n'));
+
+  let errorMessage = '';
+  let result;
+  await assert.rejects(
+    async () => {
+      result = await migrateDraft({
+        sourceVersion: '0.0',
+        latestVersion: '0.1',
+        draft: { local: { credential_blob: credentialValue } },
+        mappingsDir,
+      });
+    },
+    (error) => {
+      errorMessage = String(error);
+      return error instanceof Error && error.message === 'local.credential_blob';
+    },
+  );
+  assert.equal(result, undefined);
+  assert.doesNotMatch(errorMessage, new RegExp(credentialValue));
 });
 
 for (const segment of ['__proto__', 'constructor', 'prototype']) {

@@ -16,6 +16,9 @@ function pathsOverlap(left, right) {
     assertSafePath(right);
     return left === right || left.startsWith(`${right}.`) || right.startsWith(`${left}.`);
 }
+function isCredentialLikePath(dottedPath) {
+    return /credential|secret|token|password|access_?key/i.test(dottedPath);
+}
 function parseVersion(version) {
     const parts = version.split('.').map(Number);
     if (parts.length < 2 || parts.some((part) => !Number.isInteger(part) || part < 0)) {
@@ -112,6 +115,17 @@ function validateMappingSafety(mapping) {
         }
         if (operation.op === 'set' || operation.op === 'prompt') {
             assertSafePath(operation.to);
+        }
+    }
+    const structuralRenameSources = new Set(mapping.operations
+        .filter((operation) => operation.op === 'copy')
+        .filter((operation) => operation.from !== operation.to)
+        .map((operation) => operation.from));
+    for (const operation of mapping.operations) {
+        if (operation.op !== 'drop' || operation.redact !== false)
+            continue;
+        if (isCredentialLikePath(operation.from) || !structuralRenameSources.has(operation.from)) {
+            throw new Error(operation.from);
         }
     }
 }
