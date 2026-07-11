@@ -34,7 +34,7 @@ export ALIYUN_OSS_ACCESS_KEY_ID='<your-access-key-id>'
 export ALIYUN_OSS_ACCESS_KEY_SECRET='<your-access-key-secret>'
 ```
 
-Do not ask the user to paste the values into chat. Ask the user to set them in their own shell, then rerun the presence check and confirm again.
+Do not ask the user to paste the values into chat. Ask the user to set them in their own shell, then rerun the presence check and confirm again. If a desktop-agent subprocess still reports them absent, explain that an `export` only affects the terminal process that received it; offer a user-managed persistent shell environment file such as `~/.zshenv` (with restrictive permissions) and a Codex restart, then rerun the name-only presence check. Never read or print the values from that file.
 6. Assemble an answers file with the exact inspection `repo`, `selectors`, `files`, ordered `decisions`, `latest_contract_version: "0.2"`, and `final_confirmation: true`. Use `keep`, `accept_mapping`, or `accept_recommendation` only when the answer exactly matches the inspected value.
 7. Apply only after the user confirms the complete field list and environment-name presence:
 
