@@ -1,31 +1,31 @@
 ---
 name: axis-create-skill
-description: Use when the user asks to scan the conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created. / 用于扫描对话中的可复用技能机会并判断是否应创建公开安全的 Axis/Codex 技能。
+description: Use when the user asks to scan, create, review, or refactor a reusable Axis or Orbit/Codex skill. / 用于扫描、创建、审查或重构可复用的 Axis 或 Orbit/Codex 技能。
 ---
 
 # Axis Create Skill
 
-Use this skill to decide whether the current conversation contains a reusable, public-safe skill candidate. Its primary job is scanning and judgment; creation/deposit is delegated to the helper script only after a stable candidate is confirmed.
+Use this skill as the single entrypoint for reusable-skill discovery, creation, review, and refactoring. It scans the current work for repeatable behavior and decides whether a workflow is stable enough to become a skill, selects its namespace and target repository, then creates and validates the package.
 
-## Orbit Skill Ownership Boundary
+## Unified Skill Creation
 
-`axis-create-skill` owns only public, cross-project Axis capabilities: engineering, architecture, testing, API performance, database/schema, deployment, and reusable platform operations.
+Use one creation standard for both repositories; do not configure or invoke a separate Orbit skill creator.
 
-- Do not create personal AI information-matrix, content lifecycle, article-title, publishing, or resource-delivery skills in `axis-tools`.
-- Route those candidates to `orbit-skill-creator` in the separate Orbit repository; its skills must use `orbit-xxx` names.
+- Cross-project engineering, architecture, testing, API performance, database/schema, deployment, and platform operations belong in `axis-tools` and use `axis-xxx` names.
+- Personal AI information-matrix, content lifecycle, article-title, publishing, and resource-delivery skills belong in the Orbit repository and use `orbit-xxx` names.
+- Private, customer-specific, credential-bearing, or closed-repository workflows stay private/local; do not publish them to either repository.
 - Do not recreate `axis-pulse-*` or `axis-article-title` compatibility aliases. Their retained presence would make one request trigger competing workflows.
-- Keep private product workflows, account strategy, credentials, customer data, and closed-repository details out of both public repositories; retain them only as private assets or local notes.
 
 ## Workflow
 
 1. Scan the current conversation for reusable behavior, not one-off task details. Good candidates mention repeated workflows, verification rules, dashboard formats, release procedures, or phrases like `沉淀`, `复用`, `以后每次`, or `skill`.
-2. Route Orbit-owned content and personal-information-matrix candidates to `orbit-skill-creator`; reject candidates that are product-private, customer-specific, credential-bearing, or only useful inside one closed-source repository. Keep those as private memory/notes, not public `axis-tools` skills.
+2. Classify the stable candidate: use `axis-xxx` in `axis-tools` for general engineering capabilities, `orbit-xxx` in the Orbit repository for personal information-matrix/content capabilities, or a private/local skill for non-public workflows. Reject public candidates that are product-private, customer-specific, credential-bearing, or only useful inside one closed-source repository.
 3. If there is no reusable public workflow, say that no skill should be created.
 4. For non-trivial skill content, use the writing-skills process: write a failing validation or concrete acceptance check first.
 5. Classify the candidate before creation. Coding, architecture, API performance, bugfix, testing, database, schema, and design-document skills must include the three-step work contract: co-create the requirement with the user, execute the agreed result, then verify and report the result.
 6. Coding/design-type skills must include a light adversarial review rule capped at no more than 30% of the interaction: verify claims against evidence, surface hidden assumptions, name risk/correctness trade-offs, and challenge unsafe shortcuts while still respecting the user's explicit business wording.
 7. Write the skill frontmatter `description` in bilingual English and Chinese. It must still start with `Use when`, then include a concise Chinese explanation in the same line.
-8. If the candidate is stable and public-safe, create the local skill with the helper script:
+8. If the candidate is stable and public-safe, create it with the same helper. For Axis skills, create and deposit into `axis-tools`:
 
 ```bash
 node scripts/axis-create-skill.mjs \
@@ -48,6 +48,16 @@ When passing prompts that contain a `$skill-name`, wrap that argument in single 
 node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
 ```
 
+For Orbit skills, use the same helper but write directly into the Orbit repository's `skills/` directory, then run that repository's validator. Do not pass `--deposit`, `--commit`, or `--push` to the Axis helper for Orbit; Orbit owns its own repository history.
+
+```bash
+node <axis-tools>/scripts/axis-create-skill.mjs \
+  --source-root <orbit-repo>/skills \
+  --name orbit-example-skill \
+  --description "Use when ... / 用于..." \
+  --body-file /tmp/orbit-example-skill.md
+```
+
 ## Candidate Scan
 
 For a quick candidate scan from a saved conversation transcript:
@@ -58,9 +68,19 @@ node scripts/axis-create-skill.mjs --scan-conversation <conversation.txt> --json
 
 Only create a skill when the candidate has a stable trigger, a repeatable workflow, clear validation steps, and no private product-specific content.
 
+## Package, Reasoning, and Experience Rules
+
+Keep `SKILL.md` concise: put only triggers, workflow, boundaries, and validation in it. Add `scripts/` only for deterministic repeated operations, `references/` for detailed material that should load on demand, and `assets/` for output resources. Do not create auxiliary README, installation, or changelog files inside a skill bundle.
+
+Every generated Codex skill must have `SKILL.md` and `agents/openai.yaml`, clear use/non-use boundaries, inputs, outputs, safety rules, validation, and `After Use Deposition`. For Orbit content skills, also include `Mandatory Before-Use Experience Application`, `Mandatory After-Use Deposition`, and a `Model Reasoning Level` section.
+
+Choose the default reasoning level by actual task difficulty: `light -> low`, `standard -> medium`, `complex -> high`, and `critical -> max`. Let simple, low-risk, easily verified tasks downgrade; require explicit safety, stopping, and verification rules before upgrading.
+
+Before creating or refactoring a skill, apply relevant `stable` experience directly, treat `candidate` experience as a constraint to test, and keep `raw` experience as reference only. Report `Experience used: none`, `Experience used: <path>`, or `Experience used: skipped <reason>`. After use, report `Deposition: none`, `Deposition: updated <path>`, or `Deposition: proposed <change>`.
+
 ## Bilingual Description Rule
 
-Every public Axis skill description must be bilingual:
+Every public Axis or Orbit skill description must be bilingual:
 
 ```text
 description: Use when <English trigger>. / 用于<中文触发场景或用途>。
@@ -70,7 +90,7 @@ Rules:
 
 - The line must start with `Use when` so Codex trigger semantics remain predictable.
 - The same line must contain Chinese text; do not put the Chinese explanation only in the body.
-- For packaged skills maintained in `axis-tools`, keep `agents/openai.yaml` `short_description` bilingual too.
+- Keep `agents/openai.yaml` `short_description` bilingual too.
 - For packaged skills, `agents/openai.yaml` `display_name` must equal the skill name, such as `axis-example-skill`; do not use a marketing label or custom title there.
 - Keep both languages concise and public-safe.
 - The create and deposit helper scripts reject skills whose description is English-only or Chinese-only.
@@ -118,5 +138,5 @@ After using this skill, check whether this scan found a reusable improvement to 
 - Validate with `quick_validate.py` unless running a fake-home unit test.
 - After deposit, run the repo's available test suite when present (for example `npm test`) and update any packaged-skill manifest or explicit skill-list tests that must include the new skill.
 - Commit and push only the skill bundle, manifest, docs, and tests related to the skill change.
-- Public `axis-tools` skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
-- Content lifecycle, article-title, publishing, resource-delivery, and personal-information-matrix candidates belong to `orbit-skill-creator`, not `axis-tools`.
+- Public skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
+- Select the target repository and prefix before creating a skill: `axis-xxx` for Axis, `orbit-xxx` for Orbit, never `axis-pulse-*` compatibility aliases.
