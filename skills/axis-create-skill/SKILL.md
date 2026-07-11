@@ -7,10 +7,19 @@ description: Use when the user asks to scan the conversation for reusable skill 
 
 Use this skill to decide whether the current conversation contains a reusable, public-safe skill candidate. Its primary job is scanning and judgment; creation/deposit is delegated to the helper script only after a stable candidate is confirmed.
 
+## Orbit Skill Ownership Boundary
+
+`axis-create-skill` owns only public, cross-project Axis capabilities: engineering, architecture, testing, API performance, database/schema, deployment, and reusable platform operations.
+
+- Do not create personal AI information-matrix, content lifecycle, article-title, publishing, or resource-delivery skills in `axis-tools`.
+- Route those candidates to `orbit-skill-creator` in the separate Orbit repository; its skills must use `orbit-xxx` names.
+- Do not recreate `axis-pulse-*` or `axis-article-title` compatibility aliases. Their retained presence would make one request trigger competing workflows.
+- Keep private product workflows, account strategy, credentials, customer data, and closed-repository details out of both public repositories; retain them only as private assets or local notes.
+
 ## Workflow
 
 1. Scan the current conversation for reusable behavior, not one-off task details. Good candidates mention repeated workflows, verification rules, dashboard formats, release procedures, or phrases like `沉淀`, `复用`, `以后每次`, or `skill`.
-2. Reject candidates that are product-private, customer-specific, credential-bearing, or only useful inside one closed-source repository. Keep those as private memory/notes, not public `axis-tools` skills.
+2. Route Orbit-owned content and personal-information-matrix candidates to `orbit-skill-creator`; reject candidates that are product-private, customer-specific, credential-bearing, or only useful inside one closed-source repository. Keep those as private memory/notes, not public `axis-tools` skills.
 3. If there is no reusable public workflow, say that no skill should be created.
 4. For non-trivial skill content, use the writing-skills process: write a failing validation or concrete acceptance check first.
 5. Classify the candidate before creation. Coding, architecture, API performance, bugfix, testing, database, schema, and design-document skills must include the three-step work contract: co-create the requirement with the user, execute the agreed result, then verify and report the result.
@@ -110,3 +119,4 @@ After using this skill, check whether this scan found a reusable improvement to 
 - After deposit, run the repo's available test suite when present (for example `npm test`) and update any packaged-skill manifest or explicit skill-list tests that must include the new skill.
 - Commit and push only the skill bundle, manifest, docs, and tests related to the skill change.
 - Public `axis-tools` skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
+- Content lifecycle, article-title, publishing, resource-delivery, and personal-information-matrix candidates belong to `orbit-skill-creator`, not `axis-tools`.
