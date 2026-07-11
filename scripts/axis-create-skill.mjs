@@ -8,7 +8,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^(?:axis|orbit)-[a-z0-9][a-z0-9-]*$/;
 const publicRepoSensitivePattern =
   /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei)\b/i;
 const codingDesignSkillPattern =
@@ -55,7 +55,7 @@ function defaultValidator() {
 
 function ensureSkillName(name) {
   if (!skillNamePattern.test(name)) {
-    throw new Error(`Skill name must look like axis-example-skill: ${name}`);
+    throw new Error(`Skill name must look like axis-example-skill or orbit-example-skill: ${name}`);
   }
   return name;
 }
@@ -130,7 +130,7 @@ function ensurePublicSafeSkill({ name, description, body }) {
   const haystack = [name, description, body].join('\n');
   if (publicRepoSensitivePattern.test(haystack)) {
     throw new Error(
-      'Skill content appears project-specific or sensitive for the public axis-tools repo. ' +
+      'Skill content appears project-specific or sensitive for a public shared skill repository. ' +
       'Use a generic public workflow or pass --private-ok for a private/local-only skill.',
     );
   }
@@ -161,7 +161,7 @@ function sentenceAround(text, start, end) {
 function scanConversation(text) {
   const candidates = [];
   const seen = new Set();
-  const pattern = /\b(axis-[a-z0-9][a-z0-9-]*)\b(?:\s*(?:skill|技能))?/gi;
+  const pattern = /\b((?:axis|orbit)-[a-z0-9][a-z0-9-]*)\b(?:\s*(?:skill|技能))?/gi;
   let match;
   while ((match = pattern.exec(text)) !== null) {
     const name = match[1].toLowerCase();
@@ -196,16 +196,16 @@ async function validateSkill(skillDir, validator) {
 async function createLocalSkill() {
   const name = ensureSkillName(argValue('--name') || '');
   const description = ensureBilingualDescription(
-    argValue('--description') || `Use when the user asks for the ${name} Axis workflow. / 用于处理 ${name} 对应的 Axis 工作流。`,
+    argValue('--description') || `Use when the user asks for the ${name} workflow. / 用于处理 ${name} 对应的工作流。`,
   );
   const bodyArg = argValue('--body');
   const bodyFile = argValue('--body-file');
-  const body = bodyArg ?? (bodyFile ? await readFile(path.resolve(bodyFile), 'utf8') : `# ${name}\n\nUse this skill for the Axis workflow.\n`);
+  const body = bodyArg ?? (bodyFile ? await readFile(path.resolve(bodyFile), 'utf8') : `# ${name}\n\nUse this skill for the requested workflow.\n`);
   const sourceRoot = path.resolve(argValue('--source-root') || path.join(defaultCodexHome(), 'skills'));
   const skillDir = path.join(sourceRoot, name);
   const agentsDir = path.join(skillDir, 'agents');
   const shortDescription = ensureBilingualText(argValue('--short-description') || description, 'Skill short_description');
-  const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this Axis workflow.`;
+  const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this workflow.`;
   const validator = path.resolve(argValue('--validator') || defaultValidator());
   ensurePublicSafeSkill({ name, description, body });
 

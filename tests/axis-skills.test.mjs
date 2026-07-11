@@ -233,6 +233,27 @@ await withTempDir(async (tmp) => {
   assert.match(error.stderr, /bilingual English and Chinese/);
 });
 
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'orbit-skills');
+  await mkdir(sourceRoot, { recursive: true });
+  await execFileAsync(process.execPath, [
+    createScript,
+    '--source-root',
+    sourceRoot,
+    '--name',
+    'orbit-demo-created',
+    '--description',
+    'Use when testing Orbit skill creation. / 用于测试 Orbit 技能创建。',
+    '--body',
+    '# Orbit Demo Created\n',
+    '--no-validate',
+  ]);
+
+  const created = await readFile(path.join(sourceRoot, 'orbit-demo-created', 'SKILL.md'), 'utf8');
+  assert.match(created, /^name: orbit-demo-created$/m);
+  assert.match(created, /After Use Deposition/);
+});
+
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const packagedSkillNames = [
   'axis-ali-dashboard',
@@ -649,8 +670,10 @@ assert.match(createSkillMd, /Three-Step Work Contract/);
 assert.match(createSkillMd, /co-create the requirement with the user/i);
 assert.match(createSkillMd, /Light Adversarial Review/);
 assert.match(createSkillMd, /Coding\/design-type skills should include/i);
-assert.match(createSkillMd, /Orbit Skill Ownership Boundary/);
-assert.match(createSkillMd, /orbit-skill-creator/);
+assert.match(createSkillMd, /Unified Skill Creation/);
+assert.match(createSkillMd, /orbit-xxx/);
+assert.match(createSkillMd, /Mandatory Before-Use Experience Application/);
+assert.match(createSkillMd, /Model Reasoning Level/);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
 const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-tech-design-doc', 'SKILL.md'), 'utf8');
