@@ -649,6 +649,8 @@ assert.match(createSkillMd, /Three-Step Work Contract/);
 assert.match(createSkillMd, /co-create the requirement with the user/i);
 assert.match(createSkillMd, /Light Adversarial Review/);
 assert.match(createSkillMd, /Coding\/design-type skills should include/i);
+assert.match(createSkillMd, /Orbit Skill Ownership Boundary/);
+assert.match(createSkillMd, /orbit-skill-creator/);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
 const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-tech-design-doc', 'SKILL.md'), 'utf8');
