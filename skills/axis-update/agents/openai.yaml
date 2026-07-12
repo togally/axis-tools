@@ -1,5 +1,5 @@
 interface:
-  display_name: "Axis Skill Update"
+  display_name: "axis-update"
   short_description: "Refresh local Axis skills / 刷新本地 Axis 技能"
   default_prompt: "Use $axis-update to refresh local Axis packaged skills from axis-tools."
 

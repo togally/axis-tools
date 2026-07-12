@@ -1,7 +1,7 @@
 interface:
-  display_name: "Test Report"
-  short_description: "Capture validation reports / 采集测试验证报告"
-  default_prompt: "Use $axis-test-report to write a public-safe Axis test or benchmark report package."
+  display_name: "axis-test-report"
+  short_description: "Capture v0.2 validation reports / 采集 v0.2 测试报告"
+  default_prompt: "Use $axis-test-report to write a public-safe Axis v0.2 test or benchmark report package."
 
 policy:
   allow_implicit_invocation: true

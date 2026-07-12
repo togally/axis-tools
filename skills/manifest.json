@@ -63,7 +63,7 @@
     },
     {
       "name": "axis-coding-capture",
-      "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.1 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.1 执行报告和经验卡片。",
+      "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.2 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.2 执行报告和经验卡片。",
       "path": "skills/axis-coding-capture",
       "files": [
         "SKILL.md",
@@ -187,7 +187,7 @@
     },
     {
       "name": "axis-test-report",
-      "description": "Use when build, lint, test, benchmark, pressure-test, or verification work needs a public-safe Axis v0.1 test report package in the local outbox. / 用于将构建、lint、测试、压测或验证结果采集为公开安全的 Axis v0.1 测试报告包。",
+      "description": "Use when build, lint, test, benchmark, pressure-test, or verification work needs a public-safe Axis v0.2 test report package in the local outbox. / 用于将构建、lint、测试、压测或验证结果采集为公开安全的 Axis v0.2 测试报告包。",
       "path": "skills/axis-test-report",
       "files": [
         "SKILL.md",

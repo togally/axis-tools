@@ -1,5 +1,5 @@
 interface:
-  display_name: "Axis Project Knowledge Bootstrap"
+  display_name: "axis-project-knowledge-bootstrap"
   short_description: "Bootstrap architecture and domain designs / 生成架构与逐域详细设计"
   default_prompt: "Use $axis-project-knowledge-bootstrap to generate global technical and business architecture, business inventory, one detailed design per business_id, and the document gap report."
 

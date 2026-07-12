@@ -1,5 +1,5 @@
 interface:
-  display_name: "OSS Publish"
+  display_name: "axis-oss-publish"
   short_description: "Sync v0.2 project docs and packages / 同步项目文档与发布包"
   default_prompt: "Use $axis-oss-publish to validate and publish an Axis v0.2 outbox package using the organization-to-project OSS hierarchy."
 

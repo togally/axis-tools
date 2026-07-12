@@ -183,7 +183,7 @@ await withTempDir(async (tmp) => {
     '--display-name',
     'Axis Demo Created',
     '--short-description',
-    'Create a demo Axis skill',
+    'Create demo Axis skill / 创建演示 Axis 技能',
     '--default-prompt',
     'Use $axis-demo-created to run the demo workflow.',
     '--no-validate',
@@ -206,7 +206,10 @@ await withTempDir(async (tmp) => {
   assert.equal(localSkillBody.includes('challenge unsafe shortcuts'), true);
   assert.equal(localSkillBody.includes('After Use Deposition'), true);
   assert.equal(localSkillBody.includes('push to the remote repository when permissions allow'), true);
-  assert.equal(await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8').then((text) => text.includes('Axis Demo Created')), true);
+  const createdOpenAiYaml = await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(createdOpenAiYaml, /^\s*display_name: "axis-demo-created"$/m);
+  assert.doesNotMatch(createdOpenAiYaml, /^\s*display_name: "Axis Demo Created"$/m);
+  assert.match(createdOpenAiYaml, /Create demo Axis skill \/ 创建演示 Axis 技能/);
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
   assert.equal(manifest.skills[0].name, 'axis-demo-created');
@@ -235,6 +238,27 @@ await withTempDir(async (tmp) => {
   assert.match(error.stderr, /bilingual English and Chinese/);
 });
 
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'orbit-skills');
+  await mkdir(sourceRoot, { recursive: true });
+  await execFileAsync(process.execPath, [
+    createScript,
+    '--source-root',
+    sourceRoot,
+    '--name',
+    'orbit-demo-created',
+    '--description',
+    'Use when testing Orbit skill creation. / 用于测试 Orbit 技能创建。',
+    '--body',
+    '# Orbit Demo Created\n',
+    '--no-validate',
+  ]);
+
+  const created = await readFile(path.join(sourceRoot, 'orbit-demo-created', 'SKILL.md'), 'utf8');
+  assert.match(created, /^name: orbit-demo-created$/m);
+  assert.match(created, /After Use Deposition/);
+});
+
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const packagedSkillNames = [
   'axis-ali-dashboard',
@@ -261,6 +285,45 @@ const packagedSkillNames = [
   'axis-update',
   'axis-yunxiao-codeup',
 ];
+const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillDirs = (await readdir(path.join(repoRoot, 'skills'), { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort();
+assert.deepEqual(packagedSkillDirs, packagedSkillNames, 'packaged skill directories should match the manifest-backed skill list');
+for (const skillName of packagedSkillDirs) {
+  assert.match(skillName, skillNamePattern, `${skillName} should use axis-xxx naming`);
+  const manifestEntry = manifest.skills.find((skill) => skill.name === skillName);
+  assert.ok(manifestEntry, `${skillName} should be listed in the manifest`);
+  assert.equal(manifestEntry.path, `skills/${skillName}`);
+  assert.match(manifestEntry.name, skillNamePattern);
+
+  const skillMd = await readFile(path.join(repoRoot, 'skills', skillName, 'SKILL.md'), 'utf8');
+  assert.match(skillMd, new RegExp(`^name: ${skillName}$`, 'm'));
+  const openAiYaml = await readFile(path.join(repoRoot, 'skills', skillName, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(openAiYaml, new RegExp(`\\$${skillName}\\b`));
+}
+
+const consolidationAudit = await readFile(path.join(repoRoot, 'docs', 'axis-skill-consolidation-audit.md'), 'utf8');
+for (const requiredText of [
+  'Axis Skill Consolidation Audit',
+  'Current Decision',
+  'Rename Guard',
+  'axis-development-doc',
+  'axis-tech-design-doc',
+  'axis-db-design-doc',
+  'axis-project-knowledge-bootstrap',
+  'axis-business-domain-doc',
+  'axis-doc-drift-capture',
+  'axis-coding-capture',
+  'axis-test-report',
+  'axis-oss-publish',
+  'axis-create-skill',
+  'axis-update',
+  'Do not merge now',
+]) {
+  assert.match(consolidationAudit, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
 
@@ -734,6 +797,7 @@ for (const skillName of packagedSkillNames) {
   assert.match(descriptionLine, /[\u3400-\u9FFF]/);
   assert.match(skillMd, /## After Use Deposition/);
   const openAiYaml = await readFile(path.join(skillDir, 'agents', 'openai.yaml'), 'utf8');
+  assert.match(openAiYaml, new RegExp(`^\\s*display_name: "${skillName}"$`, 'm'));
   assert.equal(openAiYaml.includes(`$${skillName}`), true);
   const shortDescriptionLine = openAiYaml.split('\n').find((line) => line.trim().startsWith('short_description:')) ?? '';
   assert.match(shortDescriptionLine, /[A-Za-z]/);
@@ -753,6 +817,10 @@ assert.match(createSkillMd, /Three-Step Work Contract/);
 assert.match(createSkillMd, /co-create the requirement with the user/i);
 assert.match(createSkillMd, /Light Adversarial Review/);
 assert.match(createSkillMd, /Coding\/design-type skills should include/i);
+assert.match(createSkillMd, /Unified Skill Creation/);
+assert.match(createSkillMd, /orbit-xxx/);
+assert.match(createSkillMd, /Mandatory Before-Use Experience Application/);
+assert.match(createSkillMd, /Model Reasoning Level/);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
 const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-tech-design-doc', 'SKILL.md'), 'utf8');

@@ -8,7 +8,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^(?:axis|orbit)-[a-z0-9][a-z0-9-]*$/;
 const publicRepoSensitivePattern =
   /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei)\b/i;
 const codingDesignSkillPattern =
@@ -55,7 +55,7 @@ function defaultValidator() {
 
 function ensureSkillName(name) {
   if (!skillNamePattern.test(name)) {
-    throw new Error(`Skill name must look like axis-example-skill: ${name}`);
+    throw new Error(`Skill name must look like axis-example-skill or orbit-example-skill: ${name}`);
   }
   return name;
 }
@@ -68,6 +68,13 @@ function ensureBilingualDescription(description) {
     throw new Error('Skill description must be bilingual English and Chinese.');
   }
   return description;
+}
+
+function ensureBilingualText(value, fieldName) {
+  if (!/[A-Za-z]/.test(value) || !/[\u3400-\u9FFF]/.test(value)) {
+    throw new Error(`${fieldName} must be bilingual English and Chinese.`);
+  }
+  return value;
 }
 
 function yamlString(value) {
@@ -123,16 +130,16 @@ function ensurePublicSafeSkill({ name, description, body }) {
   const haystack = [name, description, body].join('\n');
   if (publicRepoSensitivePattern.test(haystack)) {
     throw new Error(
-      'Skill content appears project-specific or sensitive for the public axis-tools repo. ' +
+      'Skill content appears project-specific or sensitive for a public shared skill repository. ' +
       'Use a generic public workflow or pass --private-ok for a private/local-only skill.',
     );
   }
 }
 
-function createOpenAiYaml({ name, displayName, shortDescription, defaultPrompt }) {
+function createOpenAiYaml({ name, shortDescription, defaultPrompt }) {
   return [
     'interface:',
-    `  display_name: ${yamlString(displayName)}`,
+    `  display_name: ${yamlString(name)}`,
     `  short_description: ${yamlString(shortDescription)}`,
     `  default_prompt: ${yamlString(defaultPrompt || `Use $${name} to run this Axis skill workflow.`)}`,
     '',
@@ -154,7 +161,7 @@ function sentenceAround(text, start, end) {
 function scanConversation(text) {
   const candidates = [];
   const seen = new Set();
-  const pattern = /\b(axis-[a-z0-9][a-z0-9-]*)\b(?:\s*(?:skill|技能))?/gi;
+  const pattern = /\b((?:axis|orbit)-[a-z0-9][a-z0-9-]*)\b(?:\s*(?:skill|技能))?/gi;
   let match;
   while ((match = pattern.exec(text)) !== null) {
     const name = match[1].toLowerCase();
@@ -189,17 +196,16 @@ async function validateSkill(skillDir, validator) {
 async function createLocalSkill() {
   const name = ensureSkillName(argValue('--name') || '');
   const description = ensureBilingualDescription(
-    argValue('--description') || `Use when the user asks for the ${name} Axis workflow. / 用于处理 ${name} 对应的 Axis 工作流。`,
+    argValue('--description') || `Use when the user asks for the ${name} workflow. / 用于处理 ${name} 对应的工作流。`,
   );
   const bodyArg = argValue('--body');
   const bodyFile = argValue('--body-file');
-  const body = bodyArg ?? (bodyFile ? await readFile(path.resolve(bodyFile), 'utf8') : `# ${name}\n\nUse this skill for the Axis workflow.\n`);
+  const body = bodyArg ?? (bodyFile ? await readFile(path.resolve(bodyFile), 'utf8') : `# ${name}\n\nUse this skill for the requested workflow.\n`);
   const sourceRoot = path.resolve(argValue('--source-root') || path.join(defaultCodexHome(), 'skills'));
   const skillDir = path.join(sourceRoot, name);
   const agentsDir = path.join(skillDir, 'agents');
-  const displayName = argValue('--display-name') || name;
-  const shortDescription = argValue('--short-description') || description.slice(0, 78);
-  const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this Axis workflow.`;
+  const shortDescription = ensureBilingualText(argValue('--short-description') || description, 'Skill short_description');
+  const defaultPrompt = argValue('--default-prompt') || `Use $${name} to run this workflow.`;
   const validator = path.resolve(argValue('--validator') || defaultValidator());
   ensurePublicSafeSkill({ name, description, body });
 
@@ -209,7 +215,7 @@ async function createLocalSkill() {
 
   await mkdir(agentsDir, { recursive: true });
   await writeFile(path.join(skillDir, 'SKILL.md'), createSkillMarkdown({ name, description, body }), 'utf8');
-  await writeFile(path.join(agentsDir, 'openai.yaml'), createOpenAiYaml({ name, displayName, shortDescription, defaultPrompt }), 'utf8');
+  await writeFile(path.join(agentsDir, 'openai.yaml'), createOpenAiYaml({ name, shortDescription, defaultPrompt }), 'utf8');
 
   if (!hasFlag('--no-validate')) {
     await validateSkill(skillDir, validator);

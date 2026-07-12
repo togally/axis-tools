@@ -1,55 +1,24 @@
 ---
 name: axis-coding-capture
-description: Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.1 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.1 执行报告和经验卡片。
+description: Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.2 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.2 执行报告和经验卡片。
 ---
 
 # Coding Capture
 
-Use this skill after implementation work to turn the result into a standard Axis v0.1 local package. The package is written under `.axis/outbox/` and can later be published with `axis oss-publish`.
+Use this skill after implementation work to create a public-safe Axis v0.2 package. The package is written under the organization-scoped local outbox and can later be validated or published.
 
 ## Boundary
 
-- Use the existing CLI for deterministic packaging; do not hand-write `manifest.json`.
-- The generated package contains `manifest.json`, `metadata.json`, `report.md`, and `experience.md`.
-- `manifest.json` and `metadata.json` must include `release.channel` and `release.gate`; by default they remain `private_beta` and `not_requested`.
-- Summarize private code, logs, URLs, and identifiers. Do not paste secrets, customer data, internal issue URLs, or raw unredacted logs.
-
-## Report Sections
-
-Write `report.md` with these sections when the user has not provided a stronger template:
-
-```markdown
-# Coding Capture
-
-## 需求理解摘要
-<what was requested and the accepted scope>
-
-## 实现摘要
-<what changed and why>
-
-## 文件改动摘要
-<files or modules changed; keep private paths generalized when needed>
-
-## API/数据模型变化
-<API, schema, config, permission, or compatibility changes; say none if none>
-
-## 验证命令
-<build, lint, test, benchmark, or manual checks and results>
-
-## 风险和后续事项
-<known risk, rollback notes, uncovered tests, follow-up owners>
-
-## 可复用经验卡片
-<public-safe reusable lesson candidate>
-```
-
-Write `experience.md` as the reusable card. Keep it generic enough to help another project without leaking local facts.
+- Require a valid v0.2 project configuration before capture. If the config is missing or still v0.1, invoke `axis-project-init` and complete its conversational confirmation flow.
+- Use the deterministic CLI; never hand-write `manifest.json` or `metadata.json`.
+- The package contains `manifest.json`, `metadata.json`, `report.md`, and `experience.md`.
+- Do not paste credentials, private URLs, customer data, internal ticket links, or raw unredacted logs.
 
 ## Workflow
 
-1. Confirm `.axis/config.yml` exists. If not, use `axis-project-init` first.
-2. Prepare public-safe `report.md` and `experience.md` files.
-3. Write the local package:
+1. Run `axis validate-config --repo <repo>` and confirm `contract_version: "0.2"` plus the organization-scoped OSS profile.
+2. Prepare public-safe `report.md` and `experience.md`.
+3. Write the package:
 
 ```bash
 axis coding-capture \
@@ -62,21 +31,33 @@ axis coding-capture \
   --experience-file /tmp/coding-experience.md
 ```
 
-4. Inspect the returned `.axis/outbox/.../<run_id>/` package.
-5. Publish or validate through `axis-oss-publish`:
+4. Inspect the returned `.axis/outbox/v0.2/<organization_id>/<project_slug>/<run_id>/` package.
+5. Validate or publish it with `axis-oss-publish`.
 
-```bash
-axis oss-publish --repo <repo> --run-id <run_id> --dry-run
-axis oss-publish --repo <repo> --run-id <run_id> --local-only
+## Report Sections
+
+Use these sections unless the user provides an approved template:
+
+```markdown
+## 需求理解摘要
+## 实现摘要
+## 文件改动摘要
+## API/数据模型变化
+## 验证命令
+## 风险和后续事项
+## 可复用经验卡片
 ```
+
+Keep request summary, implementation summary, changed modules, API/data-model/config impact, verification commands and results, risks and follow-ups, and a reusable public-safe lesson in those sections.
 
 ## Validation
 
-- Confirm package files are exactly `experience.md`, `manifest.json`, `metadata.json`, and `report.md`.
-- Confirm `producer.skill` is `axis-coding-capture`.
-- Confirm `release.channel` is `private_beta` unless a passed gate explicitly allows `public`.
-- Confirm public-safety validation status is `passed` and no secret values appear in stdout, stderr, or package files.
+- `manifest.schema_version`, `metadata.schema_version`, and all four protocol declarations are `0.2`.
+- Organization, project, OSS profile, release, checksum, and public-safety snapshots are present.
+- `release.channel` is `private_beta` by default and `release.gate` must be `passed` before public release.
+- Package files match the manifest and public-safety validation is `passed`.
+- No secret value appears in stdout, stderr, or package files.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.

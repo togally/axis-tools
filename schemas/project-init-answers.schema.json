@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://axis.tools/schemas/project-init-answers.schema.json",
+  "title": "Axis project initialization answers",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "schema_version",
+    "repo",
+    "latest_contract_version",
+    "selectors",
+    "files",
+    "decisions",
+    "final_confirmation"
+  ],
+  "properties": {
+    "schema": { "const": "axis.project_init_answers" },
+    "schema_version": { "const": 1 },
+    "repo": { "type": "string", "minLength": 1 },
+    "latest_contract_version": { "const": "0.2" },
+    "selectors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registry_path", "organization_id", "oss_profile"],
+      "properties": {
+        "registry_path": { "type": "string", "minLength": 1 },
+        "organization_id": { "type": ["string", "null"] },
+        "oss_profile": { "type": ["string", "null"] }
+      }
+    },
+    "files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "path", "state", "sha256"],
+        "properties": {
+          "role": { "enum": ["main_config", "local_config", "target_registry", "source_registry", "gitignore"] },
+          "path": { "type": "string", "minLength": 1 },
+          "state": { "enum": ["present", "absent"] },
+          "sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "value", "decision"],
+        "properties": {
+          "key": { "type": "string", "minLength": 1 },
+          "value": {
+            "anyOf": [
+              { "type": "string" },
+              { "type": "number" },
+              { "type": "boolean" },
+              { "type": "null" }
+            ]
+          },
+          "decision": { "enum": ["keep", "accept_mapping", "accept_recommendation", "change"] }
+        }
+      }
+    },
+    "final_confirmation": { "const": true }
+  }
+}
