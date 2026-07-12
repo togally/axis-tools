@@ -126,6 +126,13 @@ public_safety:
   reviewed: true
   contains_credentials: false
   contains_private_urls: false
+  validation:
+    status: passed
+    validators:
+      - no_unresolved_text_scan
+      - credential_pattern_scan
+      - private_url_scan
+    findings_count: 0
 generated_fields:
   generated_by_skill: axis-project-knowledge-bootstrap
   source_commit: null
@@ -184,16 +191,30 @@ Include an executive conclusion, standards coverage matrix, stable gap table, pr
 ## Verification Checklist
 
 - Global architecture documents use the standards baseline and contain real explanations, not directory dumps.
+- The four bootstrap documents exist or the user receives the exact reason generation stopped.
 - Inventory IDs are unique and every capability appears at most once.
+- Every `business_inventory.businesses[]` item has all required fields and every inventory status uses the allowed values listed in this skill.
 - Inventory business count equals canonical domain detailed-design count.
 - Every domain document path matches `business/domains/{business_id}/detailed-design.md`.
 - No two domain documents share reader-facing paragraphs beyond standard labels and references.
 - Every factual claim has evidence or an explicit assumption/missing-evidence entry.
+- Missing, stale, blocked, conflict, and low-confidence findings are present in `doc_gap_report`.
 - Mermaid diagrams render; YAML parses; no unresolved placeholders, credentials, private URLs, raw logs, or customer identifiers remain.
 - Metadata, inventory refs, and gap report agree.
 - Generated documents remain `review` without authorized approval.
 - `axis project-knowledge-capture` includes all domain detailed designs and excludes superseded global detailed designs.
 - `axis oss-publish --dry-run` targets direct project-document paths and `_sync/manifest.json` last.
+
+Useful local checks:
+
+```bash
+rg -n "placeholder|dummy|filler" .axis/docs
+rg -n "(token|api[_-]?key|secret|password)\\s*[:=]" .axis/docs
+```
+
+Do not use the literal string `placeholder` in generated validator names when running the first scan above, because that scan intentionally treats the word itself as an unresolved-text finding. Use a name such as `no_unresolved_text_scan` instead.
+
+Add repository-specific YAML parsing or test commands when available.
 
 ## Handoff
 
