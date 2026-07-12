@@ -1,7 +1,7 @@
 interface:
   display_name: "Axis Business Domain Doc"
-  short_description: "Generate domain business and technical docs / 生成业务域业务与技术文档"
-  default_prompt: "Use $axis-business-domain-doc to generate domain_business_spec and domain_technical_design for one business_id from business_inventory, global architecture docs, and repository evidence."
+  short_description: "Reconcile or design domain requirements / 梳理或设计业务域需求"
+  default_prompt: "Use $axis-business-domain-doc in scan_and_reconcile or requirement_design mode, resolve one business_id without guessing, and update the reviewed business architecture summary."
 
 policy:
   allow_implicit_invocation: true

@@ -201,6 +201,50 @@ async function writeV02Registry(repo) {
   ].join('\n'), 'utf8');
 }
 
+async function writeProjectKnowledgeDocs(repo) {
+  const root = path.join(
+    repo,
+    '.axis',
+    'docs',
+    'orgs',
+    'org_axis_tools',
+    'projects',
+    'demo-project',
+  );
+  await mkdir(path.join(root, 'architecture'), { recursive: true });
+  await mkdir(path.join(root, 'business', 'domains', 'sales'), { recursive: true });
+  await mkdir(path.join(root, 'business', 'domains', 'support'), { recursive: true });
+  await mkdir(
+    path.join(root, 'business', 'domains', 'sales', 'requirements', 'price-protection'),
+    { recursive: true },
+  );
+  await mkdir(path.join(root, 'gaps'), { recursive: true });
+  await writeFile(path.join(root, 'metadata.yaml'), 'document_language: zh-CN\nstatus: review\n', 'utf8');
+  await writeFile(path.join(root, 'architecture', 'technical.md'), '# 技术架构\n\n## C4 系统上下文\n', 'utf8');
+  await writeFile(path.join(root, 'architecture', 'business.md'), '# 业务架构\n\n## 业务能力地图\n', 'utf8');
+  await writeFile(
+    path.join(root, 'business', 'inventory.yaml'),
+    'businesses:\n  - business_id: sales\n  - business_id: support\n',
+    'utf8',
+  );
+  await writeFile(
+    path.join(root, 'business', 'domains', 'sales', 'detailed-design.md'),
+    '# 销售业务域详细设计\n\n## 设计结论\n',
+    'utf8',
+  );
+  await writeFile(
+    path.join(root, 'business', 'domains', 'support', 'detailed-design.md'),
+    '# 支持业务域详细设计\n\n## 设计结论\n',
+    'utf8',
+  );
+  await writeFile(
+    path.join(root, 'business', 'domains', 'sales', 'requirements', 'price-protection', 'detailed-design.md'),
+    '# 价保需求详细设计\n\n## 需求结论\n',
+    'utf8',
+  );
+  await writeFile(path.join(root, 'gaps', 'doc-gap-report.md'), '# 文档差距报告\n', 'utf8');
+}
+
 await withTempDir(async (repo) => {
   await mkdir(repo, { recursive: true });
 
@@ -676,15 +720,15 @@ await withTempDir(async (repo) => {
   });
   assert.equal(
     manifest.publish.base_uri,
-    `oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/packages/demo-project/${runId}/`,
+    `oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/packages/${runId}/`,
   );
 
   const metadata = await readJson(path.join(repo, packageResult.package_dir, 'metadata.json'));
   assert.deepEqual(metadata.organization, manifest.organization);
   assert.deepEqual(metadata.project, manifest.project);
   assert.equal(metadata.source_evidence.run_id, runId);
-  assert.equal(metadata.index_refs.organization_index, 'axis/v0.2/orgs/org_axis_tools/index/packages.jsonl');
-  assert.equal(metadata.index_refs.project_package_path, `axis/v0.2/orgs/org_axis_tools/packages/demo-project/${runId}/`);
+  assert.equal(metadata.index_refs.organization_index, 'axis/v0.2/orgs/org_axis_tools/index/projects.jsonl');
+  assert.equal(metadata.index_refs.project_package_path, `axis/v0.2/orgs/org_axis_tools/projects/demo-project/packages/${runId}/`);
 
   await writeV02Config(repo, { orgId: 'org_second_mock' });
   const secondRunId = '20260706T010102Z-test-report-abcdef12';
@@ -696,7 +740,198 @@ await withTempDir(async (repo) => {
   assert.equal(secondManifest.oss_profile.bucket, 'second-org-v02-private-beta-example');
   assert.equal(
     secondManifest.publish.base_uri,
-    `oss://second-org-v02-private-beta-example/axis/v0.2/orgs/org_second_mock/packages/demo-project/${secondRunId}/`,
+    `oss://second-org-v02-private-beta-example/axis/v0.2/orgs/org_second_mock/projects/demo-project/packages/${secondRunId}/`,
+  );
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  await writeProjectKnowledgeDocs(repo);
+  const runId = '20260711T020202Z-project-knowledge-abcdef12';
+
+  const { stdout } = await run(['project-knowledge-capture', '--repo', repo, '--run-id', runId]);
+  const result = JSON.parse(stdout);
+  assert.equal(result.ok, true);
+  assert.equal(result.asset_type, 'project_knowledge_snapshot');
+  assert.equal(result.package_dir, `.axis/outbox/v0.2/org_axis_tools/demo-project/${runId}`);
+  assert.deepEqual(result.files.sort(), [
+    'documents/architecture/business.md',
+    'documents/architecture/technical.md',
+    'documents/business/domains/sales/detailed-design.md',
+    'documents/business/domains/sales/requirements/price-protection/detailed-design.md',
+    'documents/business/domains/support/detailed-design.md',
+    'documents/business/inventory.yaml',
+    'documents/gaps/doc-gap-report.md',
+    'documents/metadata.yaml',
+    'manifest.json',
+    'metadata.json',
+  ]);
+
+  const packageDir = path.join(repo, result.package_dir);
+  const metadata = await readJson(path.join(packageDir, 'metadata.json'));
+  const manifest = await readJson(path.join(packageDir, 'manifest.json'));
+  assert.equal(metadata.artifact.type, 'project_knowledge_snapshot');
+  assert.equal(metadata.document.doc_type, 'project_knowledge_snapshot');
+  assert.equal(metadata.document.language, 'zh-CN');
+  assert.equal(metadata.document.source_root, '.axis/docs/orgs/org_axis_tools/projects/demo-project');
+  assert.equal(metadata.index_refs.organization_index, 'axis/v0.2/orgs/org_axis_tools/index/projects.jsonl');
+  assert.equal(metadata.index_refs.project_document_path, 'axis/v0.2/orgs/org_axis_tools/projects/demo-project/');
+  assert.equal(
+    manifest.publish.base_uri,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/',
+  );
+  assert.equal(
+    await readFile(path.join(packageDir, 'documents', 'architecture', 'technical.md'), 'utf8'),
+    '# 技术架构\n\n## C4 系统上下文\n',
+  );
+  assert.equal(
+    await readFile(path.join(packageDir, 'documents', 'business', 'domains', 'sales', 'detailed-design.md'), 'utf8'),
+    '# 销售业务域详细设计\n\n## 设计结论\n',
+  );
+  assert.deepEqual(
+    metadata.document.documents
+      .filter((document) => document.doc_type === 'business_domain_detailed_design')
+      .map((document) => document.doc_id)
+      .sort(),
+    ['business_domain_detailed_design_sales', 'business_domain_detailed_design_support'],
+  );
+  assert.equal(
+    metadata.document.documents.find((document) => document.doc_type === 'requirement_detailed_design').doc_id,
+    'requirement_detailed_design_sales_price-protection',
+  );
+
+  const { stdout: publishStdout } = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--dry-run']);
+  const publishResult = JSON.parse(publishStdout);
+  assert.equal(publishResult.ok, true);
+  assert.equal(publishResult.asset_type, 'project_knowledge_snapshot');
+  assert.equal(
+    publishResult.target_prefix,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/',
+  );
+  assert.equal(
+    publishResult.files.find((file) => file.path === 'documents/business/domains/sales/detailed-design.md').target_uri,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/business/domains/sales/detailed-design.md',
+  );
+  assert.equal(
+    publishResult.files.find(
+      (file) => file.path === 'documents/business/domains/sales/requirements/price-protection/detailed-design.md',
+    ).target_uri,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/business/domains/sales/requirements/price-protection/detailed-design.md',
+  );
+  assert.equal(
+    publishResult.files.find((file) => file.path === 'metadata.json').target_uri,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/_sync/metadata.json',
+  );
+  assert.equal(
+    publishResult.files.find((file) => file.path === 'manifest.json').target_uri,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/_sync/manifest.json',
+  );
+  assert.equal(publishResult.upload_order.at(-1).path, 'manifest.json');
+
+  const mockDir = path.join(repo, 'mock-project-docs-oss');
+  const uploadEnv = {
+    AXIS_OSS_MOCK_DIR: mockDir,
+    ALIYUN_OSS_ENDPOINT: 'https://oss-example-endpoint.invalid',
+    ALIYUN_OSS_REGION: 'oss-cn-hangzhou',
+    ALIYUN_OSS_ACCESS_KEY_ID: 'LTAI_TEST_ACCESS_KEY_ID',
+    ALIYUN_OSS_ACCESS_KEY_SECRET: 'project-doc-sync-secret',
+  };
+  const { stdout: firstUploadStdout } = await run(['oss-publish', '--repo', repo, '--run-id', runId], { env: uploadEnv });
+  const firstUpload = JSON.parse(firstUploadStdout);
+  assert.equal(firstUpload.publish.status, 'published');
+
+  const remoteProjectRoot = path.join(
+    mockDir,
+    'axis-v02-private-beta-example',
+    'axis',
+    'v0.2',
+    'orgs',
+    'org_axis_tools',
+    'projects',
+    'demo-project',
+  );
+  assert.equal(existsSync(path.join(remoteProjectRoot, 'business', 'domains', 'sales', 'detailed-design.md')), true);
+  assert.equal(existsSync(path.join(remoteProjectRoot, '_sync', 'manifest.json')), true);
+
+  const sourceDetailedDesign = path.join(
+    repo,
+    '.axis',
+    'docs',
+    'orgs',
+    'org_axis_tools',
+    'projects',
+    'demo-project',
+    'business',
+    'domains',
+    'sales',
+    'detailed-design.md',
+  );
+  await writeFile(sourceDetailedDesign, '# 销售业务域详细设计\n\n## 设计结论\n\n同步修订版。\n', 'utf8');
+  const secondRunId = '20260711T030303Z-project-knowledge-abcdef34';
+  await run(['project-knowledge-capture', '--repo', repo, '--run-id', secondRunId]);
+  const { stdout: secondUploadStdout } = await run(
+    ['oss-publish', '--repo', repo, '--run-id', secondRunId],
+    { env: uploadEnv },
+  );
+  const secondUpload = JSON.parse(secondUploadStdout);
+  assert.equal(
+    secondUpload.files.find((file) => file.path === 'documents/business/domains/sales/detailed-design.md').status,
+    'updated',
+  );
+  assert.equal(
+    await readFile(path.join(remoteProjectRoot, 'business', 'domains', 'sales', 'detailed-design.md'), 'utf8'),
+    '# 销售业务域详细设计\n\n## 设计结论\n\n同步修订版。\n',
+  );
+  const remoteManifest = await readJson(path.join(remoteProjectRoot, '_sync', 'manifest.json'));
+  assert.equal(remoteManifest.run.run_id, secondRunId);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  await writeProjectKnowledgeDocs(repo);
+  const { stdout } = await run(['project-knowledge-capture', '--repo', repo]);
+  const result = JSON.parse(stdout);
+  const generatedRunId = path.basename(result.package_dir);
+  assert.match(generatedRunId, /^\d{8}T\d{6}Z-project-knowledge-snapshot-[a-f0-9]{8}$/);
+  const { stdout: dryRunStdout } = await run([
+    'oss-publish',
+    '--repo',
+    repo,
+    '--run-id',
+    generatedRunId,
+    '--dry-run',
+  ]);
+  assert.equal(JSON.parse(dryRunStdout).ok, true);
+});
+
+await withTempDir(async (repo) => {
+  await mkdir(repo, { recursive: true });
+  await writeV02Registry(repo);
+  await writeV02Config(repo);
+  await writeProjectKnowledgeDocs(repo);
+  await rm(
+    path.join(
+      repo,
+      '.axis',
+      'docs',
+      'orgs',
+      'org_axis_tools',
+      'projects',
+      'demo-project',
+      'business',
+      'domains',
+      'support',
+      'detailed-design.md',
+    ),
+  );
+
+  await assert.rejects(
+    run(['project-knowledge-capture', '--repo', repo, '--run-id', '20260711T040404Z-project-knowledge-abcdef56']),
+    /project knowledge domain detailed design missing: support/,
   );
 });
 
@@ -799,8 +1034,9 @@ await withTempDir(async (repo) => {
       'v0.2',
       'orgs',
       'org_axis_tools',
-      'packages',
+      'projects',
       'demo-project',
+      'packages',
       runId,
       'manifest.json',
     )),

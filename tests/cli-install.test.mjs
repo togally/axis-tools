@@ -58,7 +58,8 @@ assert.equal(packageJson.bin['axis-tools'], './dist/cli.js');
     `${'or'}${'bit'}`,
   ].join('|'));
   assert.match(stdout, /axis-tools/);
-  assert.match(stdout, /install \[--agent <codex\|claude-code\|cc\|all>\] \[--dry-run\] \[--force\]/);
+  assert.match(stdout, /install \[--agent <codex\|claude-code\|cc\|all>\] \[--skill <skill-name>\] \[--dry-run\] \[--force\]/);
+  assert.doesNotMatch(stdout, /docs-observatory --repo <path>/);
   assert.doesNotMatch(stdout, removedAliasPattern);
 }
 
@@ -82,6 +83,40 @@ await withTempDir(async (home) => {
   assert.equal(await readFile(path.join(dashboard, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-ali-dashboard')), true);
   assert.equal(await readFile(path.join(dashboard, 'references', 'aliyun-sls-drilldown.md'), 'utf8').then((text) => text.includes('SLS Drilldown')), true);
   assert.equal(await readFile(path.join(dashboard, 'scripts', 'validate_dashboard_json.py'), 'utf8').then((text) => text.includes('validate_logstore_drilldowns')), true);
+});
+
+await withTempDir(async (home) => {
+  const codexHome = path.join(home, '.codex');
+  const { stdout } = await run([
+    'install',
+    '--agent',
+    'codex',
+    '--skill',
+    'axis-business-domain-doc',
+    '--skill',
+    'axis-project-knowledge-bootstrap',
+  ], {
+    env: {
+      HOME: home,
+      USERPROFILE: home,
+      CODEX_HOME: codexHome,
+    },
+  });
+  const result = JSON.parse(stdout);
+  assert.deepEqual(
+    result.installed.map((item) => item.skill).sort(),
+    ['axis-business-domain-doc', 'axis-project-knowledge-bootstrap'],
+  );
+  await assert.rejects(
+    () => readFile(path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md'), 'utf8'),
+    /ENOENT/,
+  );
+  await assert.rejects(
+    () => run(['install', '--agent', 'codex', '--skill', 'axis-not-packaged'], {
+      env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome },
+    }),
+    /Unknown packaged skill: axis-not-packaged/,
+  );
 });
 
 await withTempDir(async (home) => {

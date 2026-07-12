@@ -17,6 +17,7 @@ const skillNames = {
     projectInit: 'axis-project-init',
     codingCapture: 'axis-coding-capture',
     testReport: 'axis-test-report',
+    projectKnowledgeBootstrap: 'axis-project-knowledge-bootstrap',
     ossPublish: 'axis-oss-publish',
 };
 const protocolVersions = {
@@ -64,12 +65,13 @@ function printUsage() {
     console.log(`axis-tools
 
 Commands:
-  install [--agent <codex|claude-code|cc|all>] [--dry-run] [--force] [--backup-dir <path>] [--rollback <backup-dir-or-manifest>]
-  inventory [--agent <codex|claude-code|cc|all>]
+  install [--agent <codex|claude-code|cc|all>] [--skill <skill-name>] [--dry-run] [--force] [--backup-dir <path>] [--rollback <backup-dir-or-manifest>]
+  inventory [--agent <codex|claude-code|cc|all>] [--skill <skill-name>]
   project-init --repo <path> --project-slug <slug> --display-name <name> [--force]
   validate-config --repo <path>
   coding-capture --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
   test-report --repo <path> --title <title> --summary <summary> --status <status> --report <markdown> [--experience <markdown>] [--tag <tag>] [--run-id <run-id>]
+  project-knowledge-capture --repo <path> [--run-id <run-id>] [--language <zh-CN>]
   oss-publish --repo <path> --run-id <run-id> [--dry-run | --local-only]
 
 Skill helper scripts:
@@ -587,7 +589,7 @@ function buildRunId(assetType) {
     }
     const now = new Date();
     const timestamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
-    return `${timestamp}-${assetType.replace('_', '-')}-${randomBytes(4).toString('hex')}`;
+    return `${timestamp}-${assetType.replaceAll('_', '-')}-${randomBytes(4).toString('hex')}`;
 }
 async function readTextArg(flag, fileFlag, fallback = null) {
     const filePath = getArg(fileFlag);
@@ -623,6 +625,260 @@ function defaultExperience(title) {
         'Reviewed; no credentials or private URLs are included.',
         '',
     ].join('\n');
+}
+function projectKnowledgeSourceRoot(repo, config) {
+    if (config.contract_version !== '0.2' || !config.organization) {
+        throw new Error('project-knowledge-capture requires a resolved v0.2 organization configuration');
+    }
+    return path.join(repo, '.axis', 'docs', 'orgs', config.organization.id, 'projects', config.project.slug);
+}
+async function projectKnowledgeSourceFiles(sourceRoot) {
+    const inventoryPath = path.join(sourceRoot, 'business', 'inventory.yaml');
+    if (!existsSync(inventoryPath)) {
+        throw new Error('project knowledge document missing: business/inventory.yaml');
+    }
+    const inventory = await readFile(inventoryPath, 'utf8');
+    const businessIds = [...inventory.matchAll(/\bbusiness_id:\s*([a-z][a-z0-9_]*)\b/g)]
+        .map((match) => match[1])
+        .filter((businessId) => businessId !== 'null');
+    const uniqueBusinessIds = [...new Set(businessIds)];
+    if (uniqueBusinessIds.length === 0) {
+        throw new Error('project knowledge inventory must contain at least one business_id');
+    }
+    if (uniqueBusinessIds.length !== businessIds.length) {
+        throw new Error('project knowledge inventory contains duplicate business_id values');
+    }
+    const domainDetailedDesigns = uniqueBusinessIds.map((businessId) => ({
+        source: `business/domains/${businessId}/detailed-design.md`,
+        target: `documents/business/domains/${businessId}/detailed-design.md`,
+        docType: 'business_domain_detailed_design',
+        docId: `business_domain_detailed_design_${businessId}`,
+        mediaType: 'text/markdown',
+    }));
+    for (const domainDocument of domainDetailedDesigns) {
+        if (!existsSync(path.join(sourceRoot, domainDocument.source))) {
+            const businessId = domainDocument.docId.replace('business_domain_detailed_design_', '');
+            throw new Error(`project knowledge domain detailed design missing: ${businessId}`);
+        }
+    }
+    const requirementDetailedDesigns = [];
+    for (const businessId of uniqueBusinessIds) {
+        const requirementsRoot = path.join(sourceRoot, 'business', 'domains', businessId, 'requirements');
+        if (!existsSync(requirementsRoot))
+            continue;
+        const requirementDirectories = (await readdir(requirementsRoot, { withFileTypes: true }))
+            .filter((entry) => entry.isDirectory())
+            .sort((left, right) => left.name.localeCompare(right.name));
+        for (const requirementDirectory of requirementDirectories) {
+            const requirementId = requirementDirectory.name;
+            if (!/^[a-z0-9][a-z0-9-]*$/.test(requirementId)) {
+                throw new Error(`project knowledge requirement_id is invalid: ${businessId}/${requirementId}`);
+            }
+            const relativePath = `business/domains/${businessId}/requirements/${requirementId}/detailed-design.md`;
+            if (!existsSync(path.join(sourceRoot, relativePath))) {
+                throw new Error(`project knowledge requirement detailed design missing: ${businessId}/${requirementId}`);
+            }
+            requirementDetailedDesigns.push({
+                source: relativePath,
+                target: `documents/${relativePath}`,
+                docType: 'requirement_detailed_design',
+                docId: `requirement_detailed_design_${businessId}_${requirementId}`,
+                mediaType: 'text/markdown',
+            });
+        }
+    }
+    return [
+        {
+            source: 'metadata.yaml',
+            target: 'documents/metadata.yaml',
+            docType: 'project_knowledge_metadata',
+            mediaType: 'application/yaml',
+        },
+        {
+            source: 'architecture/technical.md',
+            target: 'documents/architecture/technical.md',
+            docType: 'project_technical_architecture',
+            mediaType: 'text/markdown',
+        },
+        {
+            source: 'architecture/business.md',
+            target: 'documents/architecture/business.md',
+            docType: 'project_business_architecture',
+            mediaType: 'text/markdown',
+        },
+        {
+            source: 'business/inventory.yaml',
+            target: 'documents/business/inventory.yaml',
+            docType: 'business_inventory',
+            mediaType: 'application/yaml',
+        },
+        ...domainDetailedDesigns,
+        ...requirementDetailedDesigns,
+        {
+            source: 'gaps/doc-gap-report.md',
+            target: 'documents/gaps/doc-gap-report.md',
+            docType: 'doc_gap_report',
+            mediaType: 'text/markdown',
+        },
+    ];
+}
+async function assertPublicSafeProjectKnowledgeSources(sourceRoot, sourceFiles) {
+    for (const sourceFile of sourceFiles) {
+        const sourcePath = path.join(sourceRoot, sourceFile.source);
+        if (!existsSync(sourcePath)) {
+            throw new Error(`project knowledge document missing: ${sourceFile.source}`);
+        }
+        const scan = redactSensitiveText(await readFile(sourcePath, 'utf8'));
+        if (scan.redactions > 0) {
+            throw new Error(`project knowledge document contains credential-like content: ${sourceFile.source}`);
+        }
+    }
+}
+async function projectKnowledgeCaptureCommand() {
+    const repo = repoArg();
+    const rawConfig = await readAxisConfig(repo);
+    const { errors, effectiveConfig: config } = await resolveAxisConfig(repo, rawConfig);
+    if (errors.length > 0)
+        throw new Error(errors.join('\n'));
+    if (!config)
+        throw new Error('Unable to resolve Axis config');
+    if (config.contract_version !== '0.2') {
+        throw new Error('project-knowledge-capture requires contract_version: "0.2"');
+    }
+    const language = getArg('--language') ?? 'zh-CN';
+    if (language !== 'zh-CN') {
+        throw new Error('--language currently supports only zh-CN');
+    }
+    const runId = buildRunId('project_knowledge_snapshot');
+    const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
+    const sourceRoot = projectKnowledgeSourceRoot(repo, config);
+    const sourceFiles = await projectKnowledgeSourceFiles(sourceRoot);
+    await assertPublicSafeProjectKnowledgeSources(sourceRoot, sourceFiles);
+    const packageDir = packageDirFor(repo, config, runId);
+    await rm(packageDir, { recursive: true, force: true });
+    await mkdir(packageDir, { recursive: true });
+    for (const sourceFile of sourceFiles) {
+        const targetPath = path.join(packageDir, sourceFile.target);
+        await mkdir(path.dirname(targetPath), { recursive: true });
+        await cp(path.join(sourceRoot, sourceFile.source), targetPath);
+    }
+    const organization = organizationSnapshot(config);
+    const project = projectSnapshot(config);
+    const ossProfile = ossProfileSnapshot(config);
+    const git = await gitInfo(repo);
+    const publicSafetyValidation = {
+        status: 'passed',
+        validators: [...publicSafetyValidators, 'project_knowledge_source_scan'],
+        findings_count: 0,
+        validated_at: createdAt,
+        validated_by: { role: 'producing_skill' },
+    };
+    const documentRefs = await Promise.all(sourceFiles.map(async (sourceFile) => {
+        const entry = await fileEntry(packageDir, 'document', sourceFile.target, sourceFile.mediaType);
+        return {
+            doc_id: sourceFile.docId ?? sourceFile.docType,
+            doc_type: sourceFile.docType,
+            status: 'review',
+            revision: 1,
+            source_path: sourceFile.target,
+            content_sha256: entry.sha256,
+        };
+    }));
+    const metadata = {
+        schema: 'axis.package.metadata',
+        schema_version: config.contract_version,
+        title: `${config.project.display_name} 项目知识快照`,
+        summary: '项目知识启动文档的可发布快照。',
+        tags: ['project-knowledge', language.toLowerCase()],
+        organization,
+        project,
+        source_evidence: {
+            repo_ref: path.basename(repo),
+            commit: git.commit,
+            run_id: runId,
+        },
+        index_refs: {
+            organization_index: `${normalizeOssPrefix(config.oss.prefix)}/orgs/${organization?.id}/index/projects.jsonl`,
+            project_document_path: projectDocumentsOssPath(config),
+        },
+        artifact: {
+            type: 'project_knowledge_snapshot',
+            status: 'passed',
+            started_at: createdAt,
+            finished_at: createdAt,
+        },
+        skill: {
+            name: skillNames.projectKnowledgeBootstrap,
+            responsibility: 'Package the reviewed project knowledge source documents for explicit OSS publishing.',
+        },
+        public_safety: {
+            reviewed: true,
+            contains_credentials: false,
+            contains_private_urls: false,
+            validation: publicSafetyValidation,
+            redaction_notes: 'Credential-like content is rejected before the snapshot is created.',
+        },
+        document: {
+            doc_id: `project_knowledge_snapshot_${runId.replace(/[^A-Za-z0-9]+/g, '_')}`,
+            doc_type: 'project_knowledge_snapshot',
+            status: 'review',
+            revision: 1,
+            language,
+            source_root: relativeToRepo(repo, sourceRoot),
+            documents: documentRefs,
+        },
+    };
+    await writeJsonFile(path.join(packageDir, 'metadata.json'), metadata);
+    const documentEntries = await Promise.all(sourceFiles.map((sourceFile) => (fileEntry(packageDir, 'document', sourceFile.target, sourceFile.mediaType))));
+    const manifest = {
+        schema: 'axis.package.manifest',
+        schema_version: config.contract_version,
+        package_id: packageIdFor(config, runId),
+        created_at: createdAt,
+        organization,
+        project,
+        oss_profile: ossProfile,
+        producer: { skill: skillNames.projectKnowledgeBootstrap, agent: 'codex' },
+        run: { run_id: runId, git },
+        release: config.release,
+        files: [
+            await fileEntry(packageDir, 'metadata', 'metadata.json', 'application/json'),
+            ...documentEntries,
+            {
+                kind: 'manifest',
+                path: 'manifest.json',
+                media_type: 'application/json',
+                sha256: '0'.repeat(64),
+                bytes: 0,
+            },
+        ],
+        publish: {
+            provider: 'aliyun-oss',
+            status: 'local_ready',
+            bucket: config.oss.bucket,
+            prefix: config.oss.prefix,
+            base_uri: projectDocumentsBaseUri(config),
+        },
+        protocols: protocolVersions,
+        document_refs: documentRefs,
+        skill_refs: [{
+                skill_id: skillNames.projectKnowledgeBootstrap,
+                canonical_family: 'project_knowledge',
+                status: 'active',
+            }],
+        tool_refs: [],
+        public_safety_validation: publicSafetyValidation,
+    };
+    const manifestPath = path.join(packageDir, 'manifest.json');
+    await writeJsonFile(manifestPath, manifest);
+    manifest.files[manifest.files.length - 1] = await fileEntry(packageDir, 'manifest', 'manifest.json', 'application/json');
+    await writeJsonFile(manifestPath, manifest);
+    console.log(JSON.stringify({
+        ok: true,
+        asset_type: 'project_knowledge_snapshot',
+        package_dir: relativeToRepo(repo, packageDir),
+        files: manifest.files.map((file) => file.path),
+    }, null, 2));
 }
 async function gitValue(repo, args, fallback) {
     try {
@@ -660,12 +916,23 @@ function packageIdFor(config, runId) {
 }
 function ossPackagePath(config, runId) {
     if (config.contract_version === '0.2') {
-        return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization?.id}/packages/${config.project.slug}/${runId}/`;
+        if (!config.organization?.id)
+            throw new Error('organization.id is required for v0.2 OSS package path');
+        return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization.id}/projects/${config.project.slug}/packages/${runId}/`;
     }
     return `${normalizeOssPrefix(config.oss.prefix)}/${config.project.slug}/${runId}/`;
 }
+function projectDocumentsOssPath(config) {
+    if (config.contract_version !== '0.2' || !config.organization?.id) {
+        throw new Error('project document sync requires contract_version "0.2" and organization.id');
+    }
+    return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization.id}/projects/${config.project.slug}/`;
+}
 function baseUriFor(config, runId) {
     return `oss://${config.oss.bucket}/${ossPackagePath(config, runId)}`;
+}
+function projectDocumentsBaseUri(config) {
+    return `oss://${config.oss.bucket}/${projectDocumentsOssPath(config)}`;
 }
 function organizationSnapshot(config) {
     if (config.contract_version !== '0.2')
@@ -785,7 +1052,7 @@ async function writePackageCommand(assetType) {
                 run_id: runId,
             },
             index_refs: {
-                organization_index: `${normalizeOssPrefix(config.oss.prefix)}/orgs/${organization?.id}/index/packages.jsonl`,
+                organization_index: `${normalizeOssPrefix(config.oss.prefix)}/orgs/${organization?.id}/index/projects.jsonl`,
                 project_package_path: ossPackagePath(config, runId).replace(/\/$/, '/'),
             },
         } : {}),
@@ -1007,9 +1274,24 @@ function objectKeyFor(prefix, slug, runId, relativePath) {
 }
 function objectKeyForConfig(config, runId, relativePath) {
     if (config.contract_version === '0.2') {
-        return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization?.id}/packages/${config.project.slug}/${runId}/${relativePath}`;
+        return `${ossPackagePath(config, runId)}${relativePath}`;
     }
     return objectKeyFor(config.oss.prefix, config.project.slug, runId, relativePath);
+}
+function projectKnowledgeSyncedRelativePath(packagePath) {
+    if (packagePath.startsWith('documents/'))
+        return packagePath.slice('documents/'.length);
+    if (packagePath === 'metadata.json')
+        return '_sync/metadata.json';
+    if (packagePath === 'manifest.json')
+        return '_sync/manifest.json';
+    throw new Error(`unsupported project knowledge sync path: ${packagePath}`);
+}
+function objectKeyForPublish(config, runId, relativePath, assetType) {
+    if (assetType === 'project_knowledge_snapshot') {
+        return `${projectDocumentsOssPath(config)}${projectKnowledgeSyncedRelativePath(relativePath)}`;
+    }
+    return objectKeyForConfig(config, runId, relativePath);
 }
 function ossUri(bucket, objectKey) {
     return `oss://${bucket}/${objectKey}`;
@@ -1185,14 +1467,20 @@ async function validatePackageManifest(repo, packageDir, runId, config, localFil
             || manifest.oss_profile?.prefix !== expectedOssProfile?.prefix) {
             throw new Error('manifest organization/project/oss snapshot does not match resolved config');
         }
-        const expectedOrganizationIndex = `${normalizeOssPrefix(config.oss.prefix)}/orgs/${expectedOrganization?.id}/index/packages.jsonl`;
+        const isProjectKnowledgeSync = metadata.artifact?.type === 'project_knowledge_snapshot';
+        const expectedOrganizationIndex = `${normalizeOssPrefix(config.oss.prefix)}/orgs/${expectedOrganization?.id}/index/projects.jsonl`;
         if (metadata.source_evidence?.run_id !== runId) {
             throw new Error('metadata.source_evidence.run_id must match --run-id');
         }
         if (metadata.index_refs?.organization_index !== expectedOrganizationIndex) {
             throw new Error('metadata.index_refs.organization_index must match resolved OSS target');
         }
-        if (metadata.index_refs?.project_package_path !== ossPackagePath(config, runId)) {
+        if (isProjectKnowledgeSync) {
+            if (metadata.index_refs?.project_document_path !== projectDocumentsOssPath(config)) {
+                throw new Error('metadata.index_refs.project_document_path must match resolved OSS target');
+            }
+        }
+        else if (metadata.index_refs?.project_package_path !== ossPackagePath(config, runId)) {
             throw new Error('metadata.index_refs.project_package_path must match resolved OSS target');
         }
     }
@@ -1212,7 +1500,9 @@ async function validatePackageManifest(repo, packageDir, runId, config, localFil
         throw new Error('manifest.publish.bucket must match resolved config');
     if (manifest.publish.prefix !== config.oss.prefix)
         throw new Error('manifest.publish.prefix must match resolved config');
-    const expectedBaseUri = baseUriFor(config, runId);
+    const expectedBaseUri = metadata.artifact?.type === 'project_knowledge_snapshot'
+        ? projectDocumentsBaseUri(config)
+        : baseUriFor(config, runId);
     if (manifest.publish.base_uri !== expectedBaseUri)
         throw new Error('manifest.publish.base_uri does not match configured OSS target');
     if (!Array.isArray(manifest.files) || manifest.files.length === 0)
@@ -1389,14 +1679,14 @@ function mediaTypeForPath(filePath, fallback) {
         return 'text/markdown';
     return 'application/octet-stream';
 }
-async function buildPublishFiles(packageDir, manifest, config, runId) {
+async function buildPublishFiles(packageDir, manifest, config, runId, assetType) {
     const bucket = config.oss.bucket;
     const files = [];
     for (const entry of manifest.files ?? []) {
         const absolutePath = path.join(packageDir, entry.path);
         const content = await readFile(absolutePath);
         const stats = await stat(absolutePath);
-        const objectKey = objectKeyForConfig(config, runId, entry.path);
+        const objectKey = objectKeyForPublish(config, runId, entry.path, assetType);
         files.push({
             path: entry.path,
             absolutePath,
@@ -1415,13 +1705,17 @@ async function buildPublishFiles(packageDir, manifest, config, runId) {
         return left.path.localeCompare(right.path);
     });
 }
-async function uploadPublishFiles(adapter, files) {
+async function uploadPublishFiles(adapter, files, allowOverwrite) {
     const uploaded = [];
     for (const file of files) {
         const existing = await adapter.headObject(file.object_key);
         if (existing) {
             if (existing.sha256 !== file.sha256) {
-                throw new Error(`remote object differs: ${file.object_key}`);
+                if (!allowOverwrite)
+                    throw new Error(`remote object differs: ${file.object_key}`);
+                await adapter.putObject(file.object_key, file.absolutePath, { sha256: file.sha256 });
+                uploaded.push({ ...file, status: 'updated' });
+                continue;
             }
             uploaded.push({ ...file, status: 'already_present' });
             continue;
@@ -1499,7 +1793,9 @@ async function ossPublishCommand() {
     if (mode !== 'dry_run') {
         await persistManifest(packageDir, manifest, manifest.publish?.status);
     }
-    const plannedFiles = await buildPublishFiles(packageDir, manifest, config, runId);
+    const assetType = metadata.artifact?.type;
+    const projectDocumentSync = assetType === 'project_knowledge_snapshot';
+    const plannedFiles = await buildPublishFiles(packageDir, manifest, config, runId, assetType);
     if (mode === 'dry_run' || mode === 'local_only') {
         console.log(JSON.stringify(publishSummary(mode, false, metadata, manifest, plannedFiles, redactions), null, 2));
         return;
@@ -1508,18 +1804,18 @@ async function ossPublishCommand() {
     const adapter = storageAdapter(config, credentials);
     try {
         await persistManifest(packageDir, manifest, 'uploading');
-        const uploadFiles = await buildPublishFiles(packageDir, manifest, config, runId);
+        const uploadFiles = await buildPublishFiles(packageDir, manifest, config, runId, assetType);
         const manifestUploadFile = uploadFiles.find((file) => file.path === 'manifest.json');
         if (!manifestUploadFile)
             throw new Error('manifest.json is required');
         const contentUploadFiles = uploadFiles.filter((file) => file.path !== 'manifest.json');
-        const uploadedFiles = await uploadPublishFiles(adapter, contentUploadFiles);
+        const uploadedFiles = await uploadPublishFiles(adapter, contentUploadFiles, projectDocumentSync);
         await persistManifest(packageDir, manifest, 'published');
-        const finalFiles = await buildPublishFiles(packageDir, manifest, config, runId);
+        const finalFiles = await buildPublishFiles(packageDir, manifest, config, runId, assetType);
         const finalManifestUploadFile = finalFiles.find((file) => file.path === 'manifest.json');
         if (!finalManifestUploadFile)
             throw new Error('manifest.json is required');
-        const manifestUploadedFiles = await uploadPublishFiles(adapter, [finalManifestUploadFile]);
+        const manifestUploadedFiles = await uploadPublishFiles(adapter, [finalManifestUploadFile], projectDocumentSync);
         const statuses = new Map([...uploadedFiles, ...manifestUploadedFiles].map((file) => [file.path, file.status]));
         console.log(JSON.stringify(publishSummary(mode, true, metadata, manifest, finalFiles.map((file) => ({ ...file, status: statuses.get(file.path) ?? 'uploaded' })), redactions), null, 2));
     }
@@ -1767,11 +2063,18 @@ async function copySkillBundle(skillName, sourceDir, targetDir, inventory, backu
     }
     return 'copied';
 }
-async function buildInstallInventory(agent, force) {
-    const names = await packagedSkillNames();
-    if (names.length === 0) {
+async function buildInstallInventory(agent, force, requestedSkills = []) {
+    const packagedNames = await packagedSkillNames();
+    if (packagedNames.length === 0) {
         throw new Error(`No packaged skills found under ${skillsRoot()}`);
     }
+    const requestedNames = [...new Set(requestedSkills)];
+    for (const requestedName of requestedNames) {
+        if (!packagedNames.includes(requestedName)) {
+            throw new Error(`Unknown packaged skill: ${requestedName}`);
+        }
+    }
+    const names = requestedNames.length > 0 ? requestedNames.sort() : packagedNames;
     const inventory = [];
     for (const skillName of names) {
         const source = path.join(skillsRoot(), skillName);
@@ -1791,8 +2094,8 @@ function dryRunStatusFor(action) {
         return 'blocked';
     return 'would_copy';
 }
-async function installPackagedSkills(agent, force, dryRun) {
-    const inventory = await buildInstallInventory(agent, force);
+async function installPackagedSkills(agent, force, dryRun, requestedSkills = []) {
+    const inventory = await buildInstallInventory(agent, force, requestedSkills);
     if (dryRun) {
         return {
             inventory,
@@ -1839,13 +2142,15 @@ async function installCommand() {
     const agent = parseInstallAgentArg(getArg('--agent'));
     const dryRun = hasFlag('--dry-run');
     const force = hasFlag('--force');
-    const result = await installPackagedSkills(agent, force, dryRun);
-    console.log(JSON.stringify({ ok: true, agent, dry_run: dryRun, force, ...result }, null, 2));
+    const requestedSkills = getArgs('--skill');
+    const result = await installPackagedSkills(agent, force, dryRun, requestedSkills);
+    console.log(JSON.stringify({ ok: true, agent, skills: requestedSkills, dry_run: dryRun, force, ...result }, null, 2));
 }
 async function inventoryCommand() {
     const agent = parseInstallAgentArg(getArg('--agent'));
-    const inventory = await buildInstallInventory(agent, hasFlag('--force'));
-    console.log(JSON.stringify({ ok: true, agent, inventory }, null, 2));
+    const requestedSkills = getArgs('--skill');
+    const inventory = await buildInstallInventory(agent, hasFlag('--force'), requestedSkills);
+    console.log(JSON.stringify({ ok: true, agent, skills: requestedSkills, inventory }, null, 2));
 }
 async function rollbackCommand(backupDirOrManifest) {
     const manifestPath = backupManifestPath(backupDirOrManifest);
@@ -1906,6 +2211,10 @@ async function main() {
     }
     if (command === 'test-report') {
         await writePackageCommand('test_report');
+        return;
+    }
+    if (command === 'project-knowledge-capture') {
+        await projectKnowledgeCaptureCommand();
         return;
     }
     if (command === 'oss-publish') {

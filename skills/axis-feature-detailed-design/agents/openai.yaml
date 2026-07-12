@@ -1,0 +1,7 @@
+interface:
+  display_name: "Axis Feature Detailed Design"
+  short_description: "Design one confirmed feature / 为已确认的单功能生成详细设计"
+  default_prompt: "Use $axis-feature-detailed-design to resolve one feature from repository evidence, ask for confirmation when unresolved or ambiguous, and generate its Chinese detailed design only after confirmation."
+
+policy:
+  allow_implicit_invocation: true

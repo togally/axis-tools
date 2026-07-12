@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-document-review"
+  short_description: "Start Axis document review / 启动 Axis 文档评审"
+  default_prompt: "Use $axis-document-review to inspect the local app, ask once before pulling when it is missing, then start and open the review page."
+
+policy:
+  allow_implicit_invocation: true

@@ -1,7 +1,7 @@
 interface:
-  display_name: "Project Init"
-  short_description: "Initialize v0.1 package config / 初始化 v0.1 包配置"
-  default_prompt: "Use $axis-project-init to initialize Axis v0.1 project config and capture the local outbox handoff."
+  display_name: "Axis Project Init"
+  short_description: "Configure v0.2 once / 一次确认完成 v0.2 配置"
+  default_prompt: "Use $axis-project-init to inspect an Axis v0.2 project configuration, present one complete confirmation bundle, and apply only after one consolidated user confirmation."
 
 policy:
   allow_implicit_invocation: true
