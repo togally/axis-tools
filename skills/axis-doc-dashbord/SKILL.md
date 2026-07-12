@@ -15,7 +15,7 @@ description: Use when a user wants to start and open the local Axis document das
 
 ## Defaults
 
-- 应用目录：`${AXIS_DOC_DASHBORD_DIR:-~/axis-document-review}`。
+- 应用目录：`${AXIS_DOC_DASHBORD_DIR:-~/Documents/axis/axis-document-review}`。默认复用同一台电脑上的共享应用目录；只有显式设置环境变量时才改用其他位置。
 - 项目目录：用户指定的 Axis 项目仓库；未指定时使用当前工作目录。
 - 地址：`http://127.0.0.1:4177`。
 - 数据源：`all`，即本地文档与项目配置声明的 OSS；凭据只留在本地服务进程。
@@ -23,10 +23,10 @@ description: Use when a user wants to start and open the local Axis document das
 脚本路径：
 
 ```bash
-python3 <skill-dir>/scripts/axis_doc_dashbord.py status --target "$AXIS_DOC_DASHBORD_DIR"
+python3 <skill-dir>/scripts/axis_doc_dashbord.py status
 ```
 
-若环境变量未设置，将 `--target` 替换为 `~/axis-document-review`。
+脚本未传 `--target` 时使用 `~/Documents/axis/axis-document-review`；如已设置 `AXIS_DOC_DASHBORD_DIR`，则优先使用该环境变量。
 
 ## Missing Repository Confirmation Gate
 
@@ -43,7 +43,7 @@ python3 <skill-dir>/scripts/axis_doc_dashbord.py status --target "$AXIS_DOC_DASH
 
 ```bash
 python3 <skill-dir>/scripts/axis_doc_dashbord.py clone \
-  --target ~/axis-document-review \
+  --target ~/Documents/axis/axis-document-review \
   --repo-url https://github.com/togally/axis-document-review.git
 ```
 
@@ -53,7 +53,7 @@ python3 <skill-dir>/scripts/axis_doc_dashbord.py clone \
 
 ```bash
 python3 <skill-dir>/scripts/axis_doc_dashbord.py scaffold \
-  --target ~/axis-document-review
+  --target ~/Documents/axis/axis-document-review
 ```
 
 `scaffold` 只写入不存在或空的目标目录，不覆盖已有应用。
@@ -64,7 +64,7 @@ python3 <skill-dir>/scripts/axis_doc_dashbord.py scaffold \
 
 ```bash
 python3 <skill-dir>/scripts/axis_doc_dashbord.py start \
-  --target ~/axis-document-review \
+  --target ~/Documents/axis/axis-document-review \
   --project /path/to/axis-project \
   --source all \
   --host 127.0.0.1 \
