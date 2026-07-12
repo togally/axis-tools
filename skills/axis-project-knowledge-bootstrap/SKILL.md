@@ -114,7 +114,7 @@ public_safety:
   validation:
     status: passed
     validators:
-      - no_placeholder_scan
+      - no_unresolved_text_scan
       - credential_pattern_scan
       - private_url_scan
     findings_count: 0
@@ -276,6 +276,8 @@ Useful local checks:
 rg -n "placeholder|dummy|filler" .axis/docs
 rg -n "(token|api[_-]?key|secret|password)\\s*[:=]" .axis/docs
 ```
+
+Do not use the literal string `placeholder` in generated validator names when running the first scan above, because that scan intentionally treats the word itself as an unresolved-text finding. Use a name such as `no_unresolved_text_scan` instead.
 
 Add repository-specific YAML parsing or test commands when available.
 
