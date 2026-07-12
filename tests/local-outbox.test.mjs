@@ -193,10 +193,10 @@ async function writeV02Config(repo, options = {}) {
     '  provider: aliyun-oss',
     `  profile: ${profile}`,
     'skills:',
-    '  project_init: axis-project-init',
-    '  coding_capture: axis-coding-capture',
+    '  project_init: axis-doc-project-init',
+    '  coding_capture: axis-code-capture',
     '  test_report: axis-test-report',
-    '  oss_publish: axis-oss-publish',
+    '  oss_publish: axis-ops-oss-publish',
     '',
   ].join('\n'), 'utf8');
 }
@@ -546,9 +546,9 @@ await withTempDir(async (repo) => {
 
   const metadata = await readJson(path.join(repo, result.package_dir, 'metadata.json'));
   assert.equal(metadata.artifact.type, 'coding_capture');
-  assert.equal(metadata.skill.name, 'axis-coding-capture');
+  assert.equal(metadata.skill.name, 'axis-code-capture');
   assert.equal(metadata.document.doc_type, 'execution_report');
-  assert.equal(metadata.experience.related_skill, 'axis-coding-capture');
+  assert.equal(metadata.experience.related_skill, 'axis-code-capture');
   assert.equal(metadata.agent_execution.expected_outputs.experience_candidates.required, true);
 });
 
@@ -728,10 +728,10 @@ await withTempDir(async (repo) => {
     '  provider: aliyun-oss',
     '  profile: private_beta_main',
     'skills:',
-    '  project_init: axis-project-init',
-    '  coding_capture: axis-coding-capture',
+    '  project_init: axis-doc-project-init',
+    '  coding_capture: axis-code-capture',
     '  test_report: axis-test-report',
-    '  oss_publish: axis-oss-publish',
+    '  oss_publish: axis-ops-oss-publish',
     '',
   ].join('\n'), 'utf8');
 

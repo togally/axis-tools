@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-skill-create"
+  short_description: "Scan reusable skill candidates / 扫描可复用技能候选"
+  default_prompt: "Use $axis-skill-create to create or refactor one reusable Axis or Orbit skill, choose the correct repository and prefix, then validate it."
+
+policy:
+  allow_implicit_invocation: true

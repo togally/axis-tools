@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-test-side-effects"
+  short_description: "Test side-effecting actions / 测试有副作用的后端行为"
+  default_prompt: "Use $axis-test-side-effects to test this real side-effecting action."
+
+policy:
+  allow_implicit_invocation: true

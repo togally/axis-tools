@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
-const updateSkillsScript = path.resolve('scripts/axis-update-skills.mjs');
+const updateSkillsScript = path.resolve('scripts/axis-skill-update.mjs');
 const repoRoot = path.resolve('.');
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const manifest = JSON.parse(await readFile(new URL('../skills/manifest.json', import.meta.url), 'utf8'));
@@ -79,8 +79,8 @@ await withTempDir(async (home) => {
   assert.deepEqual(result.installed.map((item) => item.skill).sort(), packagedSkillNames);
   assert.equal(result.installed.every((item) => item.target.includes(path.join(home, '.codex', 'skills'))), true);
 
-  const dashboard = path.join(home, '.codex', 'skills', 'axis-ali-dashboard');
-  assert.equal(await readFile(path.join(dashboard, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-ali-dashboard')), true);
+  const dashboard = path.join(home, '.codex', 'skills', 'axis-ops-ali-dashboard');
+  assert.equal(await readFile(path.join(dashboard, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-ops-ali-dashboard')), true);
   assert.equal(await readFile(path.join(dashboard, 'references', 'aliyun-sls-drilldown.md'), 'utf8').then((text) => text.includes('SLS Drilldown')), true);
   assert.equal(await readFile(path.join(dashboard, 'scripts', 'validate_dashboard_json.py'), 'utf8').then((text) => text.includes('validate_logstore_drilldowns')), true);
 });
@@ -92,9 +92,9 @@ await withTempDir(async (home) => {
     '--agent',
     'codex',
     '--skill',
-    'axis-business-domain-doc',
+    'axis-doc-business-domain',
     '--skill',
-    'axis-project-knowledge-bootstrap',
+    'axis-doc-project-knowledge-bootstrap',
   ], {
     env: {
       HOME: home,
@@ -105,10 +105,10 @@ await withTempDir(async (home) => {
   const result = JSON.parse(stdout);
   assert.deepEqual(
     result.installed.map((item) => item.skill).sort(),
-    ['axis-business-domain-doc', 'axis-project-knowledge-bootstrap'],
+    ['axis-doc-business-domain', 'axis-doc-project-knowledge-bootstrap'],
   );
   await assert.rejects(
-    () => readFile(path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md'), 'utf8'),
+    () => readFile(path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md'), 'utf8'),
     /ENOENT/,
   );
   await assert.rejects(
@@ -137,7 +137,7 @@ await withTempDir(async (home) => {
   assert.equal(result.inventory.every((item) => item.action === 'copy'), true);
 
   await assert.rejects(
-    () => readFile(path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md'), 'utf8'),
+    () => readFile(path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md'), 'utf8'),
     /ENOENT/,
   );
 });
@@ -151,7 +151,7 @@ await withTempDir(async (home) => {
       CODEX_HOME: codexHome,
     },
   });
-  const dashboardSkill = path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md');
+  const dashboardSkill = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md');
   await writeFile(dashboardSkill, '# local edit\n', 'utf8');
 
   await assert.rejects(
@@ -177,7 +177,7 @@ await withTempDir(async (home) => {
       CODEX_HOME: codexHome,
     },
   });
-  const dashboardSkill = path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md');
+  const dashboardSkill = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md');
   await writeFile(dashboardSkill, '# local edit before forced update\n', 'utf8');
 
   await assert.rejects(
@@ -186,7 +186,7 @@ await withTempDir(async (home) => {
         HOME: home,
         USERPROFILE: home,
         CODEX_HOME: codexHome,
-        AXIS_INSTALL_FAIL_AFTER_BACKUP: 'axis-ali-dashboard',
+        AXIS_INSTALL_FAIL_AFTER_BACKUP: 'axis-ops-ali-dashboard',
       },
     }),
     /Simulated install failure after backup/,
@@ -204,7 +204,7 @@ await withTempDir(async (home) => {
       CODEX_HOME: codexHome,
     },
   });
-  const dashboardSkill = path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md');
+  const dashboardSkill = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md');
   await writeFile(dashboardSkill, '# local edit for rollback\n', 'utf8');
   const forced = await run(['install', '--agent', 'codex', '--force', '--backup-dir', backupDir], {
     env: {
@@ -215,7 +215,7 @@ await withTempDir(async (home) => {
   });
   const forcedResult = JSON.parse(forced.stdout);
   assert.equal(forcedResult.backup_dir, backupDir);
-  assert.equal(await readFile(dashboardSkill, 'utf8').then((text) => text.includes('axis-ali-dashboard')), true);
+  assert.equal(await readFile(dashboardSkill, 'utf8').then((text) => text.includes('axis-ops-ali-dashboard')), true);
 
   const rollback = await run(['install', '--rollback', backupDir], {
     env: {
@@ -249,7 +249,7 @@ await withTempDir(async (home) => {
 await withTempDir(async (home) => {
   const cleanRepo = path.join(home, 'clean-axis-tools');
   const codexHome = path.join(home, '.codex');
-  const dashboard = path.join(codexHome, 'skills', 'axis-ali-dashboard');
+  const dashboard = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard');
   await execFileAsync('git', ['clone', repoRoot, cleanRepo], { maxBuffer: 10 * 1024 * 1024 });
   await mkdir(dashboard, { recursive: true });
   await writeFile(path.join(dashboard, 'SKILL.md'), '# local edit\n', 'utf8');
@@ -284,7 +284,7 @@ await withTempDir(async (home) => {
     /dirty|local changes|working tree/i,
   );
   await assert.rejects(
-    () => readFile(path.join(codexHome, 'skills', 'axis-ali-dashboard', 'SKILL.md'), 'utf8'),
+    () => readFile(path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md'), 'utf8'),
     /ENOENT/,
   );
 });

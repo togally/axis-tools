@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-code-bugfix"
+  short_description: "Evidence-first bugfix workflow / 证据优先的缺陷修复流程"
+  default_prompt: "Use $axis-code-bugfix to fix the reported bug from evidence."
+
+policy:
+  allow_implicit_invocation: true

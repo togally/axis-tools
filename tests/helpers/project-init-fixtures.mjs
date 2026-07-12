@@ -79,10 +79,10 @@ export function v02Config({
     '  provider: aliyun-oss',
     `  profile: ${profile}`,
     'skills:',
-    '  project_init: axis-project-init',
-    '  coding_capture: axis-coding-capture',
+    '  project_init: axis-doc-project-init',
+    '  coding_capture: axis-code-capture',
     '  test_report: axis-test-report',
-    '  oss_publish: axis-oss-publish',
+    '  oss_publish: axis-ops-oss-publish',
     ...(local ? [local.trimEnd()] : []),
     '',
   ].join('\n');
