@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { access, readFile, readdir, stat } from 'node:fs/promises';
+import { userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -115,6 +116,8 @@ interface CandidateProfile {
 const latestVersion: '0.2' = '0.2';
 const defaultRegistryPath = '.axis/organizations.yml';
 const defaultOutboxDir = '.axis/outbox';
+const defaultOssBucket = 'ohw-jzw';
+const defaultOssPrefix = 'jasperWei';
 const defaultEnvironment = {
   endpoint_env: 'ALIYUN_OSS_ENDPOINT',
   region_env: 'ALIYUN_OSS_REGION',
@@ -421,6 +424,15 @@ function availableIdentifier(base: string, used: Set<string>): string {
   return `${base}_${suffix}`;
 }
 
+function defaultProfileName(environment: NodeJS.ProcessEnv): string {
+  const username = environment.USER
+    ?? environment.USERNAME
+    ?? environment.LOGNAME
+    ?? userInfo().username;
+  const normalizedUsername = username ? normalizeIdentifier(username) : 'user';
+  return `default_${normalizedUsername}`;
+}
+
 function registryValue(organization: Organization | null, profile: OssProfile | null, key: string): unknown {
   if (key.startsWith('organization.')) return organization?.[key.slice('organization.'.length)];
   if (key.startsWith('oss_profile.')) return profile?.[key.slice('oss_profile.'.length)];
@@ -555,6 +567,7 @@ function selectedProfile(organization: Organization | null, profileName: string 
 
 export async function inspectProjectInit(options: ProjectInitInspectionOptions): Promise<ProjectInitInspection> {
   const repo = await assertRepo(options.repo);
+  const runtimeEnvironment = options.environment ?? process.env;
   const main = await parseFile(repo, '.axis/config.yml', '.axis/config.yml');
   const local = await parseFile(repo, '.axis/config.local.yml', '.axis/config.local.yml');
   const sourceVersion = sourceVersionFor(main.value);
@@ -626,7 +639,7 @@ export async function inspectProjectInit(options: ProjectInitInspectionOptions):
   const selectedOrg = selectedOrganization(targetRegistry.value as Registry, recommendedOrganizationId);
   const usedProfileNames = new Set(selectedOrg ? collectionRecords<OssProfile>(selectedOrg.oss_profiles, 'name').map((item) => String(item.name)) : []);
   const recommendedProfileName = profileName
-    ?? (candidates.length === 1 ? String(candidates[0].profile.name) : availableIdentifier('private_beta_main', usedProfileNames));
+    ?? (candidates.length === 1 ? String(candidates[0].profile.name) : availableIdentifier(defaultProfileName(runtimeEnvironment), usedProfileNames));
   if (!organizationId && candidates.length !== 1) applyRecommendation(recommendations, 'organization.id', recommendedOrganizationId);
   if (!profileName && candidates.length !== 1) applyRecommendation(recommendations, 'oss_profile.name', recommendedProfileName);
   profileName ??= recommendedProfileName;
@@ -648,8 +661,8 @@ export async function inspectProjectInit(options: ProjectInitInspectionOptions):
   applyRecommendation(recommendations, 'organization.display_name', organization?.display_name ?? projectDisplayName);
   applyRecommendation(recommendations, 'organization.status', organization?.status ?? 'active');
   applyRecommendation(recommendations, 'oss_profile.provider', profile?.provider ?? 'aliyun-oss');
-  applyRecommendation(recommendations, 'oss_profile.bucket', profile?.bucket ?? getPath(migrated, 'oss_profile.bucket').value ?? 'axis-v02-private-beta-example');
-  applyRecommendation(recommendations, 'oss_profile.prefix', profile?.prefix ?? getPath(migrated, 'oss_profile.prefix').value ?? 'axis/v0.2');
+  applyRecommendation(recommendations, 'oss_profile.bucket', profile?.bucket ?? getPath(migrated, 'oss_profile.bucket').value ?? defaultOssBucket);
+  applyRecommendation(recommendations, 'oss_profile.prefix', profile?.prefix ?? getPath(migrated, 'oss_profile.prefix').value ?? defaultOssPrefix);
   for (const { key } of environmentFields) {
     applyRecommendation(recommendations, `oss_profile.${key}`, profile?.[key] ?? getPath(migrated, `oss_profile.${key}`).value ?? defaultEnvironment[key]);
   }
@@ -681,7 +694,7 @@ export async function inspectProjectInit(options: ProjectInitInspectionOptions):
         : typeof recommendations[`oss_profile.${key}`] === 'string'
           ? recommendations[`oss_profile.${key}`] as string
           : null;
-    return { field: key, name, required, present: Boolean(name && (options.environment ?? process.env)[name]) };
+    return { field: key, name, required, present: Boolean(name && runtimeEnvironment[name]) };
   });
 
   const files = [
