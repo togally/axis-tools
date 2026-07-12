@@ -39,6 +39,7 @@ async function run(args, options = {}) {
   const environment = {
     ...process.env,
     NO_COLOR: '1',
+    USER: 'axis-test-user',
   };
   for (const name of Object.values(defaultEnv)) {
     delete environment[name];
@@ -177,7 +178,7 @@ async function writeRecoveryJournal(repo, state, entries, transactionId = 'test-
     assert.deepEqual(result.selectors, {
       registry_path: '.axis/organizations.yml',
       organization_id: 'org_axis_doc_project_init_v02',
-      oss_profile: 'private_beta_main',
+      oss_profile: 'default_axis_test_user',
     });
     assert.equal(file(result, 'main_config').state, 'absent');
     assert.equal(file(result, 'main_config').sha256, null);
@@ -186,7 +187,9 @@ async function writeRecoveryJournal(repo, state, entries, transactionId = 'test-
     assert.equal(file(result, 'gitignore').state, 'absent');
     assert.equal(field(result, 'contract_version').mapped_value, '0.2');
     assert.equal(field(result, 'organization.status').recommendation, 'active');
-    assert.equal(field(result, 'oss_profile.name').recommendation, 'private_beta_main');
+    assert.equal(field(result, 'oss_profile.name').recommendation, 'default_axis_test_user');
+    assert.equal(field(result, 'oss_profile.bucket').recommendation, 'ohw-jzw');
+    assert.equal(field(result, 'oss_profile.prefix').recommendation, 'jasperWei');
   });
 }
 

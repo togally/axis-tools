@@ -12,7 +12,7 @@ release:
   gate: not_requested
 oss:
   provider: aliyun-oss
-  profile: private_beta_main
+  profile: default_jiazhiwei
 skills:
   project_init: axis-doc-project-init
   coding_capture: axis-code-capture

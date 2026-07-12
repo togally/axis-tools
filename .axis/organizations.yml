@@ -6,10 +6,10 @@ organizations:
     display_name: Axis Tools
     status: active
     oss_profiles:
-      - name: private_beta_main
+      - name: default_jiazhiwei
         provider: aliyun-oss
-        bucket: axis-v02-private-beta-example
-        prefix: axis/v0.2
+        bucket: ohw-jzw
+        prefix: jasperWei
         endpoint_env: ALIYUN_OSS_ENDPOINT
         region_env: ALIYUN_OSS_REGION
         access_key_id_env: ALIYUN_OSS_ACCESS_KEY_ID

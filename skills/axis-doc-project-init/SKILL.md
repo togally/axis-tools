@@ -39,7 +39,7 @@ confirmation_bundle:
   organization.registry: .axis/organizations.yml
   project.slug: example-project
   project.display_name: 示例项目
-  oss.profile: private_beta_main
+  oss.profile: default_<current-user>
   release.channel: private_beta
   release.gate: not_requested
   package.outbox_dir: .axis/outbox
@@ -78,7 +78,7 @@ Use a compact table:
 | Organization | `organization.registry` | `.axis/organizations.yml` | repository convention | keep/add/change |
 | Project | `project.slug` | `example-project` | repository evidence | keep/add/change |
 | Project | `project.display_name` | `示例项目` | package/README evidence | keep/add/change |
-| OSS | `oss.profile` | `private_beta_main` | selected organization | keep/add/change |
+| OSS | `oss.profile` | `default_<current-user>` | selected organization/default recommendation | keep/add/change |
 | Release | `release.channel` | `private_beta` | safe default | keep/add/change |
 | Release | `release.gate` | `not_requested` | safe default | keep/add/change |
 | Storage | `package.outbox_dir` | `.axis/outbox` | Axis convention | keep/add/change |
@@ -142,6 +142,7 @@ After a v0.2 capture command creates an outbox run, use `$axis-ops-oss-publish` 
 - `.axis/config.yml` contains `contract_version: "0.2"`, `organization.id`, `organization.registry`, `project.slug`, `project.display_name`, `oss.profile`, `package.outbox_dir`, `release.channel`, and `release.gate`.
 - The organization registry contains the selected organization, OSS profile, and project.
 - Default release is `private_beta` with `not_requested`; `public` requires `passed`.
+- For a new organization without a stored match, default OSS profile is `default_<current-user>`; the configured default bucket and prefix are `ohw-jzw` and `jasperWei`.
 - Default `document_language` is `zh-CN` unless the user explicitly selected another supported language.
 - `.axis/config.local.yml` and `.axis/outbox/` are ignored.
 - The conversation contains one complete confirmation summary and explicit approval before writes.
