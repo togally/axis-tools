@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-project-init"
-  short_description: "Configure v0.2 projects conversationally / 对话式配置 v0.2 项目"
-  default_prompt: "Use $axis-project-init to inspect, confirm, migrate, and apply Axis v0.2 project configuration for a target repository."
+  short_description: "Configure v0.2 once / 一次确认完成 v0.2 配置"
+  default_prompt: "Use $axis-project-init to inspect an Axis v0.2 project configuration, present one complete confirmation bundle, and apply only after one consolidated user confirmation."
 
 policy:
   allow_implicit_invocation: true

@@ -43,26 +43,31 @@ async function writePackagedSkill(repo, name = 'axis-demo-skill') {
 
 async function writeFakeAxisCli(repo) {
   await writeExecutable(path.join(repo, 'dist', 'cli.js'), `#!/usr/bin/env node
-import { cp, mkdir, readdir, rm } from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+const { cp, mkdir, readdir, rm } = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
 
 const args = process.argv.slice(2);
-if (args[0] !== 'install') throw new Error('expected install');
-const agent = args[args.indexOf('--agent') + 1] || 'codex';
-const repo = process.cwd();
-const home = os.homedir();
-const installed = [];
-for (const entry of await readdir(path.join(repo, 'skills'), { withFileTypes: true })) {
-  if (!entry.isDirectory()) continue;
-  const source = path.join(repo, 'skills', entry.name);
-  const target = path.join(home, agent === 'codex' ? '.codex' : '.claude', 'skills', entry.name);
-  await rm(target, { recursive: true, force: true });
-  await mkdir(path.dirname(target), { recursive: true });
-  await cp(source, target, { recursive: true });
-  installed.push({ skill: entry.name, target, status: 'copied' });
-}
-console.log(JSON.stringify({ ok: true, agent, installed }, null, 2));
+(async () => {
+  if (args[0] !== 'install') throw new Error('expected install');
+  const agent = args[args.indexOf('--agent') + 1] || 'codex';
+  const repo = process.cwd();
+  const home = os.homedir();
+  const installed = [];
+  for (const entry of await readdir(path.join(repo, 'skills'), { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const source = path.join(repo, 'skills', entry.name);
+    const target = path.join(home, agent === 'codex' ? '.codex' : '.claude', 'skills', entry.name);
+    await rm(target, { recursive: true, force: true });
+    await mkdir(path.dirname(target), { recursive: true });
+    await cp(source, target, { recursive: true });
+    installed.push({ skill: entry.name, target, status: 'copied' });
+  }
+  console.log(JSON.stringify({ ok: true, agent, installed }, null, 2));
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 `);
 }
 
@@ -267,6 +272,8 @@ const packagedSkillNames = [
   'axis-db-design-doc',
   'axis-development-doc',
   'axis-doc-drift-capture',
+  'axis-document-review',
+  'axis-feature-detailed-design',
   'axis-oss-publish',
   'axis-project-init',
   'axis-project-knowledge-bootstrap',
@@ -349,10 +356,43 @@ for (const skillName of v01CaptureSkills) {
 const projectInitBody = await readFile(path.join(repoRoot, 'skills', 'axis-project-init', 'SKILL.md'), 'utf8');
 assert.match(projectInitBody, /axis project-init/);
 assert.match(projectInitBody, /\.axis\/config\.yml/);
+const projectInitSkill = manifest.skills.find((skill) => skill.name === 'axis-project-init');
+assert.ok(projectInitSkill);
+assert.match(projectInitSkill.description, /v0\.2/);
+assert.match(projectInitSkill.description, /[\u3400-\u9FFF]/);
+for (const requiredText of [
+  'Batch Configuration Confirmation Gate',
+  'confirmation_bundle',
+  'single_confirmation',
+  'max_confirmation_rounds: 1',
+  'final_confirmation: true',
+  'Do not ask one field at a time',
+  'one compact batch',
+  'organization.id',
+  'organization.registry',
+  'project.slug',
+  'project.display_name',
+  'oss.profile',
+  'release.channel',
+  'release.gate',
+  'package.outbox_dir',
+  'document_language',
+  'required_env',
+  'present: true|false',
+]) {
+  assert.match(projectInitBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.doesNotMatch(projectInitBody, /Show every `fields\[\]` entry in order, one at a time/i);
 
 const projectKnowledgeBootstrap = manifest.skills.find((skill) => skill.name === 'axis-project-knowledge-bootstrap');
 assert.ok(projectKnowledgeBootstrap);
-assert.deepEqual(projectKnowledgeBootstrap.files.sort(), ['SKILL.md', 'agents/openai.yaml']);
+assert.deepEqual(projectKnowledgeBootstrap.files.sort(), [
+  'SKILL.md',
+  'agents/openai.yaml',
+  'references/business-domain-detailed-design-template.md',
+  'references/project-business-architecture-template.md',
+  'references/project-technical-architecture-template.md',
+]);
 assert.match(projectKnowledgeBootstrap.description, /^Use when/);
 assert.match(projectKnowledgeBootstrap.description, /[\u3400-\u9FFF]/);
 const projectKnowledgeBootstrapBody = await readFile(
@@ -374,6 +414,7 @@ for (const requiredText of [
   'docs',
   'project_technical_architecture',
   'project_business_architecture',
+  'business_domain_detailed_design',
   'business_inventory',
   'doc_gap_report',
   'business_id',
@@ -383,11 +424,57 @@ for (const requiredText of [
   'active / deprecated / prototype / external_only / unknown',
   'missing / draft / review / approved / low_confidence / stale / blocked / not_applicable',
   'generate_domain_docs / review_evidence / mark_not_applicable / refresh_stale_docs / manual_confirm',
+  'document_language',
+  'zh-CN',
+  'document_role_separation_check',
+  'project-knowledge-capture',
+  'projects/{project_slug}',
+  '_sync/manifest.json',
+  'ISO/IEC/IEEE 42010:2022',
+  'arc42',
+  'C4',
+  'ISO/IEC 25010:2023',
+  'GB/T 8567-2006',
+  'IEEE 1016-2009',
+  'architecture/technical.md',
+  'architecture/business.md',
+  'business/domains/{business_id}/detailed-design.md',
+  'one document per business_id',
+  'gaps/doc-gap-report.md',
+  'axis-feature-detailed-design',
 ]) {
   assert.match(projectKnowledgeBootstrapBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 assert.doesNotMatch(projectKnowledgeBootstrapBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(projectKnowledgeBootstrapBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+assert.doesNotMatch(projectKnowledgeBootstrapBody, /project_business_detailed_design|architecture\/business-detailed-design\.md/);
+const businessDomainDetailedDesignTemplate = await readFile(
+  path.join(
+    repoRoot,
+    'skills',
+    'axis-project-knowledge-bootstrap',
+    'references',
+    'business-domain-detailed-design-template.md',
+  ),
+  'utf8',
+);
+for (const requiredText of [
+  '业务域详细设计说明书',
+  '设计结论',
+  '业务架构追踪基线',
+  '业务流程编排',
+  '异常与补偿设计',
+  '角色职责与权限设计',
+  '业务对象与状态设计',
+  '业务规则决策表',
+  '业务能力到系统实现映射',
+  '验收与追踪矩阵',
+  '假设与缺失证据',
+]) {
+  assert.match(businessDomainDetailedDesignTemplate, new RegExp(requiredText));
+}
+assert.match(businessDomainDetailedDesignTemplate, /业务域边界|业务域标识|business_id/);
+assert.doesNotMatch(businessDomainDetailedDesignTemplate, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 
 const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');
 assert.ok(docDriftCapture);
@@ -449,8 +536,17 @@ for (const requiredText of [
   'business_inventory',
   'project_technical_architecture',
   'project_business_architecture',
-  'domain_business_spec',
-  'domain_technical_design',
+  'business_domain_detailed_design',
+  'business/domains/{business_id}/detailed-design.md',
+  'exactly one',
+  'scan_and_reconcile',
+  'requirement_design',
+  'requirement_detailed_design',
+  'business/domains/{business_id}/requirements/{requirement_id}/detailed-design.md',
+  'project_business_architecture',
+  'update the business architecture summary',
+  'zero_matches',
+  'multiple_matches',
   'business flow',
   'state model',
   'permissions',
@@ -469,11 +565,62 @@ for (const requiredText of [
   'conflict',
   'do not invent',
   'public-safe',
+  'axis-feature-detailed-design',
 ]) {
   assert.match(businessDomainDocBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
+assert.doesNotMatch(businessDomainDocBody, /domain_business_spec|domain_technical_design|business-spec\.md|technical-design\.md/);
 assert.doesNotMatch(businessDomainDocBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(businessDomainDocBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+
+const featureDetailedDesign = manifest.skills.find((skill) => skill.name === 'axis-feature-detailed-design');
+assert.ok(featureDetailedDesign);
+assert.deepEqual(featureDetailedDesign.files.sort(), [
+  'SKILL.md',
+  'agents/openai.yaml',
+  'references/feature-detailed-design-template.md',
+]);
+assert.match(featureDetailedDesign.description, /^Use when/);
+assert.match(featureDetailedDesign.description, /[\u3400-\u9FFF]/);
+const featureDetailedDesignBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-feature-detailed-design', 'SKILL.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Three-Step Work Contract',
+  'Feature Resolution Confirmation Gate',
+  'zero_matches',
+  'multiple_matches',
+  'confirmed_feature',
+  'do not generate',
+  'routes',
+  'controllers',
+  'pages',
+  'menus',
+  'services',
+  'entities',
+  'migrations',
+  'tests',
+  'config',
+  'docs',
+  'feature_id',
+  'feature_detailed_design',
+  'features/{feature_id}/detailed-design.md',
+  'axis-tech-design-doc',
+  'requirements and non-goals',
+  'main and exception flows',
+  'transaction, idempotency, and concurrency',
+  'security, privacy, and audit',
+  'tests and acceptance criteria',
+  'assumptions',
+  'missing evidence',
+  'public-safe',
+]) {
+  assert.match(featureDetailedDesignBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+assert.match(featureDetailedDesignBody, /ask (?:the )?user|向用户确认/i);
+assert.doesNotMatch(featureDetailedDesignBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(featureDetailedDesignBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
 const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-coding-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
@@ -706,6 +853,7 @@ for (const skillName of [
   'axis-development-doc',
   'axis-db-design-doc',
   'axis-doc-drift-capture',
+  'axis-feature-detailed-design',
   'axis-project-knowledge-bootstrap',
   'axis-tech-design-doc',
   'axis-test-driven-development',

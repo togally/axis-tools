@@ -53,7 +53,7 @@
     },
     {
       "name": "axis-business-domain-doc",
-      "description": "Use when generating Axis v0.2 domain business and technical documents for one business_id from business_inventory and repository evidence. / 用于根据 business_inventory 中的一个 business_id 和仓库证据生成 Axis v0.2 业务域业务文档与技术文档。",
+      "description": "Use when reconciling existing detailed designs into one business-domain design and business architecture, or designing a requirement under one business_id and summarizing its architecture impact. / 用于扫描梳理已有详细设计并补充业务域详细设计与业务架构，或按需求生成所属业务域的需求详细设计并汇总业务架构影响。",
       "path": "skills/axis-business-domain-doc",
       "files": [
         "SKILL.md",
@@ -108,8 +108,29 @@
       ]
     },
     {
+      "name": "axis-document-review",
+      "description": "Use when a user wants to start and open the local Axis document review console, and the standalone application may need to be pulled or scaffolded first. / 用于启动并打开本地 Axis 文档评审页面；当独立应用不存在时，先让用户选择拉取公开仓库或使用内置模板本地自建。",
+      "path": "skills/axis-document-review",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "assets/axis-document-review-template.tgz",
+        "scripts/axis_document_review.py"
+      ]
+    },
+    {
+      "name": "axis-feature-detailed-design",
+      "description": "Use when the user asks for a detailed design of one specific feature and the feature must first be resolved from repository evidence without guessing. / 用于为某个单独功能生成详细设计；必须先从仓库证据定位功能，找不到或存在歧义时停止生成并向用户确认。",
+      "path": "skills/axis-feature-detailed-design",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/feature-detailed-design-template.md"
+      ]
+    },
+    {
       "name": "axis-oss-publish",
-      "description": "Use when an Axis v0.2 local outbox package must be validated, redacted locally, dry-run checked, or uploaded to the configured Aliyun OSS profile. / 用于校验、脱敏、本地预演或上传 Axis v0.2 outbox 包到配置的阿里云 OSS profile。",
+      "description": "Use when an Axis v0.2 local outbox package must be validated, redacted, dry-run checked, synchronized as project documents, or uploaded as an immutable project package to Aliyun OSS. / 用于校验、脱敏、预演或发布 Axis v0.2 outbox；支持项目文档同步和项目内不可变包上传。",
       "path": "skills/axis-oss-publish",
       "files": [
         "SKILL.md",
@@ -118,7 +139,7 @@
     },
     {
       "name": "axis-project-init",
-      "description": "Use when a repository needs conversational Axis v0.2 configuration, migration from an older protocol, or confirmation of organization and OSS profile settings. / 用于通过对话式流程为项目配置 Axis v0.2、迁移旧协议并确认组织和 OSS profile。",
+      "description": "Use when a repository needs conversational Axis v0.2 project configuration, migration from an older contract, or one consolidated confirmation of organization, project, OSS profile, release, directory, language, and environment-name settings. / 用于通过一次汇总确认配置 Axis v0.2 项目、迁移旧协议，并统一确认组织、项目、OSS、发布、目录、语言及环境变量名称。",
       "path": "skills/axis-project-init",
       "files": [
         "SKILL.md",
@@ -127,11 +148,14 @@
     },
     {
       "name": "axis-project-knowledge-bootstrap",
-      "description": "Use when a repository needs its first Axis v0.2 project knowledge set for global technical architecture, global business architecture, business inventory, and document gap report. / 用于为存量项目首次生成 Axis v0.2 项目知识文档集，包括全局技术架构、全局业务架构、子业务清单和文档缺口报告。",
+      "description": "Use when a repository needs its first Axis v0.2 project knowledge set with global technical architecture, global business architecture, one detailed design per business domain, business inventory, and document gap report. / 用于为存量项目首次生成 Axis v0.2 项目知识文档集，包括全局技术架构、全局业务架构、每个业务域一份详细设计、业务清单和文档缺口报告。",
       "path": "skills/axis-project-knowledge-bootstrap",
       "files": [
         "SKILL.md",
-        "agents/openai.yaml"
+        "agents/openai.yaml",
+        "references/business-domain-detailed-design-template.md",
+        "references/project-business-architecture-template.md",
+        "references/project-technical-architecture-template.md"
       ]
     },
     {

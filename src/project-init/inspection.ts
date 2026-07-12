@@ -614,7 +614,7 @@ export async function inspectProjectInit(options: ProjectInitInspectionOptions):
 
   const organizations = registryOrganizations(targetRegistry.value as Registry);
   const usedOrganizationIds = new Set(organizations.map((organization) => String(organization.id)));
-  const fallbackProjectSlug = normalizeProjectSlug(path.basename(repo).replace(/-[a-z0-9]{6}$/i, ''));
+  const fallbackProjectSlug = normalizeProjectSlug(path.basename(repo).replace(/-[a-z0-9]{6,}$/i, ''));
   const projectSlug = typeof getPath(migrated, 'project.slug').value === 'string'
     ? String(getPath(migrated, 'project.slug').value)
     : fallbackProjectSlug;

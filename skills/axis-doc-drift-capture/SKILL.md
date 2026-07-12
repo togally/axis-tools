@@ -18,7 +18,7 @@ Produce project-specific record drafts and document drift decisions:
 - `affected_docs`
 - `doc_gap_report` update recommendations
 
-Do not replace `domain_business_spec`, `domain_technical_design`, global architecture documents, or experience cards with a task record. Do not approve documents, publish packages, upload OSS artifacts, or silently modify `approved` project knowledge documents.
+Do not replace `business_domain_detailed_design`, global architecture documents, or experience cards with a task record. Do not approve documents, publish packages, upload OSS artifacts, or silently modify `approved` project knowledge documents.
 
 ## Three-Step Work Contract
 
@@ -119,8 +119,8 @@ Record decisions in `affected_docs`:
 
 ```yaml
 affected_docs:
-  - doc_type: domain_technical_design
-    path: .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/domains/example/technical-design.yaml
+  - doc_type: business_domain_detailed_design
+    path: .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/domains/example/detailed-design.md
     status: stale
     reason: Service and permission changes affect this business domain.
     change_categories:

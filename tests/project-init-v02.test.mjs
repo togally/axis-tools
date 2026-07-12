@@ -36,11 +36,18 @@ async function withTempDir(fn) {
 }
 
 async function run(args, options = {}) {
+  const environment = {
+    ...process.env,
+    NO_COLOR: '1',
+  };
+  for (const name of Object.values(defaultEnv)) {
+    delete environment[name];
+  }
+
   return execFileAsync(process.execPath, [cli, ...args], {
     ...options,
     env: {
-      ...process.env,
-      NO_COLOR: '1',
+      ...environment,
       ...(options.env ?? {}),
     },
   });

@@ -16,6 +16,14 @@ Use this skill to refresh local Axis packaged skills from the `axis-tools` repos
 node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
 ```
 
+When developing uncommitted skill changes in the current `axis-tools` checkout, the helper correctly refuses the dirty repository. Refresh only the intentionally changed bundles through the CLI, which creates backups before forced replacement:
+
+```bash
+node dist/cli.js install --agent codex --skill <skill-name> --force
+```
+
+Repeat `--skill <skill-name>` to update multiple named bundles in one atomic backup session. Run `--dry-run` first. Do not force-install every skill merely to refresh a few changed bundles, because unrelated local skill customizations may differ.
+
 3. Use `--agent all` when the user wants both Codex and Claude Code skill directories updated.
 4. Use `--no-pull` only for tests, offline work, or when the user explicitly does not want a remote refresh. The helper still refuses a dirty git `--repo` before install when `--no-pull` is set.
 5. Use `--no-validate` only in tests with fake homes. Normal updates should run `quick_validate.py` against the installed skill bundles.
@@ -24,6 +32,7 @@ node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
 ## Checks
 
 - The update must install the full skill bundle, including `agents/`, `references/`, and `scripts/`.
+- A focused `--skill` update must reject unknown names and leave every unselected installed skill untouched.
 - The command should leave unrelated product repos untouched.
 - Dirty git source repos must be rejected before install, including `--repo <dirty> --no-pull --no-validate --json`.
 - If `git pull --ff-only` fails because of local changes, stop and report the dirty checkout instead of overwriting it.
