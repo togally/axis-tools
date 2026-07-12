@@ -20,6 +20,7 @@ assert.deepEqual(entry.files.sort(), [
 ]);
 
 const body = await readFile(path.join(skillRoot, 'SKILL.md'), 'utf8');
+assert.match(body, /~\/Documents\/axis\/axis-document-review/);
 for (const requiredText of [
   'Three-Step Work Contract',
   'repo_missing',
@@ -47,6 +48,8 @@ assert.match(openAiYaml, /\$axis-doc-dashbord/);
 assert.doesNotMatch(openAiYaml, /\$axis-document-review/);
 
 const script = path.join(skillRoot, 'scripts', 'axis_doc_dashbord.py');
+const scriptBody = await readFile(script, 'utf8');
+assert.match(scriptBody, /~\/Documents\/axis\/axis-document-review/);
 const missingTarget = await mkdtemp(path.join(tmpdir(), 'axis-doc-dashbord-status-'));
 await rm(missingTarget, { recursive: true, force: true });
 try {
