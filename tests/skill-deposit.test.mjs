@@ -18,7 +18,7 @@ async function withTempDir(fn) {
   }
 }
 
-async function writeDemoSkill(sourceRoot, name = 'axis-demo-skill') {
+async function writeDemoSkill(sourceRoot, name = 'axis-skill-demo') {
   const skillDir = path.join(sourceRoot, name);
   await mkdir(path.join(skillDir, 'references'), { recursive: true });
   await mkdir(path.join(skillDir, 'scripts'), { recursive: true });
@@ -55,19 +55,19 @@ await withTempDir(async (tmp) => {
     '--source-root',
     sourceRoot,
     '--skill',
-    'axis-demo-skill',
+    'axis-skill-demo',
     '--no-validate',
   ]);
 
-  assert.equal(await readFile(path.join(repo, 'skills', 'axis-demo-skill', 'SKILL.md'), 'utf8').then((text) => text.includes('axis-demo-skill')), true);
-  assert.equal(await readFile(path.join(repo, 'skills', 'axis-demo-skill', 'references', 'guide.md'), 'utf8'), 'reference\n');
-  assert.equal(await readFile(path.join(repo, 'skills', 'axis-demo-skill', 'scripts', 'helper.py'), 'utf8'), 'print("ok")\n');
+  assert.equal(await readFile(path.join(repo, 'skills', 'axis-skill-demo', 'SKILL.md'), 'utf8').then((text) => text.includes('axis-skill-demo')), true);
+  assert.equal(await readFile(path.join(repo, 'skills', 'axis-skill-demo', 'references', 'guide.md'), 'utf8'), 'reference\n');
+  assert.equal(await readFile(path.join(repo, 'skills', 'axis-skill-demo', 'scripts', 'helper.py'), 'utf8'), 'print("ok")\n');
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
   assert.equal(manifest.version, 1);
-  assert.equal(manifest.skills[0].name, 'axis-demo-skill');
+  assert.equal(manifest.skills[0].name, 'axis-skill-demo');
   assert.match(manifest.skills[0].description, /用于测试 Axis 技能沉淀/);
-  assert.equal(manifest.skills[0].path, 'skills/axis-demo-skill');
+  assert.equal(manifest.skills[0].path, 'skills/axis-skill-demo');
   assert.deepEqual(manifest.skills[0].files.sort(), [
     'SKILL.md',
     'agents/openai.yaml',
@@ -80,7 +80,7 @@ await withTempDir(async (tmp) => {
   const sourceRoot = path.join(tmp, 'source-skills');
   const repo = path.join(tmp, 'repo');
   await mkdir(repo, { recursive: true });
-  await writeDemoSkill(sourceRoot, 'demo-skill');
+  await writeDemoSkill(sourceRoot, 'axis-demo-skill');
 
   const error = await execFileAsync(process.execPath, [
     script,
@@ -89,12 +89,12 @@ await withTempDir(async (tmp) => {
     '--source-root',
     sourceRoot,
     '--skill',
-    'demo-skill',
+    'axis-demo-skill',
     '--no-validate',
   ]).catch((caught) => caught);
 
   assert.equal(error.code, 1);
-  assert.match(error.stderr, /axis-example-skill/);
+  assert.match(error.stderr, /axis-\{category\}-/);
 });
 
 await withTempDir(async (tmp) => {
@@ -114,7 +114,7 @@ await withTempDir(async (tmp) => {
     '--source-root',
     sourceRoot,
     '--skill',
-    'axis-demo-skill',
+    'axis-skill-demo',
     '--no-validate',
     '--commit',
     '--message',
@@ -123,7 +123,7 @@ await withTempDir(async (tmp) => {
 
   assert.match(stdout, /Committed: chore: deposit axis demo skill/);
   const { stdout: committed } = await execFileAsync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo });
-  assert.match(committed, /skills\/axis-demo-skill\/SKILL.md/);
+  assert.match(committed, /skills\/axis-skill-demo\/SKILL.md/);
   assert.match(committed, /skills\/manifest.json/);
   assert.doesNotMatch(committed, /unrelated.txt/);
   const { stdout: status } = await execFileAsync('git', ['status', '--short'], { cwd: repo });

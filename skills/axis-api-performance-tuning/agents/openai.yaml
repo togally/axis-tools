@@ -1,7 +1,0 @@
-interface:
-  display_name: "axis-api-performance-tuning"
-  short_description: "Tune slow read APIs safely / 安全优化慢读接口"
-  default_prompt: "Use $axis-api-performance-tuning to run this Axis workflow."
-
-policy:
-  allow_implicit_invocation: true

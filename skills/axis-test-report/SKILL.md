@@ -5,11 +5,11 @@ description: Use when build, lint, test, benchmark, pressure-test, or verificati
 
 # Test Report
 
-Use this skill to capture validation evidence as an Axis v0.2 local package. The package is organization-scoped, carries stable manifest metadata, and can be validated or published with `axis-oss-publish`.
+Use this skill to capture validation evidence as an Axis v0.2 local package. The package is organization-scoped, carries stable manifest metadata, and can be validated or published with `axis-ops-oss-publish`.
 
 ## Boundary
 
-- Require `axis validate-config --repo <repo>` to resolve v0.2 before creating a package. If it reports expired v0.1, use `axis-project-init` and confirm the migration first.
+- Require `axis validate-config --repo <repo>` to resolve v0.2 before creating a package. If it reports expired v0.1, use `axis-doc-project-init` and confirm the migration first.
 - Use `axis test-report` for package creation; do not hand-write package metadata.
 - Keep raw logs local unless they are redacted and public-safe. Never include credentials, private URLs, customer names, bearer tokens, or unredacted private paths.
 
@@ -30,7 +30,7 @@ axis test-report \
 ```
 
 3. Inspect `.axis/outbox/v0.2/<organization_id>/<project_slug>/<run_id>/` and verify the returned run id.
-4. Run a dry-run or local redaction check through `axis-oss-publish`.
+4. Run a dry-run or local redaction check through `axis-ops-oss-publish`.
 
 ## Report Sections
 

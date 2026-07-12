@@ -1,7 +1,0 @@
-interface:
-  display_name: "axis-arch-optimize"
-  short_description: "Lift fixes into shared architecture / 提炼共享架构能力"
-  default_prompt: "Use $axis-arch-optimize to guide this architecture-level code optimization."
-
-policy:
-  allow_implicit_invocation: true

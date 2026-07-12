@@ -9,16 +9,17 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
 const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/outbox/'];
 const requiredEnvFields = ['endpoint_env', 'region_env', 'access_key_id_env', 'access_key_secret_env'];
 const skillNames = {
-    projectInit: 'axis-project-init',
-    codingCapture: 'axis-coding-capture',
+    projectInit: 'axis-doc-project-init',
+    codingCapture: 'axis-code-capture',
     testReport: 'axis-test-report',
-    projectKnowledgeBootstrap: 'axis-project-knowledge-bootstrap',
-    ossPublish: 'axis-oss-publish',
+    projectKnowledgeBootstrap: 'axis-doc-project-knowledge-bootstrap',
+    ossPublish: 'axis-ops-oss-publish',
 };
 const protocolVersions = {
     document_protocol: '0.2',
@@ -81,8 +82,8 @@ Commands:
   oss-publish --repo <path> --run-id <run-id> [--dry-run | --local-only]
 
 Skill helper scripts:
-  node scripts/axis-update-skills.mjs --repo <axis-tools> --agent codex --json
-  node scripts/axis-create-skill.mjs --scan-conversation <conversation.txt> --json
+  node scripts/axis-skill-update.mjs --repo <axis-tools> --agent codex --json
+  node scripts/axis-skill-create.mjs --scan-conversation <conversation.txt> --json
   node scripts/axis-skill-deposit.mjs --skill <skill-name> --commit --push --branch main
 
 Purpose:
@@ -1923,6 +1924,9 @@ async function packagedSkillNames() {
         if (!entry.isDirectory())
             continue;
         if (existsSync(path.join(root, entry.name, 'SKILL.md'))) {
+            if (!packagedSkillNamePattern.test(entry.name)) {
+                throw new Error(`Packaged skill must use axis-{category}-<action>: ${entry.name}`);
+            }
             names.push(entry.name);
         }
     }

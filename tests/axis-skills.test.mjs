@@ -8,8 +8,8 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
-const updateScript = path.join(repoRoot, 'scripts', 'axis-update-skills.mjs');
-const createScript = path.join(repoRoot, 'scripts', 'axis-create-skill.mjs');
+const updateScript = path.join(repoRoot, 'scripts', 'axis-skill-update.mjs');
+const createScript = path.join(repoRoot, 'scripts', 'axis-skill-create.mjs');
 
 async function withTempDir(fn) {
   const dir = await mkdtemp(path.join(tmpdir(), 'axis-skills-'));
@@ -26,7 +26,7 @@ async function writeExecutable(filePath, text) {
   await chmod(filePath, 0o755);
 }
 
-async function writePackagedSkill(repo, name = 'axis-demo-skill') {
+async function writePackagedSkill(repo, name = 'axis-skill-demo') {
   const skillDir = path.join(repo, 'skills', name);
   await mkdir(path.join(skillDir, 'references'), { recursive: true });
   await mkdir(path.join(skillDir, 'scripts'), { recursive: true });
@@ -112,9 +112,9 @@ await withTempDir(async (tmp) => {
 
   const result = JSON.parse(stdout);
   assert.equal(result.ok, true);
-  assert.equal(result.installed.some((item) => item.skill === 'axis-demo-skill'), true);
-  const localSkill = path.join(home, '.codex', 'skills', 'axis-demo-skill');
-  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-demo-skill')), true);
+  assert.equal(result.installed.some((item) => item.skill === 'axis-skill-demo'), true);
+  const localSkill = path.join(home, '.codex', 'skills', 'axis-skill-demo');
+  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-skill-demo')), true);
   assert.equal(await readFile(path.join(localSkill, 'references', 'guide.md'), 'utf8'), 'reference\n');
   assert.equal(await readFile(path.join(localSkill, 'scripts', 'helper.py'), 'utf8'), 'print("ok")\n');
 });
@@ -123,7 +123,7 @@ await withTempDir(async (tmp) => {
   const conversation = path.join(tmp, 'conversation.txt');
   await writeFile(
     conversation,
-    '我们以后每次排查阿里云大屏都应该复用一套流程，可以沉淀一个 axis-dashboard-review skill。',
+    '我们以后每次排查阿里云大屏都应该复用一套流程，可以沉淀一个 axis-ops-dashboard-review skill。',
     'utf8',
   );
   const { stdout } = await execFileAsync(process.execPath, [
@@ -135,7 +135,7 @@ await withTempDir(async (tmp) => {
 
   const result = JSON.parse(stdout);
   assert.equal(result.candidates.length, 1);
-  assert.equal(result.candidates[0].name, 'axis-dashboard-review');
+  assert.equal(result.candidates[0].name, 'axis-ops-dashboard-review');
   assert.match(result.candidates[0].reason, /沉淀|复用/);
 });
 
@@ -175,7 +175,7 @@ await withTempDir(async (tmp) => {
     '--source-root',
     sourceRoot,
     '--name',
-    'axis-demo-created',
+    'axis-code-demo-created',
     '--description',
     'Use when testing Axis-created skills. / 用于测试 Axis 自动创建技能流程。',
     '--body',
@@ -185,7 +185,7 @@ await withTempDir(async (tmp) => {
     '--short-description',
     'Create demo Axis skill / 创建演示 Axis 技能',
     '--default-prompt',
-    'Use $axis-demo-created to run the demo workflow.',
+    'Use $axis-code-demo-created to run the demo workflow.',
     '--no-validate',
     '--deposit',
     '--commit',
@@ -193,9 +193,9 @@ await withTempDir(async (tmp) => {
     'chore: add generated demo skill',
   ]);
 
-  assert.match(stdout, /Created local skill axis-demo-created/);
-  assert.match(stdout, /Deposited axis-demo-created/);
-  const localSkill = path.join(sourceRoot, 'axis-demo-created');
+  assert.match(stdout, /Created local skill axis-code-demo-created/);
+  assert.match(stdout, /Deposited axis-code-demo-created/);
+  const localSkill = path.join(sourceRoot, 'axis-code-demo-created');
   const localSkillBody = await readFile(path.join(localSkill, 'SKILL.md'), 'utf8');
   assert.equal(localSkillBody.includes('Use when testing Axis-created skills'), true);
   assert.equal(localSkillBody.includes('用于测试 Axis 自动创建技能流程'), true);
@@ -207,15 +207,37 @@ await withTempDir(async (tmp) => {
   assert.equal(localSkillBody.includes('After Use Deposition'), true);
   assert.equal(localSkillBody.includes('push to the remote repository when permissions allow'), true);
   const createdOpenAiYaml = await readFile(path.join(localSkill, 'agents', 'openai.yaml'), 'utf8');
-  assert.match(createdOpenAiYaml, /^\s*display_name: "axis-demo-created"$/m);
+  assert.match(createdOpenAiYaml, /^\s*display_name: "axis-code-demo-created"$/m);
   assert.doesNotMatch(createdOpenAiYaml, /^\s*display_name: "Axis Demo Created"$/m);
   assert.match(createdOpenAiYaml, /Create demo Axis skill \/ 创建演示 Axis 技能/);
 
   const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
-  assert.equal(manifest.skills[0].name, 'axis-demo-created');
+  assert.equal(manifest.skills[0].name, 'axis-code-demo-created');
   const { stdout: committed } = await execFileAsync('git', ['show', '--name-only', '--pretty=format:', 'HEAD'], { cwd: repo });
-  assert.match(committed, /skills\/axis-demo-created\/SKILL.md/);
+  assert.match(committed, /skills\/axis-code-demo-created\/SKILL.md/);
   assert.match(committed, /skills\/manifest.json/);
+});
+
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'local-skills');
+  await mkdir(sourceRoot, { recursive: true });
+  for (const name of ['axis-demo-created', 'axis-project-demo-created', 'axis-review-demo-created']) {
+    const error = await execFileAsync(process.execPath, [
+      createScript,
+      '--source-root',
+      sourceRoot,
+      '--name',
+      name,
+      '--description',
+      'Use when testing legacy Axis names. / 用于测试旧式 Axis 名称。',
+      '--body',
+      '# Legacy Axis Name\n',
+      '--no-validate',
+    ]).catch((caught) => caught);
+
+    assert.equal(error.code, 1);
+    assert.match(error.stderr, /axis-\{category\}-/);
+  }
 });
 
 await withTempDir(async (tmp) => {
@@ -226,7 +248,7 @@ await withTempDir(async (tmp) => {
     '--source-root',
     sourceRoot,
     '--name',
-    'axis-english-only',
+    'axis-doc-english-only',
     '--description',
     'Use when testing English-only descriptions.',
     '--body',
@@ -261,31 +283,30 @@ await withTempDir(async (tmp) => {
 
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const packagedSkillNames = [
-  'axis-ali-dashboard',
-  'axis-api-performance-tuning',
-  'axis-arch-optimize',
-  'axis-benchmark',
-  'axis-bugfix',
-  'axis-business-domain-doc',
-  'axis-coding-capture',
-  'axis-create-skill',
-  'axis-db-design-doc',
-  'axis-development-doc',
+  'axis-code-api-performance-tuning',
+  'axis-code-arch-optimize',
+  'axis-code-bugfix',
+  'axis-code-capture',
+  'axis-doc-business-domain',
+  'axis-doc-dashbord',
+  'axis-doc-db-design',
+  'axis-doc-development',
   'axis-doc-drift-capture',
-  'axis-document-review',
-  'axis-feature-detailed-design',
-  'axis-oss-publish',
-  'axis-project-init',
-  'axis-project-knowledge-bootstrap',
-  'axis-review-summary',
-  'axis-tech-design-doc',
-  'axis-test-driven-development',
+  'axis-doc-feature-detailed-design',
+  'axis-doc-project-init',
+  'axis-doc-project-knowledge-bootstrap',
+  'axis-doc-tech-design',
+  'axis-integration-yunxiao-codeup',
+  'axis-ops-ali-dashboard',
+  'axis-ops-oss-publish',
+  'axis-skill-create',
+  'axis-skill-update',
+  'axis-test-benchmark',
   'axis-test-report',
-  'axis-testing',
-  'axis-update',
-  'axis-yunxiao-codeup',
+  'axis-test-side-effects',
+  'axis-test-tdd',
 ];
-const skillNamePattern = /^axis-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
 const packagedSkillDirs = (await readdir(path.join(repoRoot, 'skills'), { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
@@ -309,17 +330,17 @@ for (const requiredText of [
   'Axis Skill Consolidation Audit',
   'Current Decision',
   'Rename Guard',
-  'axis-development-doc',
-  'axis-tech-design-doc',
-  'axis-db-design-doc',
-  'axis-project-knowledge-bootstrap',
-  'axis-business-domain-doc',
+  'axis-doc-development',
+  'axis-doc-tech-design',
+  'axis-doc-db-design',
+  'axis-doc-project-knowledge-bootstrap',
+  'axis-doc-business-domain',
   'axis-doc-drift-capture',
-  'axis-coding-capture',
+  'axis-code-capture',
   'axis-test-report',
-  'axis-oss-publish',
-  'axis-create-skill',
-  'axis-update',
+  'axis-ops-oss-publish',
+  'axis-skill-create',
+  'axis-skill-update',
   'Do not merge now',
 ]) {
   assert.match(consolidationAudit, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -328,10 +349,10 @@ assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /Pet
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
 
 const v01CaptureSkills = [
-  'axis-project-init',
-  'axis-coding-capture',
+  'axis-doc-project-init',
+  'axis-code-capture',
   'axis-test-report',
-  'axis-oss-publish',
+  'axis-ops-oss-publish',
 ];
 for (const skillName of v01CaptureSkills) {
   const skill = manifest.skills.find((entry) => entry.name === skillName);
@@ -346,17 +367,17 @@ for (const skillName of v01CaptureSkills) {
   assert.match(body, /release\.channel/);
   assert.match(body, /release\.gate/);
   assert.match(body, /private_beta/);
-  assert.match(body, /axis oss-publish|axis-oss-publish/);
+  assert.match(body, /axis oss-publish|axis-ops-oss-publish/);
   assert.match(body, /After Use Deposition/);
 
   const openAiYaml = await readFile(path.join(repoRoot, 'skills', skillName, 'agents', 'openai.yaml'), 'utf8');
   assert.match(openAiYaml, /allow_implicit_invocation: true/);
 }
 
-const projectInitBody = await readFile(path.join(repoRoot, 'skills', 'axis-project-init', 'SKILL.md'), 'utf8');
+const projectInitBody = await readFile(path.join(repoRoot, 'skills', 'axis-doc-project-init', 'SKILL.md'), 'utf8');
 assert.match(projectInitBody, /axis project-init/);
 assert.match(projectInitBody, /\.axis\/config\.yml/);
-const projectInitSkill = manifest.skills.find((skill) => skill.name === 'axis-project-init');
+const projectInitSkill = manifest.skills.find((skill) => skill.name === 'axis-doc-project-init');
 assert.ok(projectInitSkill);
 assert.match(projectInitSkill.description, /v0\.2/);
 assert.match(projectInitSkill.description, /[\u3400-\u9FFF]/);
@@ -384,7 +405,7 @@ for (const requiredText of [
 }
 assert.doesNotMatch(projectInitBody, /Show every `fields\[\]` entry in order, one at a time/i);
 
-const projectKnowledgeBootstrap = manifest.skills.find((skill) => skill.name === 'axis-project-knowledge-bootstrap');
+const projectKnowledgeBootstrap = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge-bootstrap');
 assert.ok(projectKnowledgeBootstrap);
 assert.deepEqual(projectKnowledgeBootstrap.files.sort(), [
   'SKILL.md',
@@ -396,7 +417,7 @@ assert.deepEqual(projectKnowledgeBootstrap.files.sort(), [
 assert.match(projectKnowledgeBootstrap.description, /^Use when/);
 assert.match(projectKnowledgeBootstrap.description, /[\u3400-\u9FFF]/);
 const projectKnowledgeBootstrapBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-project-knowledge-bootstrap', 'SKILL.md'),
+  path.join(repoRoot, 'skills', 'axis-doc-project-knowledge-bootstrap', 'SKILL.md'),
   'utf8',
 );
 for (const requiredText of [
@@ -441,7 +462,7 @@ for (const requiredText of [
   'business/domains/{business_id}/detailed-design.md',
   'one document per business_id',
   'gaps/doc-gap-report.md',
-  'axis-feature-detailed-design',
+  'axis-doc-feature-detailed-design',
 ]) {
   assert.match(projectKnowledgeBootstrapBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
@@ -452,7 +473,7 @@ const businessDomainDetailedDesignTemplate = await readFile(
   path.join(
     repoRoot,
     'skills',
-    'axis-project-knowledge-bootstrap',
+    'axis-doc-project-knowledge-bootstrap',
     'references',
     'business-domain-detailed-design-template.md',
   ),
@@ -521,13 +542,13 @@ for (const requiredText of [
 assert.doesNotMatch(docDriftCaptureBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
-const businessDomainDoc = manifest.skills.find((skill) => skill.name === 'axis-business-domain-doc');
+const businessDomainDoc = manifest.skills.find((skill) => skill.name === 'axis-doc-business-domain');
 assert.ok(businessDomainDoc);
 assert.deepEqual(businessDomainDoc.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
 assert.match(businessDomainDoc.description, /^Use when/);
 assert.match(businessDomainDoc.description, /[\u3400-\u9FFF]/);
 const businessDomainDocBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-business-domain-doc', 'SKILL.md'),
+  path.join(repoRoot, 'skills', 'axis-doc-business-domain', 'SKILL.md'),
   'utf8',
 );
 for (const requiredText of [
@@ -554,9 +575,9 @@ for (const requiredText of [
   'interfaces',
   'code locations',
   'test points',
-  'axis-development-doc',
-  'axis-tech-design-doc',
-  'axis-db-design-doc',
+  'axis-doc-development',
+  'axis-doc-tech-design',
+  'axis-doc-db-design',
   'missing_evidence',
   'assumptions',
   'doc_gap_report',
@@ -565,7 +586,7 @@ for (const requiredText of [
   'conflict',
   'do not invent',
   'public-safe',
-  'axis-feature-detailed-design',
+  'axis-doc-feature-detailed-design',
 ]) {
   assert.match(businessDomainDocBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
@@ -573,7 +594,7 @@ assert.doesNotMatch(businessDomainDocBody, /domain_business_spec|domain_technica
 assert.doesNotMatch(businessDomainDocBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(businessDomainDocBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
-const featureDetailedDesign = manifest.skills.find((skill) => skill.name === 'axis-feature-detailed-design');
+const featureDetailedDesign = manifest.skills.find((skill) => skill.name === 'axis-doc-feature-detailed-design');
 assert.ok(featureDetailedDesign);
 assert.deepEqual(featureDetailedDesign.files.sort(), [
   'SKILL.md',
@@ -583,7 +604,7 @@ assert.deepEqual(featureDetailedDesign.files.sort(), [
 assert.match(featureDetailedDesign.description, /^Use when/);
 assert.match(featureDetailedDesign.description, /[\u3400-\u9FFF]/);
 const featureDetailedDesignBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-feature-detailed-design', 'SKILL.md'),
+  path.join(repoRoot, 'skills', 'axis-doc-feature-detailed-design', 'SKILL.md'),
   'utf8',
 );
 for (const requiredText of [
@@ -606,7 +627,7 @@ for (const requiredText of [
   'feature_id',
   'feature_detailed_design',
   'features/{feature_id}/detailed-design.md',
-  'axis-tech-design-doc',
+  'axis-doc-tech-design',
   'requirements and non-goals',
   'main and exception flows',
   'transaction, idempotency, and concurrency',
@@ -622,7 +643,7 @@ assert.match(featureDetailedDesignBody, /ask (?:the )?user|向用户确认/i);
 assert.doesNotMatch(featureDetailedDesignBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(featureDetailedDesignBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
-const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-coding-capture', 'SKILL.md'), 'utf8');
+const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-code-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
   '需求理解摘要',
   '实现摘要',
@@ -646,7 +667,7 @@ for (const requiredSection of [
   assert.match(testReportBody, new RegExp(requiredSection));
 }
 
-const ossPublishBody = await readFile(path.join(repoRoot, 'skills', 'axis-oss-publish', 'SKILL.md'), 'utf8');
+const ossPublishBody = await readFile(path.join(repoRoot, 'skills', 'axis-ops-oss-publish', 'SKILL.md'), 'utf8');
 assert.match(ossPublishBody, /manifest\.json.*last/i);
 assert.match(ossPublishBody, /--dry-run/);
 assert.match(ossPublishBody, /--local-only/);
@@ -656,10 +677,10 @@ for (const skillName of v01CaptureSkills) {
   assert.doesNotMatch(publicCatalog, new RegExp(skillName), `${skillName} should stay out of the public catalog before the release gate passes`);
 }
 
-const benchmarkSkill = manifest.skills.find((skill) => skill.name === 'axis-benchmark');
+const benchmarkSkill = manifest.skills.find((skill) => skill.name === 'axis-test-benchmark');
 assert.ok(benchmarkSkill);
-const benchmarkScript = path.join(repoRoot, 'skills', 'axis-benchmark', 'scripts', 'core_api_benchmark.py');
-const benchmarkBody = await readFile(path.join(repoRoot, 'skills', 'axis-benchmark', 'SKILL.md'), 'utf8');
+const benchmarkScript = path.join(repoRoot, 'skills', 'axis-test-benchmark', 'scripts', 'core_api_benchmark.py');
+const benchmarkBody = await readFile(path.join(repoRoot, 'skills', 'axis-test-benchmark', 'SKILL.md'), 'utf8');
 assert.match(benchmarkBody, /Three-Step Work Contract/);
 assert.match(benchmarkBody, /Scope Clarification Gate/);
 assert.match(benchmarkBody, /Module Benchmark Workflow/);
@@ -667,10 +688,10 @@ assert.match(benchmarkBody, /local module -> remote dependency/i);
 assert.match(benchmarkBody, /Process Failure Guard/);
 assert.match(benchmarkBody, /Deposition Gate/i);
 assert.match(benchmarkBody, /Do not treat "the benchmark finished" as complete/i);
-const apiPerformanceTuning = manifest.skills.find((skill) => skill.name === 'axis-api-performance-tuning');
+const apiPerformanceTuning = manifest.skills.find((skill) => skill.name === 'axis-code-api-performance-tuning');
 assert.ok(apiPerformanceTuning);
 const apiPerformanceTuningBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-api-performance-tuning', 'SKILL.md'),
+  path.join(repoRoot, 'skills', 'axis-code-api-performance-tuning', 'SKILL.md'),
   'utf8',
 );
 assert.match(apiPerformanceTuningBody, /Plan Confirmation Gate/i);
@@ -679,33 +700,18 @@ assert.match(apiPerformanceTuningBody, /only after implementation and verificati
 assert.match(apiPerformanceTuningBody, /update the relevant skill bundle/i);
 assert.doesNotMatch(apiPerformanceTuningBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
 
-const architectureOptimization = manifest.skills.find((skill) => skill.name === 'axis-arch-optimize');
+const architectureOptimization = manifest.skills.find((skill) => skill.name === 'axis-code-arch-optimize');
 assert.ok(architectureOptimization);
 assert.equal(architectureOptimization.files.includes('SKILL.md'), true);
 assert.equal(architectureOptimization.files.includes('agents/openai.yaml'), true);
 
-const bugfixMethod = manifest.skills.find((skill) => skill.name === 'axis-bugfix');
+const bugfixMethod = manifest.skills.find((skill) => skill.name === 'axis-code-bugfix');
 assert.ok(bugfixMethod);
 
-const reviewSummary = manifest.skills.find((skill) => skill.name === 'axis-review-summary');
-assert.ok(reviewSummary);
-assert.match(reviewSummary.description, /review a PR, change set, or document set/i);
-assert.match(reviewSummary.description, /审核 PR、变更集或文档/);
-assert.equal(reviewSummary.files.includes('SKILL.md'), true);
-assert.equal(reviewSummary.files.includes('agents/openai.yaml'), true);
-const reviewSummaryBody = await readFile(path.join(repoRoot, 'skills', 'axis-review-summary', 'SKILL.md'), 'utf8');
-assert.match(reviewSummaryBody, /Review Brief/i);
-assert.match(reviewSummaryBody, /待审文件清单/);
-assert.match(reviewSummaryBody, /每个文件摘要/);
-assert.match(reviewSummaryBody, /风险点/);
-assert.match(reviewSummaryBody, /建议细查位置/);
-assert.match(reviewSummaryBody, /原始路径/);
-assert.match(reviewSummaryBody, /public-safe/i);
-assert.match(reviewSummaryBody, /credential|secret|token/i);
 assert.equal(bugfixMethod.files.includes('SKILL.md'), true);
 assert.equal(bugfixMethod.files.includes('agents/openai.yaml'), true);
 const bugfixMethodBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-bugfix', 'SKILL.md'),
+  path.join(repoRoot, 'skills', 'axis-code-bugfix', 'SKILL.md'),
   'utf8',
 );
 assert.match(bugfixMethodBody, /Evidence First/i);
@@ -713,7 +719,7 @@ assert.match(bugfixMethodBody, /classify.*external dependency.*application code/
 assert.match(bugfixMethodBody, /RED.*GREEN/is);
 assert.match(bugfixMethodBody, /Do not fix by theory alone/i);
 assert.doesNotMatch(bugfixMethodBody, /\b(petmall|petmallplatform|owh|whalecloud|jiazhiwei|aliyuncs\.com)\b/i);
-const architectureOptimizationBody = await readFile(path.join(repoRoot, 'skills', 'axis-arch-optimize', 'SKILL.md'), 'utf8');
+const architectureOptimizationBody = await readFile(path.join(repoRoot, 'skills', 'axis-code-arch-optimize', 'SKILL.md'), 'utf8');
 assert.match(architectureOptimizationBody, /architecture boundary/i);
 assert.match(architectureOptimizationBody, /cross-cutting/i);
 assert.match(architectureOptimizationBody, /contract tests/i);
@@ -759,11 +765,11 @@ await withTempDir(async (tmp) => {
   }
 });
 
-const axisTesting = manifest.skills.find((skill) => skill.name === 'axis-testing');
+const axisTesting = manifest.skills.find((skill) => skill.name === 'axis-test-side-effects');
 assert.ok(axisTesting);
 assert.equal(axisTesting.files.includes('SKILL.md'), true);
 assert.equal(axisTesting.files.includes('agents/openai.yaml'), true);
-const axisTestingBody = await readFile(path.join(repoRoot, 'skills', 'axis-testing', 'SKILL.md'), 'utf8');
+const axisTestingBody = await readFile(path.join(repoRoot, 'skills', 'axis-test-side-effects', 'SKILL.md'), 'utf8');
 assert.match(axisTestingBody, /real side effects/i);
 assert.match(axisTestingBody, /precondition/i);
 assert.match(axisTestingBody, /status boundary/i);
@@ -772,14 +778,14 @@ assert.match(axisTestingBody, /cleanup/i);
 
 const allSkillFiles = await readTreeFiles(path.join(repoRoot, 'skills'));
 const manifestPath = path.join(repoRoot, 'skills', 'manifest.json');
-const yunxiaoCodeupFiles = allSkillFiles.filter((filePath) => filePath.includes(`${path.sep}axis-yunxiao-codeup${path.sep}`));
+const yunxiaoCodeupFiles = allSkillFiles.filter((filePath) => filePath.includes(`${path.sep}axis-integration-yunxiao-codeup${path.sep}`));
 const publicSkillText = (await Promise.all(
   allSkillFiles
     .filter((filePath) => filePath !== manifestPath && !yunxiaoCodeupFiles.includes(filePath))
     .map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
 )).join('\n');
 assert.doesNotMatch(publicSkillText, /PetMall|petmall|PETMALL|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup/);
-assert.ok(yunxiaoCodeupFiles.length > 0, 'axis-yunxiao-codeup should be packaged');
+assert.ok(yunxiaoCodeupFiles.length > 0, 'axis-integration-yunxiao-codeup should be packaged');
 const yunxiaoCodeupText = (await Promise.all(
   yunxiaoCodeupFiles.map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
 )).join('\n');
@@ -810,7 +816,7 @@ for (const skill of manifest.skills) {
   assert.match(skill.description, /[\u3400-\u9FFF]/);
 }
 
-const createSkillMd = await readFile(path.join(repoRoot, 'skills', 'axis-create-skill', 'SKILL.md'), 'utf8');
+const createSkillMd = await readFile(path.join(repoRoot, 'skills', 'axis-skill-create', 'SKILL.md'), 'utf8');
 assert.match(createSkillMd, /scan.+whether/i);
 assert.match(createSkillMd, /Bilingual Description Rule/);
 assert.match(createSkillMd, /Three-Step Work Contract/);
@@ -819,44 +825,49 @@ assert.match(createSkillMd, /Light Adversarial Review/);
 assert.match(createSkillMd, /Coding\/design-type skills should include/i);
 assert.match(createSkillMd, /Unified Skill Creation/);
 assert.match(createSkillMd, /orbit-xxx/);
+assert.match(createSkillMd, /Naming Taxonomy/);
+assert.match(createSkillMd, /axis-doc-xxx/);
+assert.match(createSkillMd, /axis-code-xxx/);
+assert.match(createSkillMd, /axis-doc-project-init/);
+assert.doesNotMatch(createSkillMd, /\| Project \|/);
 assert.match(createSkillMd, /Mandatory Before-Use Experience Application/);
 assert.match(createSkillMd, /Model Reasoning Level/);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
-const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-tech-design-doc', 'SKILL.md'), 'utf8');
+const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-tech-design', 'SKILL.md'), 'utf8');
 assert.match(techDesignDocMd, /Three-Step Work Contract/);
 assert.match(techDesignDocMd, /Light Adversarial Review/);
 assert.match(techDesignDocMd, /boundary risks/i);
 
-const dbDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-db-design-doc', 'SKILL.md'), 'utf8');
+const dbDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-db-design', 'SKILL.md'), 'utf8');
 assert.match(dbDesignDocMd, /Three-Step Work Contract/);
 assert.match(dbDesignDocMd, /Light Adversarial Schema Review/);
 assert.match(dbDesignDocMd, /derived display fields/i);
 
-const developmentDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-development-doc', 'SKILL.md'), 'utf8');
+const developmentDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-development', 'SKILL.md'), 'utf8');
 assert.match(developmentDocMd, /概要设计/);
 assert.match(developmentDocMd, /详细设计/);
 assert.match(developmentDocMd, /Document Selection Matrix/);
-assert.match(developmentDocMd, /axis-tech-design-doc/);
-assert.match(developmentDocMd, /axis-db-design-doc/);
+assert.match(developmentDocMd, /axis-doc-tech-design/);
+assert.match(developmentDocMd, /axis-doc-db-design/);
 assert.match(developmentDocMd, /Word\/DOCX/i);
 assert.match(developmentDocMd, /Three-Step Work Contract/);
 assert.match(developmentDocMd, /Light Adversarial Review/);
 
 for (const skillName of [
-  'axis-api-performance-tuning',
-  'axis-benchmark',
-  'axis-arch-optimize',
-  'axis-bugfix',
-  'axis-business-domain-doc',
-  'axis-create-skill',
-  'axis-development-doc',
-  'axis-db-design-doc',
+  'axis-code-api-performance-tuning',
+  'axis-test-benchmark',
+  'axis-code-arch-optimize',
+  'axis-code-bugfix',
+  'axis-doc-business-domain',
+  'axis-skill-create',
+  'axis-doc-development',
+  'axis-doc-db-design',
   'axis-doc-drift-capture',
-  'axis-feature-detailed-design',
-  'axis-project-knowledge-bootstrap',
-  'axis-tech-design-doc',
-  'axis-test-driven-development',
+  'axis-doc-feature-detailed-design',
+  'axis-doc-project-knowledge-bootstrap',
+  'axis-doc-tech-design',
+  'axis-test-tdd',
 ]) {
   const skillMd = await readFile(path.join(repoRoot, 'skills', skillName, 'SKILL.md'), 'utf8');
   assert.match(skillMd, /Three-Step Work Contract/);

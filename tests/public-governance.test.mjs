@@ -59,7 +59,7 @@ for (const schemaPath of requiredFiles.filter((file) => file.startsWith('schemas
 }
 
 const skillTemplate = await readRequired('templates/skill/SKILL.md');
-assert.match(skillTemplate, /^---\nname: axis-example-skill\n/ms);
+assert.match(skillTemplate, /^---\nname: axis-skill-example\n/ms);
 assert.match(skillTemplate, /description: Use when/);
 assert.match(skillTemplate, /## After Use Deposition/);
 
@@ -74,7 +74,7 @@ assert.match(assetTemplate, /visibility: public/);
 assert.match(assetTemplate, /redaction_checked: true/);
 
 const skillsCatalog = await readRequired('catalog/skills.public.yaml');
-assert.match(skillsCatalog, /axis-example-skill/);
+assert.match(skillsCatalog, /axis-skill-example/);
 assert.match(skillsCatalog, /mock/);
 
 const assetsCatalog = await readRequired('catalog/assets.public.yaml');
@@ -98,10 +98,10 @@ for (const requiredText of [
   'gate: not_requested',
   'provider: aliyun-oss',
   'profile: private_beta_main',
-  'project_init: axis-project-init',
-  'coding_capture: axis-coding-capture',
+  'project_init: axis-doc-project-init',
+  'coding_capture: axis-code-capture',
   'test_report: axis-test-report',
-  'oss_publish: axis-oss-publish',
+  'oss_publish: axis-ops-oss-publish',
 ]) {
   assert.match(axisConfig, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
@@ -124,9 +124,9 @@ for (const requiredText of [
 const v02Protocol = await readRequired('docs/v0.2-project-knowledge-doc-protocol.md');
 for (const requiredText of [
   'Axis v0.2 Project Knowledge Document Protocol',
-  'axis-project-knowledge-bootstrap',
-  'axis-business-domain-doc',
-  'axis-feature-detailed-design',
+  'axis-doc-project-knowledge-bootstrap',
+  'axis-doc-business-domain',
+  'axis-doc-feature-detailed-design',
   'axis-doc-drift-capture',
   'project_technical_architecture',
   'project_business_architecture',

@@ -7,7 +7,7 @@ import path from 'node:path';
 const { applyTransaction, recoverTransaction, journalRelativePath } = await import('../dist/project-init/transaction.js');
 
 async function withTempDir(fn) {
-  const repo = await mkdtemp(path.join(tmpdir(), 'axis-project-init-transaction-'));
+  const repo = await mkdtemp(path.join(tmpdir(), 'axis-doc-project-init-transaction-'));
   try {
     return await fn(repo);
   } finally {

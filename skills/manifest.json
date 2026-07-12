@@ -3,58 +3,45 @@
   "description": "Axis packaged skill bundles captured by scripts/axis-skill-deposit.mjs",
   "skills": [
     {
-      "name": "axis-ali-dashboard",
-      "description": "Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON or SLS drilldowns. / 用于创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和监控面板。",
-      "path": "skills/axis-ali-dashboard",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "references/aliyun-sls-drilldown.md",
-        "references/business-flow-dashboard-json.md",
-        "scripts/validate_dashboard_json.py"
-      ]
-    },
-    {
-      "name": "axis-api-performance-tuning",
+      "name": "axis-code-api-performance-tuning",
       "description": "Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness. / 用于压测发现读接口慢且需要在保证正确性的前提下优化响应性能。",
-      "path": "skills/axis-api-performance-tuning",
+      "path": "skills/axis-code-api-performance-tuning",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-arch-optimize",
+      "name": "axis-code-arch-optimize",
       "description": "Use when implementation work starts as method-level fixes but should become a shared architecture capability or cross-cutting module. / 用于把局部方法修复提升为共享架构能力、中间件组件、适配器或横切模块。",
-      "path": "skills/axis-arch-optimize",
+      "path": "skills/axis-code-arch-optimize",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-benchmark",
-      "description": "Use when the user asks to benchmark APIs, local modules, service dependencies, throughput, latency, concurrency, or capacity. / 用于对 API、本地模块、服务依赖链路、吞吐、延迟、并发或容量进行基准测试。",
-      "path": "skills/axis-benchmark",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "scripts/core_api_benchmark.py"
-      ]
-    },
-    {
-      "name": "axis-bugfix",
+      "name": "axis-code-bugfix",
       "description": "Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs and wants a root-cause fix. / 用于排查并修复缺陷、生产错误、压测失败、偶发问题或日志截图中的根因问题。",
-      "path": "skills/axis-bugfix",
+      "path": "skills/axis-code-bugfix",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-business-domain-doc",
+      "name": "axis-code-capture",
+      "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.2 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.2 执行报告和经验卡片。",
+      "path": "skills/axis-code-capture",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-doc-business-domain",
       "description": "Use when reconciling existing detailed designs into one business-domain design and business architecture, or designing a requirement under one business_id and summarizing its architecture impact. / 用于扫描梳理已有详细设计并补充业务域详细设计与业务架构，或按需求生成所属业务域的需求详细设计并汇总业务架构影响。",
-      "path": "skills/axis-business-domain-doc",
+      "path": "skills/axis-doc-business-domain",
       "files": [
         "SKILL.md",
         "agents/openai.yaml",
@@ -62,36 +49,29 @@
       ]
     },
     {
-      "name": "axis-coding-capture",
-      "description": "Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.2 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.2 执行报告和经验卡片。",
-      "path": "skills/axis-coding-capture",
+      "name": "axis-doc-dashbord",
+      "description": "Use when a user wants to start and open the local Axis document dashboard, and the standalone application may need to be pulled or scaffolded first. / 用于启动并打开本地 Axis 文档看板；当独立应用不存在时，先让用户选择拉取公开仓库或使用内置模板本地自建。",
+      "path": "skills/axis-doc-dashbord",
       "files": [
         "SKILL.md",
-        "agents/openai.yaml"
+        "agents/openai.yaml",
+        "assets/axis-doc-dashbord-template.tgz",
+        "scripts/axis_doc_dashbord.py"
       ]
     },
     {
-      "name": "axis-create-skill",
-      "description": "Use when the user asks to scan the conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created. / 用于扫描对话中的可复用技能机会并判断是否应创建公开安全的 Axis/Codex 技能。",
-      "path": "skills/axis-create-skill",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
-      ]
-    },
-    {
-      "name": "axis-db-design-doc",
+      "name": "axis-doc-db-design",
       "description": "Use when the user asks for a database design document, data dictionary, schema design, ER/table documentation, or a Word DBDD. / 用于生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。",
-      "path": "skills/axis-db-design-doc",
+      "path": "skills/axis-doc-db-design",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-development-doc",
+      "name": "axis-doc-development",
       "description": "Use when the user asks to create one or more development documents such as 概要设计, 详细设计, database design, API docs, test plans, deployment docs, or Word/DOCX outputs from a prompt or repo evidence. / 用于根据提示词或仓库证据生成一个或多个开发文档，包括概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。",
-      "path": "skills/axis-development-doc",
+      "path": "skills/axis-doc-development",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
@@ -108,20 +88,9 @@
       ]
     },
     {
-      "name": "axis-document-review",
-      "description": "Use when a user wants to start and open the local Axis document review console, and the standalone application may need to be pulled or scaffolded first. / 用于启动并打开本地 Axis 文档评审页面；当独立应用不存在时，先让用户选择拉取公开仓库或使用内置模板本地自建。",
-      "path": "skills/axis-document-review",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "assets/axis-document-review-template.tgz",
-        "scripts/axis_document_review.py"
-      ]
-    },
-    {
-      "name": "axis-feature-detailed-design",
+      "name": "axis-doc-feature-detailed-design",
       "description": "Use when the user asks for a detailed design of one specific feature and the feature must first be resolved from repository evidence without guessing. / 用于为某个单独功能生成详细设计；必须先从仓库证据定位功能，找不到或存在歧义时停止生成并向用户确认。",
-      "path": "skills/axis-feature-detailed-design",
+      "path": "skills/axis-doc-feature-detailed-design",
       "files": [
         "SKILL.md",
         "agents/openai.yaml",
@@ -129,27 +98,18 @@
       ]
     },
     {
-      "name": "axis-oss-publish",
-      "description": "Use when an Axis v0.2 local outbox package must be validated, redacted, dry-run checked, synchronized as project documents, or uploaded as an immutable project package to Aliyun OSS. / 用于校验、脱敏、预演或发布 Axis v0.2 outbox；支持项目文档同步和项目内不可变包上传。",
-      "path": "skills/axis-oss-publish",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
-      ]
-    },
-    {
-      "name": "axis-project-init",
+      "name": "axis-doc-project-init",
       "description": "Use when a repository needs conversational Axis v0.2 project configuration, migration from an older contract, or one consolidated confirmation of organization, project, OSS profile, release, directory, language, and environment-name settings. / 用于通过一次汇总确认配置 Axis v0.2 项目、迁移旧协议，并统一确认组织、项目、OSS、发布、目录、语言及环境变量名称。",
-      "path": "skills/axis-project-init",
+      "path": "skills/axis-doc-project-init",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-project-knowledge-bootstrap",
+      "name": "axis-doc-project-knowledge-bootstrap",
       "description": "Use when a repository needs its first Axis v0.2 project knowledge set with global technical architecture, global business architecture, one detailed design per business domain, business inventory, and document gap report. / 用于为存量项目首次生成 Axis v0.2 项目知识文档集，包括全局技术架构、全局业务架构、每个业务域一份详细设计、业务清单和文档缺口报告。",
-      "path": "skills/axis-project-knowledge-bootstrap",
+      "path": "skills/axis-doc-project-knowledge-bootstrap",
       "files": [
         "SKILL.md",
         "agents/openai.yaml",
@@ -159,30 +119,72 @@
       ]
     },
     {
-      "name": "axis-review-summary",
-      "description": "Use when a user needs to review a PR, change set, or document set before deep inspection. / 用于审核 PR、变更集或文档前生成待审文件摘要和风险定位。",
-      "path": "skills/axis-review-summary",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
-      ]
-    },
-    {
-      "name": "axis-tech-design-doc",
+      "name": "axis-doc-tech-design",
       "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention. / 用于撰写、优化或定稿可留档的技术设计文档和方案设计，尤其适合区分业务设计与技术设计。",
-      "path": "skills/axis-tech-design-doc",
+      "path": "skills/axis-doc-tech-design",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-test-driven-development",
-      "description": "Use when implementing a feature, bugfix, refactor, or behavior change before writing production code. / 用于在实现功能、修复缺陷、重构或行为变更前先进行测试驱动开发。",
-      "path": "skills/axis-test-driven-development",
+      "name": "axis-integration-yunxiao-codeup",
+      "description": "Use when accessing Yunxiao Codeup repositories or merge requests through OpenAPI with an environment token. / 用于通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。",
+      "path": "skills/axis-integration-yunxiao-codeup",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/yunxiao-openapi.md",
+        "scripts/yunxiao_codeup.py"
+      ]
+    },
+    {
+      "name": "axis-ops-ali-dashboard",
+      "description": "Use when a user asks to create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON or SLS drilldowns. / 用于创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和监控面板。",
+      "path": "skills/axis-ops-ali-dashboard",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/aliyun-sls-drilldown.md",
+        "references/business-flow-dashboard-json.md",
+        "scripts/validate_dashboard_json.py"
+      ]
+    },
+    {
+      "name": "axis-ops-oss-publish",
+      "description": "Use when an Axis v0.2 local outbox package must be validated, redacted, dry-run checked, synchronized as project documents, or uploaded as an immutable project package to Aliyun OSS. / 用于校验、脱敏、预演或发布 Axis v0.2 outbox；支持项目文档同步和项目内不可变包上传。",
+      "path": "skills/axis-ops-oss-publish",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-skill-create",
+      "description": "Use when the user asks to scan the conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created. / 用于扫描对话中的可复用技能机会并判断是否应创建公开安全的 Axis/Codex 技能。",
+      "path": "skills/axis-skill-create",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-skill-update",
+      "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装或修复本地 Axis/Codex 打包技能。",
+      "path": "skills/axis-skill-update",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-test-benchmark",
+      "description": "Use when the user asks to benchmark APIs, local modules, service dependencies, throughput, latency, concurrency, or capacity. / 用于对 API、本地模块、服务依赖链路、吞吐、延迟、并发或容量进行基准测试。",
+      "path": "skills/axis-test-benchmark",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "scripts/core_api_benchmark.py"
       ]
     },
     {
@@ -195,32 +197,21 @@
       ]
     },
     {
-      "name": "axis-testing",
+      "name": "axis-test-side-effects",
       "description": "Use when testing backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. / 用于测试会触发真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作的后端行为。",
-      "path": "skills/axis-testing",
+      "path": "skills/axis-test-side-effects",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-update",
-      "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装或修复本地 Axis/Codex 打包技能。",
-      "path": "skills/axis-update",
+      "name": "axis-test-tdd",
+      "description": "Use when implementing a feature, bugfix, refactor, or behavior change before writing production code. / 用于在实现功能、修复缺陷、重构或行为变更前先进行测试驱动开发。",
+      "path": "skills/axis-test-tdd",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
-      ]
-    },
-    {
-      "name": "axis-yunxiao-codeup",
-      "description": "Use when accessing Yunxiao Codeup repositories or merge requests through OpenAPI with an environment token. / 用于通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。",
-      "path": "skills/axis-yunxiao-codeup",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "references/yunxiao-openapi.md",
-        "scripts/yunxiao_codeup.py"
       ]
     }
   ]

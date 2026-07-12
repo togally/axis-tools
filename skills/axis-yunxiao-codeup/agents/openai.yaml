@@ -1,7 +1,0 @@
-interface:
-  display_name: "axis-yunxiao-codeup"
-  short_description: "Yunxiao Codeup OpenAPI / 云效代码库 MR"
-  default_prompt: "Use $axis-yunxiao-codeup to safely inspect Yunxiao repositories or create a merge request."
-
-policy:
-  allow_implicit_invocation: true

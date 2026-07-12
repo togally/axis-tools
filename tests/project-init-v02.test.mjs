@@ -27,7 +27,7 @@ const { renderProjectFiles, validateAnswers } = await import('../dist/project-in
 const { applyProjectInit, recoverProjectInit } = await import('../dist/project-init/index.js');
 
 async function withTempDir(fn) {
-  const dir = await mkdtemp(path.join(tmpdir(), 'axis-project-init-v02-'));
+  const dir = await mkdtemp(path.join(tmpdir(), 'axis-doc-project-init-v02-'));
   try {
     return await fn(dir);
   } finally {
@@ -176,7 +176,7 @@ async function writeRecoveryJournal(repo, state, entries, transactionId = 'test-
     assert.equal(result.latest_contract_version, '0.2');
     assert.deepEqual(result.selectors, {
       registry_path: '.axis/organizations.yml',
-      organization_id: 'org_axis_project_init_v02',
+      organization_id: 'org_axis_doc_project_init_v02',
       oss_profile: 'private_beta_main',
     });
     assert.equal(file(result, 'main_config').state, 'absent');

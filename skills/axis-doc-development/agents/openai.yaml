@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-doc-development"
+  short_description: "Generate development document sets / 生成开发文档集"
+  default_prompt: "Use $axis-doc-development to generate one or more development documents from my prompt."
+
+policy:
+  allow_implicit_invocation: true
