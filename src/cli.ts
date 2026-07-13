@@ -9,6 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { parse as parseYaml } from 'yaml';
 import type { ProjectInitInspection } from './project-init/index.js';
 
 type InstallAgentChoice = 'codex' | 'claude-code' | 'all';
@@ -1075,7 +1076,7 @@ async function projectKnowledgeSourceFiles(sourceRoot: string): Promise<ProjectK
   if (!existsSync(inventoryPath)) {
     throw new Error('project knowledge document missing: business/inventory.yaml');
   }
-  const inventory = parseSimpleYaml(await readFile(inventoryPath, 'utf8')) as {
+  const inventory = parseYaml(await readFile(inventoryPath, 'utf8')) as {
     level1_capabilities?: Level1CapabilityInventoryItem[];
   };
   const level1Capabilities = Array.isArray(inventory.level1_capabilities)

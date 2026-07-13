@@ -9,6 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { parse as parseYaml } from 'yaml';
 const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
@@ -721,7 +722,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     if (!existsSync(inventoryPath)) {
         throw new Error('project knowledge document missing: business/inventory.yaml');
     }
-    const inventory = parseSimpleYaml(await readFile(inventoryPath, 'utf8'));
+    const inventory = parseYaml(await readFile(inventoryPath, 'utf8'));
     const level1Capabilities = Array.isArray(inventory.level1_capabilities)
         ? inventory.level1_capabilities
         : [];
