@@ -763,6 +763,10 @@ assert.match(developmentDocMd, /Document Selection and Expansion/);
 assert.match(developmentDocMd, /master_draft/);
 assert.match(developmentDocMd, /database_design/);
 assert.match(developmentDocMd, /Mandatory Pre-Change Archive/);
+assert.match(developmentDocMd, /Mandatory OSS Synchronization Gate/);
+assert.match(developmentDocMd, /project-knowledge-capture/);
+assert.match(developmentDocMd, /oss-publish/);
+assert.match(developmentDocMd, /OSS-first/);
 assert.match(developmentDocMd, /Three-Step Work Contract/);
 assert.match(developmentDocMd, /light adversarial review/i);
 

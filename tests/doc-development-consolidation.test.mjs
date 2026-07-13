@@ -58,6 +58,12 @@ for (const requiredText of [
   'approved',
   'supersedes',
   '_archive',
+  'Mandatory OSS Synchronization Gate',
+  'project-knowledge-capture',
+  'oss-publish',
+  '--dry-run',
+  'published',
+  'OSS-first',
 ]) {
   assert.match(developmentBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
@@ -278,6 +284,36 @@ try {
     'utf8',
   );
   await writeFile(path.join(projectRoot, 'gaps', 'doc-gap-report.md'), '# 文档缺口\n', 'utf8');
+  const archiveRelativeRoot = path.join(
+    'business',
+    'capabilities',
+    'merchant_operations',
+    'secondary-capabilities',
+    'merchant_governance',
+    'detailed-design.md.history',
+    '20260713T010000Z-r1-a1b2c3d4',
+  );
+  const archiveRoot = path.join(
+    capabilityRepo,
+    '.axis',
+    'docs',
+    '_archive',
+    'orgs',
+    'org_example',
+    'projects',
+    'example-project',
+    archiveRelativeRoot,
+  );
+  await mkdir(archiveRoot, { recursive: true });
+  await writeFile(path.join(archiveRoot, 'document.md'), '# 入驻与门店管理历史版本\n', 'utf8');
+  await writeFile(path.join(archiveRoot, 'metadata.json'), JSON.stringify({
+    schema: 'axis.document_archive',
+    organization_id: 'org_example',
+    project_slug: 'example-project',
+    canonical_path: 'business/capabilities/merchant_operations/secondary-capabilities/merchant_governance/detailed-design.md',
+    archive_id: '20260713T010000Z-r1-a1b2c3d4',
+    archive_content: 'document.md',
+  }), 'utf8');
   const { stdout } = await execFileAsync(process.execPath, [
     path.join(repoRoot, 'dist', 'cli.js'),
     'project-knowledge-capture',
@@ -288,6 +324,20 @@ try {
   assert.equal(captured.ok, true);
   assert.ok(captured.files.includes('documents/business/capabilities/merchant_operations/detailed-design.md'));
   assert.ok(captured.files.includes('documents/business/capabilities/merchant_operations/secondary-capabilities/merchant_governance/detailed-design.md'));
+  assert.ok(captured.files.includes(`documents/_archive/${archiveRelativeRoot}/document.md`));
+  assert.ok(captured.files.includes(`documents/_archive/${archiveRelativeRoot}/metadata.json`));
+  const { stdout: publishDryRunStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'oss-publish',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010101Z-project-knowledge-capability-a1b2c3d4',
+    '--dry-run',
+  ]);
+  const publishDryRun = JSON.parse(publishDryRunStdout);
+  assert.equal(
+    publishDryRun.files.find((file) => file.path === `documents/_archive/${archiveRelativeRoot}/document.md`).target_uri,
+    `oss://example-bucket/axis/v0.2/_archive/orgs/org_example/projects/example-project/${archiveRelativeRoot}/document.md`,
+  );
   const capturedMetadata = JSON.parse(await readFile(path.join(capabilityRepo, captured.package_dir, 'metadata.json'), 'utf8'));
   assert.deepEqual(
     capturedMetadata.document.documents

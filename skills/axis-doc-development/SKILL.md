@@ -39,9 +39,9 @@ Never present an assumption or market inference as confirmed product or reposito
 1. Co-create and resolve the target.
    Select the operating mode, run the Feature Resolution Confirmation Gate where applicable, and gather only the decisions needed for the mode. For `planned_feature_generation` and `implemented_feature_iteration`, run the structured discovery interview and obtain explicit approval of the `master_draft` before expansion.
 2. Execute the document lifecycle.
-   Archive each canonical document before its first modification, write the requested documents, update affected detailed/global project knowledge at the correct level, and preserve canonical paths for current reading. This skill designs the change; implementation code starts only when the user separately authorizes execution.
+   Archive each canonical document before its first modification, write the requested documents, update affected detailed/global project knowledge at the correct level, preserve canonical paths for current reading, and complete the configured OSS synchronization gate. This skill designs the change; implementation code starts only when the user separately authorizes execution.
 3. Verify and report.
-   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, and affected knowledge revisions. For detailed design, validate every material flow's traceability through API/entrypoint, code objects, entities/tables and tests with repository-relative `path:begin-end#symbol` anchors. Report current paths, archive paths, assumptions, verification results, and any code work still awaiting authorization.
+   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, affected knowledge revisions, and the published OSS checksum/status. For detailed design, validate every material flow's traceability through API/entrypoint, code objects, entities/tables and tests with repository-relative `path:begin-end#symbol` anchors. Report current paths, archive paths, OSS run ID, assumptions, verification results, and any code work still awaiting authorization.
 
 Keep light adversarial review below 30% of the interaction. Challenge guessed scope, hidden product decisions, unsafe architecture, unmeasured performance claims, broken business flows, weak schema choices, unjustified market assumptions, or silent overwrites. Once decisions are sufficient, become decisive and produce the artifacts.
 
@@ -170,6 +170,27 @@ Read [document-archive-contract.md](references/document-archive-contract.md). Be
 
 If archival fails, stop the modification. A missing or failed archive is a blocking error, not a warning.
 
+## Mandatory OSS Synchronization Gate
+
+Axis Dashboard is OSS-first because one OSS catalog aggregates N organizations and projects, while a local repository represents only one working copy. Do not solve cross-project review by discovering or hard-coding every local repository.
+
+For every Axis v0.2 repository where canonical project knowledge changed:
+
+1. inherit an explicit project/user authorization for publish-on-change, or obtain it before the first external write;
+2. validate configuration and create a fresh project-knowledge snapshot after the final local document write;
+3. run `oss-publish --dry-run` and require zero public-safety, manifest, path, or credential errors;
+4. upload the same immutable run and require `publish.status: published`;
+5. refresh the Dashboard catalog and verify the OSS object size or checksum matches the snapshot before claiming completion.
+
+```bash
+axis validate-config --repo <repo>
+axis project-knowledge-capture --repo <repo>
+axis oss-publish --repo <repo> --run-id <run_id> --dry-run
+axis oss-publish --repo <repo> --run-id <run_id>
+```
+
+The current local files remain the authoring source, but OSS is the default cross-organization review source. A local-only document change is incomplete after publish-on-change has been authorized. If OSS configuration, credentials, dry-run, upload, or checksum verification fails, retain the local snapshot, report the exact blocker, and do not describe Dashboard data as current. Never log credentials or expose them to the browser.
+
 ## Code-Change Boundary
 
 This skill may establish that code must be added or modified, but document approval is not implementation authorization. After the expanded document set is approved, summarize the implementation slices, tests, migration, rollout, and rollback, then ask whether to execute. If authorized, hand off to the appropriate code/TDD workflow and later use `$axis-doc-drift-capture` for task/version evidence and residual document drift.
@@ -181,6 +202,7 @@ This skill may establish that code must be added or modified, but document appro
 - Code-changing modes have a user-approved `master_draft` before expansion.
 - Product, architecture, performance, business_flow, database_design, and applicable market decisions are answered, recommended-and-accepted, skipped with reason, or visibly unresolved.
 - Every modified canonical document has a verified archive record created before modification.
+- Every changed v0.2 project-knowledge set with publish-on-change authorization has a fresh snapshot, passing dry-run, `published` OSS status, and verified Dashboard OSS checksum/size.
 - Current paths remain stable and archive paths stay under `_archive`.
 - `approved` content is superseded by a new `review` revision rather than overwritten.
 - There is exactly one current overview for the owning level-1 capability and one current detailed design per declared secondary capability; parent/child and adjacent-document navigation is complete.
