@@ -87,6 +87,7 @@ For `project_knowledge_snapshot`, update changed current project documents and `
 ## Synchronization and Conflict Rules
 
 - Project knowledge is a current project-document mirror. A different remote checksum is an intentional update, not an immutable-package conflict.
+- The published `_sync/manifest.json` is the authoritative current-object set. Objects left behind by an earlier document layout are retained unless cleanup is explicitly authorized, but Dashboard must not present paths absent from the latest published manifest as current documents.
 - Keep local outbox snapshots immutable by `run_id`; use `_sync/metadata.json` to identify which run produced the current remote project documents.
 - Do not delete old remote `packages` paths or unrelated project objects unless the user explicitly authorizes cleanup.
 - General report/capture packages are immutable. If a remote object under `packages/{run_id}` exists with a different checksum, stop and report the conflict.

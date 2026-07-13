@@ -156,6 +156,7 @@ Verify:
 - no credentials, private URLs, raw logs, account identifiers or customer data are exposed;
 - local validation completes before optional project-knowledge capture or OSS dry-run;
 - OSS synchronization occurs only with explicit authorization.
+- after an authorized OSS synchronization, the latest published `_sync/manifest.json` defines the current document structure; manually refresh Dashboard and verify legacy paths are absent from the current list while their archived revisions remain traceable.
 
 ## Handoff
 

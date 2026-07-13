@@ -408,6 +408,8 @@ try {
   const browser = await readFile(path.join(dashboardWork, 'src', 'browser.mjs'), 'utf8');
   const html = await readFile(path.join(dashboardWork, 'public', 'index.html'), 'utf8');
   assert.match(core, /axis\.document_archive/);
+  assert.match(core, /axis\.package\.manifest/);
+  assert.match(core, /synchronizedProjectDocumentPaths/);
   assert.match(core, /project\.archives|archives:/);
   assert.match(core, /archive_count/);
   assert.match(browser, /historyPanel/);
