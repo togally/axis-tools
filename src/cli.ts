@@ -1087,6 +1087,11 @@ interface SecondaryJourneyBinding {
   serviceAnchors: string[];
 }
 
+interface MarkdownTable {
+  headers: string[];
+  rows: string[][];
+}
+
 function secondaryDesignStatus(
   body: string,
   key: string,
@@ -1139,55 +1144,260 @@ function splitMarkdownTableRow(line: string): string[] {
   return cells;
 }
 
-function markdownTableTraceBindings(body: string): Map<string, SecondaryJourneyBinding[]> {
+function normalizeMarkdownCell(value: string): string {
+  return value.replace(/[`*]/g, '').trim();
+}
+
+function markdownTables(body: string): MarkdownTable[] {
   const lines = body.split(/\r?\n/);
-  const normalize = (value: string): string => value.replace(/[`*]/g, '').trim();
-  const bindings = new Map<string, SecondaryJourneyBinding[]>();
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index].trim();
-    if (!line.startsWith('|') || !line.endsWith('|')) continue;
-    const headers = splitMarkdownTableRow(line).map(normalize);
-    const bindingIndex = headers.indexOf('level1_journey_id');
-    if (bindingIndex < 0) continue;
-    const traceIndex = headers.findIndex((header) => header === 'api_id' || header.startsWith('flow_id'));
-    const interfaceIndex = headers.findIndex((header) => header.startsWith('方法与'));
-    const controllerIndex = headers.indexOf('Controller/入口');
-    const serviceIndex = headers.indexOf('Service/用例');
-    const mapperIndex = headers.indexOf('Mapper/Repository');
-    const entityIndex = headers.indexOf('实体/表');
-    const testIndex = headers.indexOf('测试');
-    if ([traceIndex, interfaceIndex, controllerIndex, serviceIndex, mapperIndex, entityIndex, testIndex]
-      .some((index) => index < 0)) continue;
-    for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+  const tables: MarkdownTable[] = [];
+  for (let index = 0; index < lines.length - 1; index += 1) {
+    const headerLine = lines[index].trim();
+    const separatorLine = lines[index + 1].trim();
+    if (!headerLine.startsWith('|') || !headerLine.endsWith('|')
+      || !separatorLine.startsWith('|') || !separatorLine.endsWith('|')) continue;
+    const headers = splitMarkdownTableRow(headerLine);
+    const separators = splitMarkdownTableRow(separatorLine);
+    if (headers.length === 0
+      || headers.length !== separators.length
+      || !separators.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))) continue;
+    const rows: string[][] = [];
+    let rowIndex = index + 2;
+    for (; rowIndex < lines.length; rowIndex += 1) {
       const rowLine = lines[rowIndex].trim();
       if (!rowLine.startsWith('|') || !rowLine.endsWith('|')) break;
       const cells = splitMarkdownTableRow(rowLine);
-      const traceValue = normalize(cells[traceIndex] ?? '');
-      const bindingValue = normalize(cells[bindingIndex] ?? '');
-      const interfaceEntry = normalize(cells[interfaceIndex] ?? '');
-      const controllerAnchors = exactCodeAnchors(cells[controllerIndex] ?? '');
-      const serviceAnchors = exactCodeAnchors(cells[serviceIndex] ?? '');
-      const mapperAnchors = exactCodeAnchors(cells[mapperIndex] ?? '');
-      const testAnchors = exactCodeAnchors(cells[testIndex] ?? '');
-      if (/^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/.test(bindingValue)
-        && /^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/.test(traceValue)
-        && !/^(?:missing_evidence|not_applicable|none|todo|tbd)$/i.test(traceValue)
-        && /(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceEntry)
-        && controllerAnchors.length > 0
-        && serviceAnchors.length > 0
-        && mapperAnchors.length > 0
-        && normalize(cells[entityIndex] ?? '').length > 0
-        && testAnchors.length > 0) {
-        bindings.set(bindingValue, [
-          ...(bindings.get(bindingValue) ?? []),
-          {
-            apiId: traceValue,
-            interfaceEntry,
-            controllerAnchors,
-            serviceAnchors,
-          },
-        ]);
+      if (cells.length !== headers.length) break;
+      rows.push(cells);
+    }
+    tables.push({ headers, rows });
+    index = rowIndex - 1;
+  }
+  return tables;
+}
+
+function secondaryInterfaceTraceBindings(
+  interfaceSection: string,
+  chapterNumber: number,
+  scope: string,
+): Map<string, SecondaryJourneyBinding[]> {
+  const groupPattern = /^###(?!#)\s+(\d+)\.(\d+)\s+(.+?)\s*$/gm;
+  const groupMatches = [...interfaceSection.matchAll(groupPattern)];
+  const legacyGroupTitles = new Set([
+    '接口清单与代码追踪',
+    '接口清单与代码追溯',
+    '请求字段',
+    '响应字段',
+    '错误码与异常映射',
+  ]);
+  if (groupMatches.length === 0
+    || groupMatches.some((match) => legacyGroupTitles.has(match[3].trim()))) {
+    throw new Error(`project knowledge secondary capability interface design must group each interface: ${scope}`);
+  }
+
+  const expectedSubsections = [
+    '接口清单与代码追溯',
+    '请求字段',
+    '响应字段',
+    '错误码与异常映射',
+    '认证、授权、幂等与事务',
+  ];
+  const bindings = new Map<string, SecondaryJourneyBinding[]>();
+  const apiIds = new Set<string>();
+  const concreteInterfacePattern = /(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/;
+  const identifierPattern = /^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/;
+  const invalidIdentifierPattern = /^(?:missing_evidence|not_applicable|none|todo|tbd)$/i;
+
+  for (let groupIndex = 0; groupIndex < groupMatches.length; groupIndex += 1) {
+    const groupMatch = groupMatches[groupIndex];
+    const groupChapter = Number(groupMatch[1]);
+    const groupNumber = Number(groupMatch[2]);
+    const groupTitle = groupMatch[3].trim();
+    const groupPrefix = `${chapterNumber}.${groupNumber}`;
+    if (groupChapter !== chapterNumber || groupNumber !== groupIndex + 1) {
+      throw new Error(`project knowledge secondary capability interface group numbering mismatch: ${scope}/${groupMatch[1]}.${groupMatch[2]}`);
+    }
+    if (!/(?:接口|事件|任务|命令)$/.test(groupTitle)) {
+      throw new Error(`project knowledge secondary capability interface group missing contract title: ${scope}/${groupPrefix}`);
+    }
+    const groupStart = (groupMatch.index ?? 0) + groupMatch[0].length;
+    const groupEnd = groupIndex + 1 < groupMatches.length
+      ? (groupMatches[groupIndex + 1].index ?? interfaceSection.length)
+      : interfaceSection.length;
+    const groupBody = interfaceSection.slice(groupStart, groupEnd);
+    const subsectionPattern = /^####(?!#)\s+(\d+)\.(\d+)\.(\d+)\s+(.+?)\s*$/gm;
+    const subsectionMatches = [...groupBody.matchAll(subsectionPattern)];
+    if (subsectionMatches.some((match) => (
+      Number(match[1]) !== chapterNumber || Number(match[2]) !== groupNumber
+    ))) {
+      throw new Error(`project knowledge secondary capability interface group subsection numbering mismatch: ${scope}/${groupPrefix}`);
+    }
+    const subsectionByNumber = new Map<number, RegExpMatchArray>();
+    for (const subsectionMatch of subsectionMatches) {
+      const subsectionNumber = Number(subsectionMatch[3]);
+      if (subsectionByNumber.has(subsectionNumber)) {
+        throw new Error(`project knowledge secondary capability interface group subsection numbering mismatch: ${scope}/${groupPrefix}`);
       }
+      subsectionByNumber.set(subsectionNumber, subsectionMatch);
+    }
+    for (let subsectionIndex = 0; subsectionIndex < expectedSubsections.length; subsectionIndex += 1) {
+      const subsectionNumber = subsectionIndex + 1;
+      const expectedTitle = expectedSubsections[subsectionIndex];
+      const subsectionMatch = subsectionByNumber.get(subsectionNumber);
+      if (!subsectionMatch || subsectionMatch[4].trim() !== expectedTitle) {
+        throw new Error(
+          `project knowledge secondary capability interface group missing ${groupPrefix}.${subsectionNumber} ${expectedTitle}: ${scope}`,
+        );
+      }
+    }
+    if (subsectionMatches.length !== expectedSubsections.length) {
+      throw new Error(`project knowledge secondary capability interface group subsection numbering mismatch: ${scope}/${groupPrefix}`);
+    }
+
+    const subsectionBodies = new Map<number, string>();
+    for (let subsectionIndex = 0; subsectionIndex < subsectionMatches.length; subsectionIndex += 1) {
+      const subsectionMatch = subsectionMatches[subsectionIndex];
+      const subsectionNumber = Number(subsectionMatch[3]);
+      const subsectionStart = (subsectionMatch.index ?? 0) + subsectionMatch[0].length;
+      const subsectionEnd = subsectionIndex + 1 < subsectionMatches.length
+        ? (subsectionMatches[subsectionIndex + 1].index ?? groupBody.length)
+        : groupBody.length;
+      subsectionBodies.set(subsectionNumber, groupBody.slice(subsectionStart, subsectionEnd));
+    }
+
+    const traceTables = markdownTables(subsectionBodies.get(1) ?? '');
+    const contractTable = traceTables.find((table) => {
+      const headers = table.headers.map(normalizeMarkdownCell);
+      return headers.length === 2 && headers[0] === '项目' && headers[1] === '内容';
+    });
+    const implementationTable = traceTables.find((table) => {
+      const headers = table.headers.map(normalizeMarkdownCell);
+      return headers.length === 3
+        && headers[0] === '实现层'
+        && headers[1] === '精确定位'
+        && headers[2] === '职责';
+    });
+    if (!contractTable || !implementationTable) {
+      throw new Error(`project knowledge secondary capability interface group missing compact contract tables: ${scope}/${groupPrefix}`);
+    }
+    const contractFields = new Map<string, string>();
+    for (const row of contractTable.rows) {
+      const key = normalizeMarkdownCell(row[0] ?? '');
+      if (contractFields.has(key)) {
+        throw new Error(`project knowledge secondary capability interface group duplicates contract field ${key}: ${scope}/${groupPrefix}`);
+      }
+      contractFields.set(key, row[1] ?? '');
+    }
+    const requiredContractFields = [
+      'level1_journey_id',
+      'api_id',
+      '业务目的',
+      '调用方',
+      '请求模型',
+      '响应模型',
+      '状态',
+    ];
+    for (const field of requiredContractFields) {
+      if (!normalizeMarkdownCell(contractFields.get(field) ?? '')) {
+        throw new Error(`project knowledge secondary capability interface group missing contract field ${field}: ${scope}/${groupPrefix}`);
+      }
+    }
+    const interfaceField = [...contractFields.entries()].find(([key]) => key.startsWith('方法与完整路径'));
+    if (!interfaceField || !normalizeMarkdownCell(interfaceField[1])) {
+      throw new Error(`project knowledge secondary capability interface group missing contract field 方法与完整路径或主题: ${scope}/${groupPrefix}`);
+    }
+    const apiId = normalizeMarkdownCell(contractFields.get('api_id') ?? '');
+    const interfaceEntry = normalizeMarkdownCell(interfaceField[1]);
+    const status = normalizeMarkdownCell(contractFields.get('状态') ?? '');
+    if (!identifierPattern.test(apiId) || invalidIdentifierPattern.test(apiId)) {
+      throw new Error(`project knowledge secondary capability interface group has invalid api_id: ${scope}/${groupPrefix}`);
+    }
+    if (apiIds.has(apiId)) {
+      throw new Error(`project knowledge secondary capability interface design has duplicate api_id: ${scope}/${apiId}`);
+    }
+    apiIds.add(apiId);
+    if (!concreteInterfacePattern.test(interfaceEntry)) {
+      throw new Error(`project knowledge secondary capability interface group missing concrete contract: ${scope}/${groupPrefix}`);
+    }
+    if (!/^(?:已实现|目标设计|缺失证据)$/.test(status)) {
+      throw new Error(`project knowledge secondary capability interface group has invalid status: ${scope}/${groupPrefix}`);
+    }
+
+    const implementationRows = new Map<string, string[]>();
+    for (const row of implementationTable.rows) {
+      const implementationLayer = normalizeMarkdownCell(row[0] ?? '');
+      if (implementationRows.has(implementationLayer)) {
+        throw new Error(`project knowledge secondary capability interface group duplicates implementation trace ${implementationLayer}: ${scope}/${groupPrefix}`);
+      }
+      implementationRows.set(implementationLayer, row);
+    }
+    const requiredImplementationRows = [
+      'Controller/入口',
+      'Service/用例',
+      'Mapper/Repository',
+      '实体/表',
+      '测试',
+    ];
+    for (const rowName of requiredImplementationRows) {
+      const row = implementationRows.get(rowName);
+      if (!row || !normalizeMarkdownCell(row[1] ?? '') || !normalizeMarkdownCell(row[2] ?? '')) {
+        throw new Error(`project knowledge secondary capability interface group missing implementation trace ${rowName}: ${scope}/${groupPrefix}`);
+      }
+    }
+    const controllerAnchors = exactCodeAnchors(implementationRows.get('Controller/入口')?.[1] ?? '');
+    const serviceAnchors = exactCodeAnchors(implementationRows.get('Service/用例')?.[1] ?? '');
+    const mapperAnchors = exactCodeAnchors(implementationRows.get('Mapper/Repository')?.[1] ?? '');
+    const testAnchors = exactCodeAnchors(implementationRows.get('测试')?.[1] ?? '');
+    if (status === '已实现'
+      && [controllerAnchors, serviceAnchors, mapperAnchors, testAnchors].some((anchors) => anchors.length === 0)) {
+      throw new Error(`project knowledge secondary capability interface design missing exact code anchors: ${scope}`);
+    }
+
+    for (const subsectionNumber of [2, 3, 4]) {
+      if (!markdownTables(subsectionBodies.get(subsectionNumber) ?? '').some((table) => table.rows.length > 0)) {
+        throw new Error(
+          `project knowledge secondary capability interface group ${groupPrefix}.${subsectionNumber} has no field contract: ${scope}`,
+        );
+      }
+    }
+    const policyTable = markdownTables(subsectionBodies.get(5) ?? '').find((table) => {
+      const headers = table.headers.map(normalizeMarkdownCell);
+      return headers.length === 3 && headers[0] === '维度' && headers[1] === '设计' && headers[2] === '证据';
+    });
+    const policyDimensions = new Map<string, string[]>();
+    for (const row of policyTable?.rows ?? []) {
+      policyDimensions.set(normalizeMarkdownCell(row[0] ?? ''), row);
+    }
+    for (const dimension of ['认证', '授权', '幂等', '事务/一致性', '超时/重试/补偿']) {
+      const policyRow = policyDimensions.get(dimension);
+      if (!policyRow
+        || !normalizeMarkdownCell(policyRow[1] ?? '')
+        || !normalizeMarkdownCell(policyRow[2] ?? '')) {
+        throw new Error(`project knowledge secondary capability interface group missing ${dimension} design: ${scope}/${groupPrefix}`);
+      }
+      if (status === '已实现'
+        && exactCodeAnchors(policyRow[2] ?? '').length === 0
+        && !/(?:missing_evidence|缺失证据)/.test(policyRow[2] ?? '')) {
+        throw new Error(`project knowledge secondary capability interface group ${dimension} design missing exact evidence: ${scope}/${groupPrefix}`);
+      }
+    }
+
+    const journeyValue = normalizeMarkdownCell(contractFields.get('level1_journey_id') ?? '');
+    const journeyIds = journeyValue.split(/[,，、;；\s]+/).filter(Boolean);
+    if (journeyIds.length === 0
+      || journeyIds.some((journeyId) => !identifierPattern.test(journeyId) || invalidIdentifierPattern.test(journeyId))) {
+      throw new Error(`project knowledge secondary capability interface group has invalid level1_journey_id: ${scope}/${groupPrefix}`);
+    }
+    for (const journeyId of journeyIds) {
+      bindings.set(journeyId, [
+        ...(bindings.get(journeyId) ?? []),
+        {
+          apiId,
+          interfaceEntry,
+          controllerAnchors,
+          serviceAnchors,
+        },
+      ]);
     }
   }
   return bindings;
@@ -1486,25 +1696,15 @@ function assertSecondaryCapabilityDetailedDesign(
     if (interfaceCoverage === 'not_applicable') {
       throw new Error(`project knowledge secondary capability interface coverage conflicts with detailed status: ${scope}`);
     }
+    const interfaceHeading = /^##\s+(\d+)\.?\s+接口详细设计\s*$/m.exec(body);
     const interfaceSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+接口详细设计\s*$/m);
-    if (!interfaceSection) {
+    if (!interfaceHeading || !interfaceSection) {
       throw new Error(`project knowledge secondary capability detailed design missing interface detail section: ${scope}`);
     }
     if (/现有入口集合|对应应用服务|以\s*DTO\/BO\s*校验为准|以统一响应和领域异常为准/.test(interfaceSection)) {
       throw new Error(`project knowledge secondary capability detailed design uses generic interface placeholder: ${scope}`);
     }
-    if (!/(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceSection)) {
-      throw new Error(`project knowledge secondary capability interface design missing concrete contract: ${scope}`);
-    }
-    for (const requiredHeading of ['请求字段', '响应字段', '错误码与异常映射']) {
-      if (!new RegExp(`^###\\s+\\d+\\.\\d+\\s+${requiredHeading}\\s*$`, 'm').test(interfaceSection)) {
-        throw new Error(`project knowledge secondary capability interface design missing ${requiredHeading}: ${scope}`);
-      }
-    }
-    const interfaceAnchors = exactCodeAnchors(interfaceSection);
-    if (interfaceAnchors.length < 4 && !/目标设计/.test(interfaceSection)) {
-      throw new Error(`project knowledge secondary capability interface design missing exact code anchors: ${scope}`);
-    }
+    secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope);
     if (interfaceCoverage === 'partial' && !/(?:interface_gap_id\s*=|missing_evidence|缺失证据)/.test(body)) {
       throw new Error(`project knowledge secondary capability partial interface coverage requires an explicit gap: ${scope}`);
     }
@@ -1753,8 +1953,13 @@ async function projectKnowledgeSourceFiles(sourceRoot: string): Promise<ProjectK
       }
       const expectedJourneys = level1JourneysByCapability.get(capabilityId)?.get(secondaryId) ?? [];
       const expectedJourneyIds = new Set(expectedJourneys.map((journey) => journey.journeyId));
+      const interfaceHeading = /^##\s+(\d+)\.?\s+接口详细设计\s*$/m.exec(body);
       const interfaceSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+接口详细设计\s*$/m) ?? '';
-      const childJourneyBindings = markdownTableTraceBindings(interfaceSection);
+      const childJourneyBindings = secondaryInterfaceTraceBindings(
+        interfaceSection,
+        Number(interfaceHeading?.[1] ?? 5),
+        `${capabilityId}/${secondaryId}`,
+      );
       for (const journey of expectedJourneys) {
         const bindings = childJourneyBindings.get(journey.journeyId) ?? [];
         if (bindings.length === 0) {

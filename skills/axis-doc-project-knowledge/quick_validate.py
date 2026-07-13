@@ -53,9 +53,33 @@ REQUIRED_TERMS = {
         "relationship_model_status",
         "physical_fk",
         "logical_relation",
+        "Section 5 is grouped by contract",
+        "接口清单与代码追溯",
+        "5.2.5",
+        "not_applicable",
         "After Use Deposition",
     ],
 }
+
+GROUPED_INTERFACE_TEMPLATE_TERMS = [
+    "### 5.1 {interface_event_job_or_command_name}",
+    "#### 5.1.1 接口清单与代码追溯",
+    "| 项目 | 内容 |",
+    "| 实现层 | 精确定位 | 职责 |",
+    "#### 5.1.2 请求字段",
+    "#### 5.1.3 响应字段",
+    "#### 5.1.4 错误码与异常映射",
+    "#### 5.1.5 认证、授权、幂等与事务",
+    "### 5.2 {next_interface_event_job_or_command_name}",
+    "#### 5.2.1 接口清单与代码追溯",
+    "#### 5.2.2 请求字段",
+    "#### 5.2.3 响应字段",
+    "#### 5.2.4 错误码与异常映射",
+    "#### 5.2.5 认证、授权、幂等与事务",
+    "HTTP / EVENT / TOPIC / JOB / COMMAND",
+    "interface_not_applicable_reason",
+    "interface_not_applicable_evidence",
+]
 
 SENSITIVE_PATTERN = re.compile(
     r"(password|secret|api[_-]?key|access[_-]?key)\s*[:=]|"
@@ -134,6 +158,29 @@ def validate(skill_dir: Path) -> int:
         return fail("unresolved placeholder text found")
     if SENSITIVE_PATTERN.search(combined):
         return fail("credential-like value or private network URL found")
+
+    if skill_name == "axis-doc-project-knowledge":
+        interface_template_path = (
+            skill_dir / "references" / "secondary-capability-detailed-design-template.md"
+        )
+        if not interface_template_path.exists():
+            return fail("secondary capability detailed-design template not found")
+        interface_template = interface_template_path.read_text(encoding="utf-8")
+        for term in GROUPED_INTERFACE_TEMPLATE_TERMS:
+            if term not in interface_template:
+                return fail(f"grouped interface template missing required term: {term}")
+        if re.search(
+            r"^### 5\.\d+ (?:接口清单与代码追踪|请求字段|响应字段|错误码与异常映射)\s*$",
+            interface_template,
+            re.MULTILINE,
+        ):
+            return fail("legacy global interface/request/response subsection found")
+        if re.search(
+            r"^\|\s*`level1_journey_id`\s*\|\s*`api_id`\s*\|\s*方法与完整路径",
+            interface_template,
+            re.MULTILINE,
+        ):
+            return fail("legacy flat wide interface trace table found")
 
     print(f"{skill_name} quick validation passed")
     return 0

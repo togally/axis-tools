@@ -62,35 +62,78 @@ flowchart LR
 
 ## 5. 接口详细设计
 
-HTTP 接口、消息、定时任务和内部命令均是接口契约。`interface_design_status=detailed` 时，必须列出具体方法与完整路径/主题、字段级请求和响应、错误映射，以及入口到测试的代码链；不得用“现有入口集合”“对应应用服务”或仅列类名代替。`interface_coverage=partial` 时必须记录稳定的 `interface_gap_id`，并说明未覆盖入口及影响。
+HTTP 接口、事件/主题、定时任务和内部命令均是可追溯契约。`interface_design_status=detailed` 时，每个契约必须拥有一个直接位于本章下的独立 `### 5.N {接口/事件/任务/命令名称}` 分组；组内固定使用同一编号前缀的 `5.N.1` 至 `5.N.5`，不得把多个契约压平到一张横向宽表，也不得把请求、响应或错误字段提取为全章共用小节。第二个契约必须使用 `5.2.1` 至 `5.2.5`，后续依次递增。
 
-只有仓库证据能证明本能力不存在任何可调用入口、事件、任务或命令时，才可使用 `interface_design_status=not_applicable` 与 `interface_coverage=not_applicable`，并填写 `interface_not_applicable_reason` 和精确的 `interface_not_applicable_evidence`。
+每个分组列出具体 HTTP 方法与完整路径、EVENT/TOPIC 主题、JOB 调度入口或 COMMAND 名称，字段级输入输出、错误映射以及入口到测试的代码链；不得用“现有入口集合”“对应应用服务”或仅列类名代替。`interface_coverage=partial` 时必须记录稳定的 `interface_gap_id`，并说明未覆盖入口及影响。
 
-### 5.1 接口清单与代码追踪
+只有仓库证据能证明本能力不存在任何可调用入口、事件、主题、任务或命令时，才可使用 `interface_design_status=not_applicable` 与 `interface_coverage=not_applicable`。此时不保留空分组，改为填写 `interface_not_applicable_reason={reason}` 和 `interface_not_applicable_evidence={file_path_line_symbol}`；证据必须是仓库相对的 `path:begin-end#symbol`，不能只写“无接口”。
 
-| `level1_journey_id` | `api_id` | 方法与完整路径/主题 | 调用方 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{level1_journey_id}` | `{api_id}` | `{method} {path_or_topic}` | {caller} | {authentication_authorization} | `{request_type}` | `{response_type}` | {error_summary} | {idempotency_transaction} | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已实现 / 目标设计 / 缺失证据 |
+### 5.1 {interface_event_job_or_command_name}
 
-### 5.2 请求字段
+#### 5.1.1 接口清单与代码追溯
 
-为 5.1 中每个接口逐项列出 Header、Path、Query 与 Body 字段；无请求体也必须说明原因。
+| 项目 | 内容 |
+| --- | --- |
+| `level1_journey_id` | `{level1_journey_id}` |
+| `api_id` | `{api_id}` |
+| 契约类型 | HTTP / EVENT / TOPIC / JOB / COMMAND |
+| 方法与完整路径或主题 | `{method_and_path_or_event_topic_job_command}` |
+| 业务目的 | {business_purpose} |
+| 调用方 | {caller} |
+| 请求模型 | `{request_type}` |
+| 响应模型 | `{response_type}` / `not_applicable`（原因与证据） |
+| 状态 | 已实现 / 目标设计 / 缺失证据 |
 
-| `api_id` | 字段 | 位置 | 类型 | 必填 | 约束/枚举 | 业务语义 | 敏感处理 | 证据/状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{api_id}` | `{field_name}` | Header / Path / Query / Body | `{field_type}` | 是 / 否 | {validation_or_enum} | {business_semantics} | {sensitivity_control} | {evidence_or_target} |
+| 实现层 | 精确定位 | 职责 |
+| --- | --- | --- |
+| Controller/入口 | `{controller_file_line_symbol}` | {entry_responsibility} |
+| Service/用例 | `{service_file_line_symbol}` | {use_case_responsibility} |
+| Mapper/Repository | `{mapper_file_line_symbol}` | {persistence_responsibility} |
+| 实体/表 | `{entity_file_line_symbol}`；表 `{table_name}` | {entity_table_responsibility} |
+| 测试 | `{test_file_line_symbol}` | {test_responsibility} |
 
-### 5.3 响应字段
+#### 5.1.2 请求字段
 
-| `api_id` | HTTP/消息状态 | 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据/状态 |
+本小节只描述 5.1 这一项契约。HTTP 逐项列出 Header、Path、Query 与 Body；EVENT/TOPIC 列出消息头、键与载荷；JOB/COMMAND 列出调度上下文、参数和触发条件。确实没有字段时保留一行 `not_applicable`，同时写出原因和精确证据，不得留空。
+
+| 字段 | 位置 | 类型 | 必填 | 约束/枚举 | 业务语义 | 敏感处理 | 证据/状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{api_id}` | `{status}` | `{field_name}` | `{field_type}` | 是 / 否 | {business_semantics} | {producer} | {evidence_or_target} |
+| `{field_name}` | Header / Path / Query / Body / MessageHeader / Key / Payload / Context | `{field_type}` | 是 / 否 | {validation_or_enum} | {business_semantics} | {sensitivity_control} | {evidence_or_target} |
 
-### 5.4 错误码与异常映射
+#### 5.1.3 响应字段
 
-| `api_id` | HTTP/错误码 | 触发条件 | 用户可见语义 | 重试/回滚/补偿 | 代码证据/状态 |
-| --- | --- | --- | --- | --- | --- |
-| `{api_id}` | `{http_or_error_code}` | {trigger_condition} | {visible_semantics} | {recovery_behavior} | {evidence_or_target} |
+HTTP 列出状态码与响应体；EVENT/TOPIC 列出确认、结果事件或明确的单向语义；JOB/COMMAND 列出执行结果与状态。没有直接响应时使用带原因和证据的 `not_applicable` 行。
+
+| HTTP/消息/执行状态 | 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据/状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `{status}` | `{field_name}` | `{field_type}` | 是 / 否 | {business_semantics} | {producer} | {evidence_or_target} |
+
+#### 5.1.4 错误码与异常映射
+
+| HTTP/错误码/失败状态 | 触发条件 | 用户或调用方可见语义 | 重试/回滚/补偿 | 代码证据/状态 |
+| --- | --- | --- | --- | --- |
+| `{http_error_or_failure_status}` | {trigger_condition} | {visible_semantics} | {recovery_behavior} | {evidence_or_target} |
+
+#### 5.1.5 认证、授权、幂等与事务
+
+| 维度 | 设计 | 证据 |
+| --- | --- | --- |
+| 认证 | {authentication_design} | {evidence_or_target} |
+| 授权 | {authorization_design} | {evidence_or_target} |
+| 幂等 | {idempotency_design} | {evidence_or_target} |
+| 事务/一致性 | {transaction_consistency_design} | {evidence_or_target} |
+| 超时/重试/补偿 | {timeout_retry_compensation_design} | {evidence_or_target} |
+
+若存在第二项契约，复制完整分组并严格使用以下标题；不得只复制清单或沿用 `5.1.x` 编号：
+
+- `### 5.2 {next_interface_event_job_or_command_name}`；
+- `#### 5.2.1 接口清单与代码追溯`；
+- `#### 5.2.2 请求字段`；
+- `#### 5.2.3 响应字段`；
+- `#### 5.2.4 错误码与异常映射`；
+- `#### 5.2.5 认证、授权、幂等与事务`。
+
+第三项及后续契约同样使用 `5.3.1` 至 `5.3.5`、`5.4.1` 至 `5.4.5` 依次递增。每个分组中的 `level1_journey_id` 与 `api_id`、字段、错误和代码定位只属于该分组，不能引用另一接口的全局字段表代替。
 
 ## 6. 代码对象与关系
 

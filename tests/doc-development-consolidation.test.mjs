@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
+  flatSecondaryDetailedDesign,
+  validGroupedSecondaryDetailedDesign,
   validLevel1CapabilityDetailedDesign,
   validSecondaryDetailedDesign,
 } from './helpers/project-knowledge-fixtures.mjs';
@@ -678,7 +680,7 @@ try {
   await writeFile(
     merchantSecondaryPath,
     validSecondaryDetailedDesign('merchant_governance')
-      .replace('| `ORDER_CREATE` | `MERCHANT_GOVERNANCE_EXECUTE` |', '| `missing_evidence` | `MERCHANT_GOVERNANCE_EXECUTE` |'),
+      .replace('| `api_id` | `ORDER_CREATE` |', '| `api_id` | `missing_evidence` |'),
     'utf8',
   );
   await assert.rejects(
@@ -688,26 +690,22 @@ try {
       '--repo', capabilityRepo,
       '--run-id', '20260713T010100Z-project-knowledge-cross-level-trace-binding-a0b1c2dd',
     ]),
-    /secondary capability detailed design omits level-1 journey_id: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_EXECUTE/,
+    /secondary capability interface group has invalid api_id: merchant_operations\/merchant_governance\/5\.1/,
   );
   await writeFile(
     merchantSecondaryPath,
     validSecondaryDetailedDesign('merchant_governance'),
     'utf8',
   );
-  const validMerchantSecondary = validSecondaryDetailedDesign('merchant_governance');
-  const merchantApiRow = validMerchantSecondary
-    .split('\n')
-    .find((line) => line.startsWith('| `ORDER_CREATE` | `MERCHANT_GOVERNANCE_EXECUTE` |'));
-  assert.ok(merchantApiRow);
+  const validMerchantSecondary = validGroupedSecondaryDetailedDesign('merchant_governance');
+  const secondInterfaceStart = validMerchantSecondary.indexOf('### 5.2 查询业务接口');
+  assert.ok(secondInterfaceStart > 0);
+  const merchantWithUnlistedJourney = `${validMerchantSecondary.slice(0, secondInterfaceStart)}${validMerchantSecondary
+    .slice(secondInterfaceStart)
+    .replace('`MERCHANT_GOVERNANCE_EXECUTE`', '`MERCHANT_GOVERNANCE_QUERY`')}`;
   await writeFile(
     merchantSecondaryPath,
-    validMerchantSecondary.replace(
-      merchantApiRow,
-      `${merchantApiRow}\n${merchantApiRow
-        .replace('ORDER_CREATE', 'ORDER_QUERY')
-        .replace('MERCHANT_GOVERNANCE_EXECUTE', 'MERCHANT_GOVERNANCE_QUERY')}`,
-    ),
+    merchantWithUnlistedJourney,
     'utf8',
   );
   await assert.rejects(
@@ -921,6 +919,64 @@ try {
     /business architecture omits capability overview link: merchant_operations/,
   );
   await writeFile(businessArchitecturePath, '# 业务架构\n\n[商户经营](business/capabilities/merchant_operations/detailed-design.md)\n', 'utf8');
+
+  await writeFile(merchantSecondaryPath, flatSecondaryDetailedDesign('merchant_governance'), 'utf8');
+  await writeFile(catalogSecondaryPath, flatSecondaryDetailedDesign('catalog_inventory'), 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010107Z-project-knowledge-interface-flat-f7a8b9c0',
+    ]),
+    /secondary capability interface design must group each interface: merchant_operations\/merchant_governance/,
+  );
+
+  const validGroupedMerchantSecondary = validGroupedSecondaryDetailedDesign('merchant_governance');
+  const validGroupedCatalogSecondary = validGroupedSecondaryDetailedDesign('catalog_inventory');
+  const merchantWithoutSecondRequest = validGroupedMerchantSecondary.replace(
+    /#### 5\.2\.2 请求字段[\s\S]*?(?=#### 5\.2\.3 响应字段)/,
+    '',
+  );
+  assert.doesNotMatch(merchantWithoutSecondRequest, /#### 5\.2\.2 请求字段/);
+  await writeFile(merchantSecondaryPath, merchantWithoutSecondRequest, 'utf8');
+  await writeFile(catalogSecondaryPath, validGroupedCatalogSecondary, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010108Z-project-knowledge-interface-missing-request-f7a8b9c1',
+    ]),
+    /secondary capability interface group missing 5\.2\.2 请求字段: merchant_operations\/merchant_governance/,
+  );
+
+  const merchantWithWrongSecondNumbering = validGroupedMerchantSecondary.replaceAll(
+    '#### 5.2.',
+    '#### 5.1.',
+  );
+  assert.doesNotMatch(merchantWithWrongSecondNumbering, /#### 5\.2\.2 请求字段/);
+  await writeFile(merchantSecondaryPath, merchantWithWrongSecondNumbering, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010109Z-project-knowledge-interface-wrong-numbering-f7a8b9c2',
+    ]),
+    /secondary capability interface group subsection numbering mismatch: merchant_operations\/merchant_governance\/5\.2/,
+  );
+
+  await writeFile(merchantSecondaryPath, validGroupedMerchantSecondary, 'utf8');
+  await writeFile(catalogSecondaryPath, validGroupedCatalogSecondary, 'utf8');
+  const { stdout: groupedInterfaceStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010110Z-project-knowledge-interface-grouped-f7a8b9c3',
+  ]);
+  assert.equal(JSON.parse(groupedInterfaceStdout).ok, true);
+
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations', [
