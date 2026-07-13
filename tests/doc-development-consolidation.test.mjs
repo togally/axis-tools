@@ -7,6 +7,7 @@ import { promisify } from 'node:util';
 import {
   flatSecondaryDetailedDesign,
   validGroupedSecondaryDetailedDesign,
+  validGroupedSecondaryDetailedDesignWithInternalLogic,
   validLevel1CapabilityDetailedDesign,
   validSecondaryDetailedDesign,
 } from './helpers/project-knowledge-fixtures.mjs';
@@ -178,7 +179,7 @@ for (const requiredText of [
   '表关系与数据所有权',
   '状态与字段映射',
   '数据迁移、兼容与回滚',
-  '业务流与逻辑关系',
+  '能力级流程与跨接口关系',
   '接口详细设计',
   '请求字段',
   '响应字段',
@@ -935,10 +936,10 @@ try {
   const validGroupedMerchantSecondary = validGroupedSecondaryDetailedDesign('merchant_governance');
   const validGroupedCatalogSecondary = validGroupedSecondaryDetailedDesign('catalog_inventory');
   const merchantWithoutSecondRequest = validGroupedMerchantSecondary.replace(
-    /#### 5\.2\.2 请求字段[\s\S]*?(?=#### 5\.2\.3 响应字段)/,
+    /#### 5\.2\.3 请求字段[\s\S]*?(?=#### 5\.2\.4 响应字段)/,
     '',
   );
-  assert.doesNotMatch(merchantWithoutSecondRequest, /#### 5\.2\.2 请求字段/);
+  assert.doesNotMatch(merchantWithoutSecondRequest, /#### 5\.2\.3 请求字段/);
   await writeFile(merchantSecondaryPath, merchantWithoutSecondRequest, 'utf8');
   await writeFile(catalogSecondaryPath, validGroupedCatalogSecondary, 'utf8');
   await assert.rejects(
@@ -948,14 +949,14 @@ try {
       '--repo', capabilityRepo,
       '--run-id', '20260713T010108Z-project-knowledge-interface-missing-request-f7a8b9c1',
     ]),
-    /secondary capability interface group missing 5\.2\.2 请求字段: merchant_operations\/merchant_governance/,
+    /secondary capability interface group missing 5\.2\.3 请求字段: merchant_operations\/merchant_governance/,
   );
 
   const merchantWithWrongSecondNumbering = validGroupedMerchantSecondary.replaceAll(
     '#### 5.2.',
     '#### 5.1.',
   );
-  assert.doesNotMatch(merchantWithWrongSecondNumbering, /#### 5\.2\.2 请求字段/);
+  assert.doesNotMatch(merchantWithWrongSecondNumbering, /#### 5\.2\.3 请求字段/);
   await writeFile(merchantSecondaryPath, merchantWithWrongSecondNumbering, 'utf8');
   await assert.rejects(
     execFileAsync(process.execPath, [
@@ -976,6 +977,150 @@ try {
     '--run-id', '20260713T010110Z-project-knowledge-interface-grouped-f7a8b9c3',
   ]);
   assert.equal(JSON.parse(groupedInterfaceStdout).ok, true);
+
+  const merchantWithInterfaceLogic = validGroupedSecondaryDetailedDesignWithInternalLogic('merchant_governance');
+  const catalogWithInterfaceLogic = validGroupedSecondaryDetailedDesignWithInternalLogic('catalog_inventory');
+  const merchantWithoutFirstLogic = merchantWithInterfaceLogic.replace(
+    /#### 5\.1\.2 内部处理逻辑[\s\S]*?(?=#### 5\.1\.3 请求字段)/,
+    '',
+  );
+  await writeFile(merchantSecondaryPath, merchantWithoutFirstLogic, 'utf8');
+  await writeFile(catalogSecondaryPath, validGroupedCatalogSecondary, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010111Z-project-knowledge-interface-missing-logic-f7a8b9c4',
+    ]),
+    /secondary capability interface group missing 5\.1\.2 内部处理逻辑: merchant_operations\/merchant_governance/,
+  );
+
+  const merchantWithoutSecondLogic = merchantWithInterfaceLogic.replace(
+    /#### 5\.2\.2 内部处理逻辑[\s\S]*?(?=#### 5\.2\.3 请求字段)/,
+    '',
+  );
+  assert.doesNotMatch(merchantWithoutSecondLogic, /#### 5\.2\.2 内部处理逻辑/);
+  await writeFile(merchantSecondaryPath, merchantWithoutSecondLogic, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010112Z-project-knowledge-interface-second-logic-f7a8b9c5',
+    ]),
+    /secondary capability interface group missing 5\.2\.2 内部处理逻辑: merchant_operations\/merchant_governance/,
+  );
+
+  const genericLogic = [
+    '#### 5.1.2 内部处理逻辑',
+    '',
+    '接口内部通过通用应用服务执行规则并产生结果。',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '    actor --> api',
+    '    api --> application_service',
+    '    application_service --> business_rule',
+    '    business_rule --> entity_or_table',
+    '    business_rule --> outcome_or_state',
+    '```',
+    '',
+  ].join('\n');
+  const merchantWithGenericLogic = merchantWithInterfaceLogic.replace(
+    /#### 5\.1\.2 内部处理逻辑[\s\S]*?(?=#### 5\.1\.3 请求字段)/,
+    genericLogic,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithGenericLogic, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010113Z-project-knowledge-interface-generic-logic-f7a8b9c6',
+    ]),
+    /secondary capability interface internal logic uses generic placeholder: merchant_operations\/merchant_governance\/5\.1/,
+  );
+
+  const merchantWithoutLogicSummary = merchantWithInterfaceLogic.replace(
+    /#### 5\.1\.2 内部处理逻辑[\s\S]*?(?=#### 5\.1\.3 请求字段)/,
+    [
+      '#### 5.1.2 内部处理逻辑',
+      '',
+      '```mermaid',
+      'flowchart LR',
+      '    A["CapabilityController.execute"] --> B["CapabilityService.execute"]',
+      '    B --> C["OrderMapper.insert 写入 order"]',
+      '```',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(merchantSecondaryPath, merchantWithoutLogicSummary, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010114Z-project-knowledge-interface-logic-summary-f7a8b9c7',
+    ]),
+    /secondary capability interface internal logic missing concrete summary: merchant_operations\/merchant_governance\/5\.1/,
+  );
+
+  const merchantWithoutLogicFlow = merchantWithInterfaceLogic.replace(
+    /#### 5\.1\.2 内部处理逻辑[\s\S]*?(?=#### 5\.1\.3 请求字段)/,
+    [
+      '#### 5.1.2 内部处理逻辑',
+      '',
+      '该接口由 `CapabilityController.execute` 校验订单，再调用 `CapabilityService.execute` 和 `OrderMapper.insert` 写入 `order` 并返回订单状态。',
+      '',
+    ].join('\n'),
+  );
+  await writeFile(merchantSecondaryPath, merchantWithoutLogicFlow, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010115Z-project-knowledge-interface-logic-flow-f7a8b9c8',
+    ]),
+    /secondary capability interface internal logic missing flow diagram or step table: merchant_operations\/merchant_governance\/5\.1/,
+  );
+
+  const merchantWithOldRequestNumber = merchantWithInterfaceLogic.replace(
+    '#### 5.2.3 请求字段',
+    '#### 5.2.2 请求字段',
+  );
+  assert.doesNotMatch(merchantWithOldRequestNumber, /#### 5\.2\.3 请求字段/);
+  await writeFile(merchantSecondaryPath, merchantWithOldRequestNumber, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010116Z-project-knowledge-interface-logic-numbering-f7a8b9c9',
+    ]),
+    /secondary capability interface group subsection numbering mismatch: merchant_operations\/merchant_governance\/5\.2/,
+  );
+
+  assert.match(merchantWithInterfaceLogic, /#### 5\.1\.2 内部处理逻辑[\s\S]*CapabilityController\.execute[\s\S]*```mermaid/);
+  assert.match(merchantWithInterfaceLogic, /#### 5\.2\.2 内部处理逻辑[\s\S]*CapabilityController\.detail[\s\S]*\| 步骤 \| 内部处理 \|/);
+  for (const prefix of ['5.1', '5.2']) {
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.3 请求字段`));
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.4 响应字段`));
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.5 错误码与异常映射`));
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.6 认证、授权、幂等与事务`));
+  }
+  await writeFile(merchantSecondaryPath, merchantWithInterfaceLogic, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  const { stdout: groupedInterfaceLogicStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010117Z-project-knowledge-interface-logic-grouped-f7a8b9ca',
+  ]);
+  assert.equal(JSON.parse(groupedInterfaceLogicStdout).ok, true);
 
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),

@@ -37,22 +37,15 @@
 | --- | --- | --- | --- | --- | --- |
 | {actor} | {precondition} | {action} | {data_scope} | {audit_rule} | {evidence_ref} |
 
-## 3. 业务流与逻辑关系
+## 3. 能力级流程与跨接口关系
 
-每条关键链路分配稳定的 `{flow_id}`，并从一级全景带入同值 `{level1_journey_id}`。图中的节点与下表、接口和代码对象使用相同标识，便于横向追溯。一个内部流承接多个一级旅程时，为每个 `level1_journey_id` 分别保留绑定行，不得用无法机检的合并文本代替。
+本章只描述二级能力内部多个接口、事件、主题、任务或命令之间的能力级编排，例如先后顺序、触发关系、跨契约状态传递和补偿关系。单个契约内部的参数校验、方法调用、业务判断、数据读写、结果生成与失败处理统一放在对应的 `5.N.2 内部处理逻辑`，不得在本章重复一张泛化的 Controller → Service → Mapper 图。
 
-```mermaid
-flowchart LR
-    actor["{actor}"] --> api["{api_id}"]
-    api --> application["{application_service}"]
-    application --> rule["{business_rule}"]
-    rule --> data["{entity_or_table}"]
-    rule --> result["{outcome_or_state}"]
-```
+为每条能力级链路分配稳定的 `{flow_id}`，并从一级全景带入同值 `{level1_journey_id}`。存在真实跨契约编排时，可以补充使用实际 `api_id`、事件、任务和状态名称的 Mermaid 图；不存在跨契约编排时，明确写“本能力无跨契约编排，接口内部逻辑见各 `5.N.2`”，不要生成占位图。
 
-| `level1_journey_id` | `flow_id` / 步骤 | 发起方 | 业务动作与决策规则 | 输入 | 代码对象 | 读/写实体或表 | 输出/状态变化 | 失败与恢复 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{level1_journey_id}` | `{flow_id}` / {step} | {actor} | {action_and_decision} | {input} | {code_object_refs} | {entity_table_refs} | {result} | {failure_recovery} | {evidence_ref} |
+| `level1_journey_id` | `flow_id` | 上游契约/触发 | 下游契约/结果 | 跨契约规则或状态传递 | 失败与补偿 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `{level1_journey_id}` | `{flow_id}` | `{upstream_api_event_job_or_command}` | `{downstream_api_event_job_or_command_or_result}` | {cross_contract_rule_or_state_handoff} | {cross_contract_failure_compensation} | {evidence_ref} |
 
 ## 4. 业务对象、状态与规则
 
@@ -62,7 +55,7 @@ flowchart LR
 
 ## 5. 接口详细设计
 
-HTTP 接口、事件/主题、定时任务和内部命令均是可追溯契约。`interface_design_status=detailed` 时，每个契约必须拥有一个直接位于本章下的独立 `### 5.N {接口/事件/任务/命令名称}` 分组；组内固定使用同一编号前缀的 `5.N.1` 至 `5.N.5`，不得把多个契约压平到一张横向宽表，也不得把请求、响应或错误字段提取为全章共用小节。第二个契约必须使用 `5.2.1` 至 `5.2.5`，后续依次递增。
+HTTP 接口、事件/主题、定时任务和内部命令均是可追溯契约。`interface_design_status=detailed` 时，每个契约必须拥有一个直接位于本章下的独立 `### 5.N {接口/事件/任务/命令名称}` 分组；组内固定使用同一编号前缀的 `5.N.1` 至 `5.N.6`，不得把多个契约压平到一张横向宽表，也不得把内部处理逻辑、请求、响应或错误字段提取为全章共用小节。第二个契约必须使用 `5.2.1` 至 `5.2.6`，后续依次递增。
 
 每个分组列出具体 HTTP 方法与完整路径、EVENT/TOPIC 主题、JOB 调度入口或 COMMAND 名称，字段级输入输出、错误映射以及入口到测试的代码链；不得用“现有入口集合”“对应应用服务”或仅列类名代替。`interface_coverage=partial` 时必须记录稳定的 `interface_gap_id`，并说明未覆盖入口及影响。
 
@@ -92,7 +85,28 @@ HTTP 接口、事件/主题、定时任务和内部命令均是可追溯契约�
 | 实体/表 | `{entity_file_line_symbol}`；表 `{table_name}` | {entity_table_responsibility} |
 | 测试 | `{test_file_line_symbol}` | {test_responsibility} |
 
-#### 5.1.2 请求字段
+#### 5.1.2 内部处理逻辑
+
+先用一段具体处理说明概括这一项契约从入口到结果的内部逻辑，至少写清入口或触发、输入校验、Service/UseCase 编排、关键业务判断或分支、数据读写、输出/状态/结果事件以及失败与恢复中实际适用的部分。说明中的代码对象、表和状态必须与 `5.1.1` 的实现追溯一致，不能只写“调用服务处理并返回结果”。
+
+处理说明：{concrete_internal_processing_summary}
+
+处理说明之后至少保留一种结构化表达：有重要分支、异步交互、循环、事务或补偿时优先使用 Mermaid；简单线性流程可使用步骤表。下面两种形式是可替换示例，实际输出必须替换所有花括号内容，删除未采用的形式，不得保留占位节点或占位文字。
+
+```mermaid
+flowchart TD
+    entry["{concrete_entry_or_trigger_symbol}: {receive_or_trigger_action}"] --> validation{"{concrete_validation_or_business_decision}"}
+    validation -->|{accepted_condition}| usecase["{concrete_service_or_usecase_symbol}: {orchestration_action}"]
+    validation -->|{rejected_condition}| failure["{concrete_error_or_failure_state}"]
+    usecase --> data["{concrete_repository_entity_or_table}: {read_or_write_action}"]
+    data --> result["{concrete_response_state_event_or_job_result}"]
+```
+
+| 步骤 | 内部处理 | 代码对象 | 数据读写/状态变化 | 失败处理 |
+| --- | --- | --- | --- | --- |
+| 1 | {concrete_validation_or_decision} | `{concrete_code_symbol}` | {concrete_read_write_or_state_change} | {concrete_failure_or_recovery} |
+
+#### 5.1.3 请求字段
 
 本小节只描述 5.1 这一项契约。HTTP 逐项列出 Header、Path、Query 与 Body；EVENT/TOPIC 列出消息头、键与载荷；JOB/COMMAND 列出调度上下文、参数和触发条件。确实没有字段时保留一行 `not_applicable`，同时写出原因和精确证据，不得留空。
 
@@ -100,7 +114,7 @@ HTTP 接口、事件/主题、定时任务和内部命令均是可追溯契约�
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | `{field_name}` | Header / Path / Query / Body / MessageHeader / Key / Payload / Context | `{field_type}` | 是 / 否 | {validation_or_enum} | {business_semantics} | {sensitivity_control} | {evidence_or_target} |
 
-#### 5.1.3 响应字段
+#### 5.1.4 响应字段
 
 HTTP 列出状态码与响应体；EVENT/TOPIC 列出确认、结果事件或明确的单向语义；JOB/COMMAND 列出执行结果与状态。没有直接响应时使用带原因和证据的 `not_applicable` 行。
 
@@ -108,13 +122,13 @@ HTTP 列出状态码与响应体；EVENT/TOPIC 列出确认、结果事件或明
 | --- | --- | --- | --- | --- | --- | --- |
 | `{status}` | `{field_name}` | `{field_type}` | 是 / 否 | {business_semantics} | {producer} | {evidence_or_target} |
 
-#### 5.1.4 错误码与异常映射
+#### 5.1.5 错误码与异常映射
 
 | HTTP/错误码/失败状态 | 触发条件 | 用户或调用方可见语义 | 重试/回滚/补偿 | 代码证据/状态 |
 | --- | --- | --- | --- | --- |
 | `{http_error_or_failure_status}` | {trigger_condition} | {visible_semantics} | {recovery_behavior} | {evidence_or_target} |
 
-#### 5.1.5 认证、授权、幂等与事务
+#### 5.1.6 认证、授权、幂等与事务
 
 | 维度 | 设计 | 证据 |
 | --- | --- | --- |
@@ -128,12 +142,13 @@ HTTP 列出状态码与响应体；EVENT/TOPIC 列出确认、结果事件或明
 
 - `### 5.2 {next_interface_event_job_or_command_name}`；
 - `#### 5.2.1 接口清单与代码追溯`；
-- `#### 5.2.2 请求字段`；
-- `#### 5.2.3 响应字段`；
-- `#### 5.2.4 错误码与异常映射`；
-- `#### 5.2.5 认证、授权、幂等与事务`。
+- `#### 5.2.2 内部处理逻辑`；
+- `#### 5.2.3 请求字段`；
+- `#### 5.2.4 响应字段`；
+- `#### 5.2.5 错误码与异常映射`；
+- `#### 5.2.6 认证、授权、幂等与事务`。
 
-第三项及后续契约同样使用 `5.3.1` 至 `5.3.5`、`5.4.1` 至 `5.4.5` 依次递增。每个分组中的 `level1_journey_id` 与 `api_id`、字段、错误和代码定位只属于该分组，不能引用另一接口的全局字段表代替。
+第三项及后续契约同样使用 `5.3.1` 至 `5.3.6`、`5.4.1` 至 `5.4.6` 依次递增。每个分组中的 `level1_journey_id` 与 `api_id`、内部处理逻辑、字段、错误和代码定位只属于该分组，不能引用另一接口的全局流程图或字段表代替。
 
 ## 6. 代码对象与关系
 
