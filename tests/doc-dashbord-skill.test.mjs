@@ -36,6 +36,9 @@ for (const requiredText of [
   'https://github.com/togally/axis-document-review',
   '/api/health',
   '/api/catalog',
+  '历史追溯',
+  '.axis/docs/_archive/orgs/',
+  'archive_count',
   'AXIS_DOC_DASHBORD_DIR',
   'After Use Deposition',
 ]) {
@@ -74,6 +77,14 @@ try {
   assert.match(scaffoldBrowser, /data-source-id/);
   assert.match(scaffoldBrowser, /bucket\.source_ids\.includes\(state\.activeSourceId\)/);
   assert.match(scaffoldBrowser, /class="project-context"/);
+  assert.match(scaffoldBrowser, /historyPanel/);
+  assert.match(scaffoldBrowser, /archivesForDocument/);
+  assert.match(scaffoldBrowser, /renderDocumentNavigation/);
+  assert.match(scaffoldBrowser, /capability-group/);
+  assert.match(scaffoldBrowser, /返回业务架构/);
+  assert.match(scaffoldBrowser, /返回能力总览/);
+  assert.match(scaffoldBrowser, /上一个二级能力/);
+  assert.match(scaffoldBrowser, /下一个二级能力/);
   assert.doesNotMatch(scaffoldBrowser, /organization-label|tree-icon|elements\.breadcrumb|elements\.projectTitle/);
   const scaffoldHtml = await readFile(path.join(scaffoldTarget, 'public', 'index.html'), 'utf8');
   assert.doesNotMatch(scaffoldHtml, /overview-strip|data-drilldown|bucketMetric|organizationMetric|projectMetric|documentMetric/);
@@ -83,8 +94,17 @@ try {
   assert.match(scaffoldNavigation, /class="document-list-panel navigation-documents"/);
   assert.doesNotMatch(scaffoldContent, /document-list-panel/);
   assert.match(scaffoldHtml, /id="fullscreenButton"/);
+  assert.match(scaffoldHtml, /id="historyButton"/);
+  assert.match(scaffoldHtml, /id="historyPanel"/);
+  assert.match(scaffoldHtml, /历史追溯/);
+  assert.match(scaffoldHtml, /返回当前版本/);
+  assert.match(scaffoldHtml, /id="documentNavigation"/);
   const scaffoldCss = await readFile(path.join(scaffoldTarget, 'public', 'styles.css'), 'utf8');
   assert.match(scaffoldCss, /\.workspace\s*\{[^}]*grid-template-columns:\s*330px\s+minmax\(0,\s*1fr\)/s);
+  assert.match(scaffoldCss, /\.history-panel/);
+  assert.match(scaffoldCss, /\.archive-banner/);
+  assert.match(scaffoldCss, /\.document-navigation/);
+  assert.match(scaffoldCss, /\.capability-children/);
   await rm(scaffoldTarget, { recursive: true, force: true });
 } finally {
   await rm(missingTarget, { recursive: true, force: true });

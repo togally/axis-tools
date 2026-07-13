@@ -18,15 +18,6 @@ REQUIRED_TERMS = {
         "No Silent Approved-Doc Rewrite",
         "After Use Deposition",
     ],
-    "axis-doc-business-domain": [
-        "Three-Step Work Contract",
-        "business_id",
-        "business_inventory",
-        "business_domain_detailed_design",
-        "business/domains/{business_id}/detailed-design.md",
-        "missing_evidence",
-        "After Use Deposition",
-    ],
 }
 
 SENSITIVE_PATTERN = re.compile(

@@ -287,15 +287,11 @@ const packagedSkillNames = [
   'axis-code-arch-optimize',
   'axis-code-bugfix',
   'axis-code-capture',
-  'axis-doc-business-domain',
   'axis-doc-dashbord',
-  'axis-doc-db-design',
   'axis-doc-development',
   'axis-doc-drift-capture',
-  'axis-doc-feature-detailed-design',
   'axis-doc-project-init',
-  'axis-doc-project-knowledge-bootstrap',
-  'axis-doc-tech-design',
+  'axis-doc-project-knowledge',
   'axis-integration-yunxiao-codeup',
   'axis-ops-ali-dashboard',
   'axis-ops-oss-publish',
@@ -328,20 +324,15 @@ for (const skillName of packagedSkillDirs) {
 const consolidationAudit = await readFile(path.join(repoRoot, 'docs', 'axis-skill-consolidation-audit.md'), 'utf8');
 for (const requiredText of [
   'Axis Skill Consolidation Audit',
-  'Current Decision',
+  'Consolidated Decision',
   'Rename Guard',
   'axis-doc-development',
   'axis-doc-tech-design',
   'axis-doc-db-design',
-  'axis-doc-project-knowledge-bootstrap',
+  'axis-doc-project-knowledge',
   'axis-doc-business-domain',
   'axis-doc-drift-capture',
-  'axis-code-capture',
-  'axis-test-report',
-  'axis-ops-oss-publish',
-  'axis-skill-create',
-  'axis-skill-update',
-  'Do not merge now',
+  'Consolidate now',
 ]) {
   assert.match(consolidationAudit, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
@@ -405,24 +396,29 @@ for (const requiredText of [
 }
 assert.doesNotMatch(projectInitBody, /Show every `fields\[\]` entry in order, one at a time/i);
 
-const projectKnowledgeBootstrap = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge-bootstrap');
-assert.ok(projectKnowledgeBootstrap);
-assert.deepEqual(projectKnowledgeBootstrap.files.sort(), [
+const projectKnowledge = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge');
+assert.ok(projectKnowledge);
+assert.deepEqual(projectKnowledge.files.sort(), [
   'SKILL.md',
   'agents/openai.yaml',
-  'references/business-domain-detailed-design-template.md',
+  'quick_validate.py',
+  'references/business-capability-detailed-design-template.md',
   'references/project-business-architecture-template.md',
   'references/project-technical-architecture-template.md',
+  'references/secondary-capability-detailed-design-template.md',
 ]);
-assert.match(projectKnowledgeBootstrap.description, /^Use when/);
-assert.match(projectKnowledgeBootstrap.description, /[\u3400-\u9FFF]/);
-const projectKnowledgeBootstrapBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-doc-project-knowledge-bootstrap', 'SKILL.md'),
+assert.match(projectKnowledge.description, /^Use when/);
+assert.match(projectKnowledge.description, /[\u3400-\u9FFF]/);
+const projectKnowledgeBody = await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-project-knowledge', 'SKILL.md'),
   'utf8',
 );
 for (const requiredText of [
   'Three-Step Work Contract',
   'Evidence Collection Rules',
+  'bootstrap',
+  'scan_and_reconcile',
+  'requirement_design',
   'routes',
   'controllers',
   'pages',
@@ -435,67 +431,87 @@ for (const requiredText of [
   'docs',
   'project_technical_architecture',
   'project_business_architecture',
-  'business_domain_detailed_design',
+  'business_capability_detailed_design',
   'business_inventory',
   'doc_gap_report',
+  'level1_capability_id',
+  'secondary_capabilities',
   'business_id',
-  'aliases',
   'actors',
-  'critical / high / medium / low',
-  'active / deprecated / prototype / external_only / unknown',
-  'missing / draft / review / approved / low_confidence / stale / blocked / not_applicable',
-  'generate_domain_docs / review_evidence / mark_not_applicable / refresh_stale_docs / manual_confirm',
-  'document_language',
-  'zh-CN',
-  'document_role_separation_check',
-  'project-knowledge-capture',
-  'projects/{project_slug}',
-  '_sync/manifest.json',
-  'ISO/IEC/IEEE 42010:2022',
-  'arc42',
-  'C4',
-  'ISO/IEC 25010:2023',
-  'GB/T 8567-2006',
-  'IEEE 1016-2009',
+  'missing_evidence',
+  'low_confidence',
+  'approved',
+  'superseded',
   'architecture/technical.md',
   'architecture/business.md',
-  'business/domains/{business_id}/detailed-design.md',
-  'one document per business_id',
+  'business/capabilities/{level1_capability_id}/detailed-design.md',
+  'business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md',
+  'secondary_capability_detailed_design',
+  'one canonical overview per level1_capability_id',
+  'every secondary capability',
   'gaps/doc-gap-report.md',
-  'axis-doc-feature-detailed-design',
+  'axis-doc-development',
+  '_archive',
 ]) {
-  assert.match(projectKnowledgeBootstrapBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(projectKnowledgeBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
-assert.doesNotMatch(projectKnowledgeBootstrapBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
-assert.doesNotMatch(projectKnowledgeBootstrapBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
-assert.doesNotMatch(projectKnowledgeBootstrapBody, /project_business_detailed_design|architecture\/business-detailed-design\.md/);
-const businessDomainDetailedDesignTemplate = await readFile(
+assert.doesNotMatch(projectKnowledgeBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(projectKnowledgeBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
+assert.doesNotMatch(projectKnowledgeBody, /project_business_detailed_design|architecture\/business-detailed-design\.md/);
+const businessCapabilityDetailedDesignTemplate = await readFile(
   path.join(
     repoRoot,
     'skills',
-    'axis-doc-project-knowledge-bootstrap',
+    'axis-doc-project-knowledge',
     'references',
-    'business-domain-detailed-design-template.md',
+    'business-capability-detailed-design-template.md',
   ),
   'utf8',
 );
 for (const requiredText of [
-  '业务域详细设计说明书',
-  '设计结论',
-  '业务架构追踪基线',
-  '业务流程编排',
-  '异常与补偿设计',
-  '角色职责与权限设计',
-  '业务对象与状态设计',
-  '业务规则决策表',
-  '业务能力到系统实现映射',
+  '# {project_name} · {level1_capability_name} 详细设计说明书',
+  'level1_capability_id',
+  '二级能力完整性清单',
+  'secondary_capabilities',
+  '对应 business_id',
+  '二级能力文档',
+  '不得遗漏任何二级能力',
+  '返回业务架构',
+  '上一个能力',
+  '下一个能力',
   '验收与追踪矩阵',
-  '假设与缺失证据',
 ]) {
-  assert.match(businessDomainDetailedDesignTemplate, new RegExp(requiredText));
+  assert.match(businessCapabilityDetailedDesignTemplate, new RegExp(requiredText));
 }
-assert.match(businessDomainDetailedDesignTemplate, /业务域边界|业务域标识|business_id/);
-assert.doesNotMatch(businessDomainDetailedDesignTemplate, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
+assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /一级能力详细设计说明书/);
+
+const secondaryCapabilityDetailedDesignTemplate = await readFile(
+  path.join(
+    repoRoot,
+    'skills',
+    'axis-doc-project-knowledge',
+    'references',
+    'secondary-capability-detailed-design-template.md',
+  ),
+  'utf8',
+);
+for (const requiredText of [
+  '详细设计说明书',
+  'secondary_capability_id',
+  '返回能力总览',
+  '上一个二级能力',
+  '下一个二级能力',
+  '表结构设计',
+  '数据表清单',
+  '字段结构',
+  '索引与约束',
+  '表关系与数据所有权',
+  '状态与字段映射',
+  '数据迁移、兼容与回滚',
+]) {
+  assert.match(secondaryCapabilityDetailedDesignTemplate, new RegExp(requiredText));
+}
+assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 
 const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');
 assert.ok(docDriftCapture);
@@ -541,107 +557,6 @@ for (const requiredText of [
 }
 assert.doesNotMatch(docDriftCaptureBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
-
-const businessDomainDoc = manifest.skills.find((skill) => skill.name === 'axis-doc-business-domain');
-assert.ok(businessDomainDoc);
-assert.deepEqual(businessDomainDoc.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
-assert.match(businessDomainDoc.description, /^Use when/);
-assert.match(businessDomainDoc.description, /[\u3400-\u9FFF]/);
-const businessDomainDocBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-doc-business-domain', 'SKILL.md'),
-  'utf8',
-);
-for (const requiredText of [
-  'Three-Step Work Contract',
-  'business_id',
-  'business_inventory',
-  'project_technical_architecture',
-  'project_business_architecture',
-  'business_domain_detailed_design',
-  'business/domains/{business_id}/detailed-design.md',
-  'exactly one',
-  'scan_and_reconcile',
-  'requirement_design',
-  'requirement_detailed_design',
-  'business/domains/{business_id}/requirements/{requirement_id}/detailed-design.md',
-  'project_business_architecture',
-  'update the business architecture summary',
-  'zero_matches',
-  'multiple_matches',
-  'business flow',
-  'state model',
-  'permissions',
-  'table structure',
-  'interfaces',
-  'code locations',
-  'test points',
-  'axis-doc-development',
-  'axis-doc-tech-design',
-  'axis-doc-db-design',
-  'missing_evidence',
-  'assumptions',
-  'doc_gap_report',
-  'gap_items',
-  'low_confidence',
-  'conflict',
-  'do not invent',
-  'public-safe',
-  'axis-doc-feature-detailed-design',
-]) {
-  assert.match(businessDomainDocBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-}
-assert.doesNotMatch(businessDomainDocBody, /domain_business_spec|domain_technical_design|business-spec\.md|technical-design\.md/);
-assert.doesNotMatch(businessDomainDocBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
-assert.doesNotMatch(businessDomainDocBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
-
-const featureDetailedDesign = manifest.skills.find((skill) => skill.name === 'axis-doc-feature-detailed-design');
-assert.ok(featureDetailedDesign);
-assert.deepEqual(featureDetailedDesign.files.sort(), [
-  'SKILL.md',
-  'agents/openai.yaml',
-  'references/feature-detailed-design-template.md',
-]);
-assert.match(featureDetailedDesign.description, /^Use when/);
-assert.match(featureDetailedDesign.description, /[\u3400-\u9FFF]/);
-const featureDetailedDesignBody = await readFile(
-  path.join(repoRoot, 'skills', 'axis-doc-feature-detailed-design', 'SKILL.md'),
-  'utf8',
-);
-for (const requiredText of [
-  'Three-Step Work Contract',
-  'Feature Resolution Confirmation Gate',
-  'zero_matches',
-  'multiple_matches',
-  'confirmed_feature',
-  'do not generate',
-  'routes',
-  'controllers',
-  'pages',
-  'menus',
-  'services',
-  'entities',
-  'migrations',
-  'tests',
-  'config',
-  'docs',
-  'feature_id',
-  'feature_detailed_design',
-  'features/{feature_id}/detailed-design.md',
-  'axis-doc-tech-design',
-  'requirements and non-goals',
-  'main and exception flows',
-  'transaction, idempotency, and concurrency',
-  'security, privacy, and audit',
-  'tests and acceptance criteria',
-  'assumptions',
-  'missing evidence',
-  'public-safe',
-]) {
-  assert.match(featureDetailedDesignBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-}
-assert.match(featureDetailedDesignBody, /ask (?:the )?user|向用户确认/i);
-assert.doesNotMatch(featureDetailedDesignBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
-assert.doesNotMatch(featureDetailedDesignBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
 const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-code-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
@@ -834,39 +749,25 @@ assert.match(createSkillMd, /Mandatory Before-Use Experience Application/);
 assert.match(createSkillMd, /Model Reasoning Level/);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
-const techDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-tech-design', 'SKILL.md'), 'utf8');
-assert.match(techDesignDocMd, /Three-Step Work Contract/);
-assert.match(techDesignDocMd, /Light Adversarial Review/);
-assert.match(techDesignDocMd, /boundary risks/i);
-
-const dbDesignDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-db-design', 'SKILL.md'), 'utf8');
-assert.match(dbDesignDocMd, /Three-Step Work Contract/);
-assert.match(dbDesignDocMd, /Light Adversarial Schema Review/);
-assert.match(dbDesignDocMd, /derived display fields/i);
-
 const developmentDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-development', 'SKILL.md'), 'utf8');
 assert.match(developmentDocMd, /概要设计/);
 assert.match(developmentDocMd, /详细设计/);
-assert.match(developmentDocMd, /Document Selection Matrix/);
-assert.match(developmentDocMd, /axis-doc-tech-design/);
-assert.match(developmentDocMd, /axis-doc-db-design/);
-assert.match(developmentDocMd, /Word\/DOCX/i);
+assert.match(developmentDocMd, /Document Selection and Expansion/);
+assert.match(developmentDocMd, /master_draft/);
+assert.match(developmentDocMd, /database_design/);
+assert.match(developmentDocMd, /Mandatory Pre-Change Archive/);
 assert.match(developmentDocMd, /Three-Step Work Contract/);
-assert.match(developmentDocMd, /Light Adversarial Review/);
+assert.match(developmentDocMd, /light adversarial review/i);
 
 for (const skillName of [
   'axis-code-api-performance-tuning',
   'axis-test-benchmark',
   'axis-code-arch-optimize',
   'axis-code-bugfix',
-  'axis-doc-business-domain',
   'axis-skill-create',
   'axis-doc-development',
-  'axis-doc-db-design',
   'axis-doc-drift-capture',
-  'axis-doc-feature-detailed-design',
-  'axis-doc-project-knowledge-bootstrap',
-  'axis-doc-tech-design',
+  'axis-doc-project-knowledge',
   'axis-test-tdd',
 ]) {
   const skillMd = await readFile(path.join(repoRoot, 'skills', skillName, 'SKILL.md'), 'utf8');

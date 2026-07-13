@@ -1,7 +1,0 @@
-interface:
-  display_name: "axis-doc-tech-design"
-  short_description: "Write final technical designs / 撰写最终技术设计"
-  default_prompt: "Use $axis-doc-tech-design to write or refine a final technical design document."
-
-policy:
-  allow_implicit_invocation: true

@@ -92,9 +92,9 @@ await withTempDir(async (home) => {
     '--agent',
     'codex',
     '--skill',
-    'axis-doc-business-domain',
+    'axis-doc-project-knowledge',
     '--skill',
-    'axis-doc-project-knowledge-bootstrap',
+    'axis-doc-development',
   ], {
     env: {
       HOME: home,
@@ -105,7 +105,7 @@ await withTempDir(async (home) => {
   const result = JSON.parse(stdout);
   assert.deepEqual(
     result.installed.map((item) => item.skill).sort(),
-    ['axis-doc-business-domain', 'axis-doc-project-knowledge-bootstrap'],
+    ['axis-doc-development', 'axis-doc-project-knowledge'],
   );
   await assert.rejects(
     () => readFile(path.join(codexHome, 'skills', 'axis-ops-ali-dashboard', 'SKILL.md'), 'utf8'),

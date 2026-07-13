@@ -29,7 +29,7 @@ New public Axis skills must use `axis-{category}-{action}`. Choose the category 
 | Operations | `axis-ops-xxx` | Publishing, observability dashboards, delivery, and operational controls. |
 | Integration | `axis-integration-xxx` | Named third-party platform, repository, or service integrations. |
 
-Examples: `axis-doc-project-init`, `axis-doc-project-knowledge-bootstrap`, `axis-doc-feature-detailed-design`, `axis-doc-dashbord`, `axis-code-bugfix`, `axis-test-benchmark`, `axis-ops-oss-publish`, and `axis-integration-source-control`.
+Examples: `axis-doc-project-init`, `axis-doc-project-knowledge`, `axis-doc-development`, `axis-doc-dashbord`, `axis-code-bugfix`, `axis-test-benchmark`, `axis-ops-oss-publish`, and `axis-integration-source-control`.
 
 Every public Axis skill must use this taxonomy; the creation and deposit helpers reject the old generic `axis-xxx` shape. Do not invent a category for an ambiguous workflow: ask the user whether its primary outcome is document, code, test, skill, operations, or integration.
 
@@ -38,11 +38,12 @@ Every public Axis skill must use this taxonomy; the creation and deposit helpers
 1. Scan the current conversation for reusable behavior, not one-off task details. Good candidates mention repeated workflows, verification rules, dashboard formats, release procedures, or phrases like `沉淀`, `复用`, `以后每次`, or `skill`.
 2. Classify the stable candidate: choose one Axis naming-taxonomy category and use `axis-{category}-{action}` in `axis-tools`, use `orbit-xxx` in the Orbit repository for personal information-matrix/content capabilities, or use a private/local skill for non-public workflows. Reject public candidates that are product-private, customer-specific, credential-bearing, or only useful inside one closed-source repository. When evidence cannot determine the category, ask the user instead of guessing.
 3. If there is no reusable public workflow, say that no skill should be created.
-4. For non-trivial skill content, use the writing-skills process: write a failing validation or concrete acceptance check first.
-5. Classify the candidate before creation. Coding, architecture, API performance, bugfix, testing, database, schema, and design-document skills must include the three-step work contract: co-create the requirement with the user, execute the agreed result, then verify and report the result.
-6. Coding/design-type skills must include a light adversarial review rule capped at no more than 30% of the interaction: verify claims against evidence, surface hidden assumptions, name risk/correctness trade-offs, and challenge unsafe shortcuts while still respecting the user's explicit business wording.
-7. Write the skill frontmatter `description` in bilingual English and Chinese. It must still start with `Use when`, then include a concise Chinese explanation in the same line.
-8. If the candidate is stable and public-safe, create it with the same helper. For Axis skills, create and deposit into `axis-tools`:
+4. Before creating or refactoring, run a trigger-overlap audit against existing packaged skills. A top-level skill should represent an independently selectable user outcome, not merely a document chapter, internal mode, template, or lifecycle step already owned by another skill. When two candidates share trigger wording, evidence, and output, prefer one front door with internal modes and on-demand `references/`.
+5. For non-trivial skill content, use the writing-skills process: write a failing validation or concrete acceptance check first.
+6. Classify the candidate before creation. Coding, architecture, API performance, bugfix, testing, database, schema, and design-document skills must include the three-step work contract: co-create the requirement with the user, execute the agreed result, then verify and report the result.
+7. Coding/design-type skills must include a light adversarial review rule capped at no more than 30% of the interaction: verify claims against evidence, surface hidden assumptions, name risk/correctness trade-offs, and challenge unsafe shortcuts while still respecting the user's explicit business wording.
+8. Write the skill frontmatter `description` in bilingual English and Chinese. It must still start with `Use when`, then include a concise Chinese explanation in the same line.
+9. If the candidate is stable and public-safe, create it with the same helper. For Axis skills, create and deposit into `axis-tools`:
 
 ```bash
 node scripts/axis-skill-create.mjs \
@@ -58,8 +59,8 @@ The helper injects an `After Use Deposition` section into generated skills so ea
 
 When passing prompts that contain a `$skill-name`, wrap that argument in single quotes so the shell does not expand `$skill` as an environment variable. For example, use `--default-prompt 'Use $axis-code-example-skill to ...'`, or omit `--default-prompt` and let the helper generate the default.
 
-9. Keep the skill bundle complete. At minimum include `SKILL.md` and `agents/openai.yaml`; include `references/`, `scripts/`, or `assets/` when the workflow needs them.
-10. Install or refresh local packaged skills after pushing when the user expects immediate local use:
+10. Keep the skill bundle complete. At minimum include `SKILL.md` and `agents/openai.yaml`; include `references/`, `scripts/`, or `assets/` when the workflow needs them.
+11. Install or refresh local packaged skills after pushing when the user expects immediate local use:
 
 ```bash
 node scripts/axis-skill-update.mjs --repo <axis-tools> --agent codex --json
@@ -157,3 +158,5 @@ After using this skill, check whether this scan found a reusable improvement to 
 - Commit and push only the skill bundle, manifest, docs, and tests related to the skill change.
 - Public skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
 - Select the target repository and prefix before creating a skill: `axis-{category}-xxx` for new Axis skills, `orbit-xxx` for Orbit, never `axis-pulse-*` compatibility aliases. Use only `doc`, `code`, `test`, `skill`, `ops`, or `integration` as the Axis category. Project initialization, migration, knowledge bootstrap, and document dashboards belong to `doc`.
+- A refactor must prove retired top-level skills are absent from the manifest, packaged directory list, public inventory, and installed refresh result.
+- Review trigger overlap, evidence overlap, output overlap, and circular handoffs before retaining multiple top-level skills; move deep internal guidance to `references/` when one front door is sufficient.

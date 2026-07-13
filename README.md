@@ -73,12 +73,8 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 研发实现 | `axis-test-tdd` | 实现功能、修复缺陷、重构或行为变更前，先明确测试和验收口径。 |
 | 测试验证 | `axis-test-side-effects` | 测试真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作。 |
 | 测试验证 | `axis-test-report` | 将 build、lint、test、benchmark 或压测验证结果采集为 Axis v0.2 测试报告包。 |
-| 文档设计 | `axis-doc-development` | 生成概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。 |
-| 文档设计 | `axis-doc-tech-design` | 撰写、优化或定稿技术设计文档和方案设计。 |
-| 文档设计 | `axis-doc-db-design` | 生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。 |
-| 文档设计 | `axis-doc-project-knowledge-bootstrap` | 为存量项目生成全局技术架构、全局业务架构、业务清单、每个业务域一份详细设计和文档缺口报告。 |
-| 文档设计 | `axis-doc-business-domain` | 扫描梳理已有详细设计并补全业务域/业务架构，或按需求生成所属业务域的需求详细设计并汇总架构影响。 |
-| 文档设计 | `axis-doc-feature-detailed-design` | 为证据已定位且经用户确认的单独功能生成中文详细设计；找不到或有歧义时停止并请求确认。 |
+| 文档设计 | `axis-doc-development` | 统一输出、生成、修正或迭代已有/规划功能文档，完成需求问询、原始稿扩写、技术与数据库设计、影响更新和修订归档。 |
+| 文档设计 | `axis-doc-project-knowledge` | 首次生成或持续梳理全局架构、业务清单、逐域详细设计、元数据和文档缺口。 |
 | 文档设计 | `axis-doc-drift-capture` | 任务或 PR 完成后记录 task_execution_record、version_iteration_record 和文档漂移影响范围。 |
 | 文档看板 | `axis-doc-dashbord` | 启动并打开独立文档看板；本地应用缺失时，一次确认拉取公开仓库或使用模板本地自建。 |
 | 文档设计 | `axis-doc-project-init` | 通过一次汇总确认配置或迁移 Axis v0.2 的组织、项目、OSS、发布、目录和语言设置。 |
@@ -170,8 +166,8 @@ node scripts/axis-skill-update.mjs --repo ~/axis-tools --agent codex --no-pull -
 开发当前 checkout 中尚未提交的 skill 时，可先预览并仅刷新指定 bundle：
 
 ```bash
-node dist/cli.js install --agent codex --skill axis-doc-business-domain --dry-run --force
-node dist/cli.js install --agent codex --skill axis-doc-business-domain --force
+node dist/cli.js install --agent codex --skill axis-doc-development --dry-run --force
+node dist/cli.js install --agent codex --skill axis-doc-development --force
 ```
 
 如果只想安装不校验，可加 `--no-validate`。
@@ -259,13 +255,13 @@ axis validate-config --repo /path/to/project
 
 ### 项目知识协议
 
-`docs/v0.2-project-knowledge-doc-protocol.md` 是四个项目知识 skills 的源控协议依据：`axis-doc-project-knowledge-bootstrap`、`axis-doc-business-domain`、`axis-doc-feature-detailed-design` 和 `axis-doc-drift-capture`。它规定 `.axis/docs/orgs/{organization_id}/projects/{project_slug}` 下的全局技术架构、全局业务架构、业务清单、每个 `business_id` 一份业务域详细设计、单功能详细设计、任务记录、版本记录和文档漂移记录结构，并要求缺失证据必须显式记录，不能编造业务或技术事实。单功能文档必须先通过功能定位确认门；零命中或多候选时不得生成。
+`docs/v0.2-project-knowledge-doc-protocol.md` 是三个项目知识 skills 的源控协议依据：`axis-doc-development`、`axis-doc-project-knowledge` 和 `axis-doc-drift-capture`。它规定当前文档、原始稿、全局架构、逐域/单功能详细设计、任务/版本记录以及 `.axis/docs/_archive/` 历史修订结构。单功能文档必须通过功能定位确认门；涉及新增或修改代码的规划与迭代必须先确认原始稿，再扩写其他文档。
 
 v0.2 OSS 统一使用 `{prefix}/orgs/{organization_id}/projects/{project_slug}` 层级。项目知识直接同步到项目目录；其他报告包保存在该项目的 `packages/{run_id}` 下。
 
 ### 本地文档看板
 
-页面已拆分到公开仓库 [togally/axis-document-review](https://github.com/togally/axis-document-review)。使用 `axis-doc-dashbord` skill 检查、启动并打开本地页面；若独立应用不存在，skill 会一次询问是拉取公开仓库还是使用内置模板本地自建，不会未经确认执行拉取。
+页面已拆分到公开仓库 [togally/axis-document-review](https://github.com/togally/axis-document-review)。使用 `axis-doc-dashbord` skill 检查、启动并打开本地页面；当前文档列表保持 canonical 路径不变，`_archive` 版本只在“历史追溯”面板中出现。若独立应用不存在，skill 会一次询问是拉取公开仓库还是使用内置模板本地自建，不会未经确认执行拉取。
 
 OSS 发布前，在 shell 环境中设置 `.axis/config.yml` 里声明的环境变量：
 
@@ -423,12 +419,8 @@ See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-aud
 | Implementation | `axis-test-tdd` | Define tests and acceptance criteria before implementing features, bugfixes, refactors, or behavior changes. |
 | Testing and verification | `axis-test-side-effects` | Test backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. |
 | Testing and verification | `axis-test-report` | Capture build, lint, test, benchmark, or pressure-test evidence as an Axis v0.2 test report package. |
-| Documentation and design | `axis-doc-development` | Generate overview design, detailed design, database design, API docs, test plans, deployment docs, or Word documents. |
-| Documentation and design | `axis-doc-tech-design` | Write, refine, or finalize technical design and solution design documents. |
-| Documentation and design | `axis-doc-db-design` | Generate database design documents, data dictionaries, schema design, ER docs, or Word DBDD files. |
-| Documentation and design | `axis-doc-project-knowledge-bootstrap` | Generate global technical and business architecture, business inventory, one detailed design per business domain, and the document gap report. |
-| Documentation and design | `axis-doc-business-domain` | Reconcile existing designs into domain/business architecture, or design one requirement and summarize its architecture impact. |
-| Documentation and design | `axis-doc-feature-detailed-design` | Generate a Chinese detailed design for one evidence-resolved, user-confirmed feature; stop and ask when resolution is missing or ambiguous. |
+| Documentation and design | `axis-doc-development` | Export, generate, correct, or iterate existing/planned feature documents with discovery, master-draft expansion, technical/database depth, impact updates, and revision archives. |
+| Documentation and design | `axis-doc-project-knowledge` | Bootstrap or reconcile global architecture, business inventory, one overview per level-1 capability, independent secondary-capability designs, navigation, metadata, and document gaps. |
 | Documentation and design | `axis-doc-drift-capture` | Record task execution, version iteration impact, and affected documents after a task or PR completes. |
 | Document dashboard | `axis-doc-dashbord` | Start and open the standalone document dashboard; when missing, ask once before pulling or scaffolding it locally. |
 | Documentation and design | `axis-doc-project-init` | Configure or migrate Axis v0.2 organization, project, OSS, release, directory, and language settings with one consolidated confirmation. |
@@ -520,8 +512,8 @@ node scripts/axis-skill-update.mjs --repo ~/axis-tools --agent codex --no-pull -
 When developing uncommitted skill changes in the current checkout, preview and refresh only the named bundle:
 
 ```bash
-node dist/cli.js install --agent codex --skill axis-doc-business-domain --dry-run --force
-node dist/cli.js install --agent codex --skill axis-doc-business-domain --force
+node dist/cli.js install --agent codex --skill axis-doc-development --dry-run --force
+node dist/cli.js install --agent codex --skill axis-doc-development --force
 ```
 
 Add `--no-validate` when installation is enough.
@@ -607,13 +599,13 @@ axis validate-config --repo /path/to/project
 
 ### Project Knowledge Protocol
 
-`docs/v0.2-project-knowledge-doc-protocol.md` is the source-controlled protocol for `axis-doc-project-knowledge-bootstrap`, `axis-doc-business-domain`, `axis-doc-feature-detailed-design`, and `axis-doc-drift-capture`. It defines global technical and business architecture, business inventory, one detailed design per `business_id`, single-feature detailed designs, task records, version records, and document drift records under `.axis/docs/orgs/{organization_id}/projects/{project_slug}`. A feature design must pass the feature-resolution confirmation gate; zero or ambiguous matches stop generation and require user confirmation.
+`docs/v0.2-project-knowledge-doc-protocol.md` is the source-controlled protocol for `axis-doc-development`, `axis-doc-project-knowledge`, and `axis-doc-drift-capture`. It defines current documents, master drafts, global architecture, domain/feature designs, task/version records, and immutable revision history under `.axis/docs/_archive/`. Feature designs require resolution confirmation; code-changing planned or iteration work requires an approved master draft before expansion.
 
 All v0.2 OSS targets use `{prefix}/orgs/{organization_id}/projects/{project_slug}`. Project knowledge synchronizes directly into the project directory; other report packages remain under that project's `packages/{run_id}` path.
 
 ### Local Document Dashboard
 
-The page now lives in the public [togally/axis-document-review](https://github.com/togally/axis-document-review) repository. Use the `axis-doc-dashbord` skill to inspect, start, and open it. When the standalone app is missing, the skill asks once whether to pull the public repository or scaffold the bundled local template; it never pulls without confirmation.
+The page now lives in the public [togally/axis-document-review](https://github.com/togally/axis-document-review) repository. Use the `axis-doc-dashbord` skill to inspect, start, and open it. Current canonical documents remain in the normal list; `_archive` revisions appear only in the history trace panel. When the standalone app is missing, the skill asks once whether to pull the public repository or scaffold the bundled local template; it never pulls without confirmation.
 
 Local preferences can live in `.axis/config.local.yml`, such as dry-run mode or a local redaction-pattern file path. Keep that file local, do not commit it, and do not place real credentials in it.
 

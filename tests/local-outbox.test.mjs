@@ -261,33 +261,53 @@ async function writeProjectKnowledgeDocs(repo) {
     'demo-project',
   );
   await mkdir(path.join(root, 'architecture'), { recursive: true });
-  await mkdir(path.join(root, 'business', 'domains', 'sales'), { recursive: true });
-  await mkdir(path.join(root, 'business', 'domains', 'support'), { recursive: true });
+  await mkdir(path.join(root, 'business', 'capabilities', 'commerce'), { recursive: true });
+  await mkdir(path.join(root, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'sales'), { recursive: true });
+  await mkdir(path.join(root, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'support'), { recursive: true });
   await mkdir(
-    path.join(root, 'business', 'domains', 'sales', 'requirements', 'price-protection'),
+    path.join(root, 'business', 'capabilities', 'commerce', 'requirements', 'price-protection'),
     { recursive: true },
   );
   await mkdir(path.join(root, 'gaps'), { recursive: true });
   await writeFile(path.join(root, 'metadata.yaml'), 'document_language: zh-CN\nstatus: review\n', 'utf8');
   await writeFile(path.join(root, 'architecture', 'technical.md'), '# 技术架构\n\n## C4 系统上下文\n', 'utf8');
-  await writeFile(path.join(root, 'architecture', 'business.md'), '# 业务架构\n\n## 业务能力地图\n', 'utf8');
+  await writeFile(path.join(root, 'architecture', 'business.md'), '# 业务架构\n\n## 业务能力地图\n\n[商业经营](business/capabilities/commerce/detailed-design.md)\n', 'utf8');
   await writeFile(
     path.join(root, 'business', 'inventory.yaml'),
-    'businesses:\n  - business_id: sales\n  - business_id: support\n',
+    [
+      'level1_capabilities:',
+      '  - level1_capability_id: commerce',
+      '    level1_capability_name: 商业经营',
+      '    secondary_capabilities:',
+      '      - secondary_capability_id: sales',
+      '        name: 销售交易',
+      '        business_ids:',
+      '          - sales',
+      '      - secondary_capability_id: support',
+      '        name: 客户支持',
+      '        business_ids:',
+      '          - support',
+      '',
+    ].join('\n'),
     'utf8',
   );
   await writeFile(
-    path.join(root, 'business', 'domains', 'sales', 'detailed-design.md'),
-    '# 销售业务域详细设计\n\n## 设计结论\n',
+    path.join(root, 'business', 'capabilities', 'commerce', 'detailed-design.md'),
+    '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n',
     'utf8',
   );
   await writeFile(
-    path.join(root, 'business', 'domains', 'support', 'detailed-design.md'),
-    '# 支持业务域详细设计\n\n## 设计结论\n',
+    path.join(root, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'sales', 'detailed-design.md'),
+    '# 销售交易详细设计\n\n`secondary_capability_id`: `sales`\n',
     'utf8',
   );
   await writeFile(
-    path.join(root, 'business', 'domains', 'sales', 'requirements', 'price-protection', 'detailed-design.md'),
+    path.join(root, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'support', 'detailed-design.md'),
+    '# 客户支持详细设计\n\n`secondary_capability_id`: `support`\n',
+    'utf8',
+  );
+  await writeFile(
+    path.join(root, 'business', 'capabilities', 'commerce', 'requirements', 'price-protection', 'detailed-design.md'),
     '# 价保需求详细设计\n\n## 需求结论\n',
     'utf8',
   );
@@ -831,9 +851,10 @@ await withTempDir(async (repo) => {
   assert.deepEqual(result.files.sort(), [
     'documents/architecture/business.md',
     'documents/architecture/technical.md',
-    'documents/business/domains/sales/detailed-design.md',
-    'documents/business/domains/sales/requirements/price-protection/detailed-design.md',
-    'documents/business/domains/support/detailed-design.md',
+    'documents/business/capabilities/commerce/detailed-design.md',
+    'documents/business/capabilities/commerce/requirements/price-protection/detailed-design.md',
+    'documents/business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md',
+    'documents/business/capabilities/commerce/secondary-capabilities/support/detailed-design.md',
     'documents/business/inventory.yaml',
     'documents/gaps/doc-gap-report.md',
     'documents/metadata.yaml',
@@ -859,19 +880,29 @@ await withTempDir(async (repo) => {
     '# 技术架构\n\n## C4 系统上下文\n',
   );
   assert.equal(
-    await readFile(path.join(packageDir, 'documents', 'business', 'domains', 'sales', 'detailed-design.md'), 'utf8'),
-    '# 销售业务域详细设计\n\n## 设计结论\n',
+    await readFile(path.join(packageDir, 'documents', 'business', 'capabilities', 'commerce', 'detailed-design.md'), 'utf8'),
+    '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n',
   );
   assert.deepEqual(
     metadata.document.documents
-      .filter((document) => document.doc_type === 'business_domain_detailed_design')
+      .filter((document) => document.doc_type === 'business_capability_detailed_design')
       .map((document) => document.doc_id)
       .sort(),
-    ['business_domain_detailed_design_sales', 'business_domain_detailed_design_support'],
+    ['business_capability_detailed_design_commerce'],
+  );
+  assert.deepEqual(
+    metadata.document.documents
+      .filter((document) => document.doc_type === 'secondary_capability_detailed_design')
+      .map((document) => document.doc_id)
+      .sort(),
+    [
+      'secondary_capability_detailed_design_commerce_sales',
+      'secondary_capability_detailed_design_commerce_support',
+    ],
   );
   assert.equal(
     metadata.document.documents.find((document) => document.doc_type === 'requirement_detailed_design').doc_id,
-    'requirement_detailed_design_sales_price-protection',
+    'requirement_detailed_design_commerce_price-protection',
   );
 
   const { stdout: publishStdout } = await run(['oss-publish', '--repo', repo, '--run-id', runId, '--dry-run']);
@@ -883,14 +914,14 @@ await withTempDir(async (repo) => {
     'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/',
   );
   assert.equal(
-    publishResult.files.find((file) => file.path === 'documents/business/domains/sales/detailed-design.md').target_uri,
-    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/business/domains/sales/detailed-design.md',
+    publishResult.files.find((file) => file.path === 'documents/business/capabilities/commerce/detailed-design.md').target_uri,
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/business/capabilities/commerce/detailed-design.md',
   );
   assert.equal(
     publishResult.files.find(
-      (file) => file.path === 'documents/business/domains/sales/requirements/price-protection/detailed-design.md',
+      (file) => file.path === 'documents/business/capabilities/commerce/requirements/price-protection/detailed-design.md',
     ).target_uri,
-    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/business/domains/sales/requirements/price-protection/detailed-design.md',
+    'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/business/capabilities/commerce/requirements/price-protection/detailed-design.md',
   );
   assert.equal(
     publishResult.files.find((file) => file.path === 'metadata.json').target_uri,
@@ -924,7 +955,8 @@ await withTempDir(async (repo) => {
     'projects',
     'demo-project',
   );
-  assert.equal(existsSync(path.join(remoteProjectRoot, 'business', 'domains', 'sales', 'detailed-design.md')), true);
+  assert.equal(existsSync(path.join(remoteProjectRoot, 'business', 'capabilities', 'commerce', 'detailed-design.md')), true);
+  assert.equal(existsSync(path.join(remoteProjectRoot, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'sales', 'detailed-design.md')), true);
   assert.equal(existsSync(path.join(remoteProjectRoot, '_sync', 'manifest.json')), true);
 
   const sourceDetailedDesign = path.join(
@@ -936,11 +968,11 @@ await withTempDir(async (repo) => {
     'projects',
     'demo-project',
     'business',
-    'domains',
-    'sales',
+    'capabilities',
+    'commerce',
     'detailed-design.md',
   );
-  await writeFile(sourceDetailedDesign, '# 销售业务域详细设计\n\n## 设计结论\n\n同步修订版。\n', 'utf8');
+  await writeFile(sourceDetailedDesign, '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n\n同步修订版。\n', 'utf8');
   const secondRunId = '20260711T030303Z-project-knowledge-abcdef34';
   await run(['project-knowledge-capture', '--repo', repo, '--run-id', secondRunId]);
   const { stdout: secondUploadStdout } = await run(
@@ -949,12 +981,12 @@ await withTempDir(async (repo) => {
   );
   const secondUpload = JSON.parse(secondUploadStdout);
   assert.equal(
-    secondUpload.files.find((file) => file.path === 'documents/business/domains/sales/detailed-design.md').status,
+    secondUpload.files.find((file) => file.path === 'documents/business/capabilities/commerce/detailed-design.md').status,
     'updated',
   );
   assert.equal(
-    await readFile(path.join(remoteProjectRoot, 'business', 'domains', 'sales', 'detailed-design.md'), 'utf8'),
-    '# 销售业务域详细设计\n\n## 设计结论\n\n同步修订版。\n',
+    await readFile(path.join(remoteProjectRoot, 'business', 'capabilities', 'commerce', 'detailed-design.md'), 'utf8'),
+    '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n\n同步修订版。\n',
   );
   const remoteManifest = await readJson(path.join(remoteProjectRoot, '_sync', 'manifest.json'));
   assert.equal(remoteManifest.run.run_id, secondRunId);
@@ -995,15 +1027,15 @@ await withTempDir(async (repo) => {
       'projects',
       'demo-project',
       'business',
-      'domains',
-      'support',
+      'capabilities',
+      'commerce',
       'detailed-design.md',
     ),
   );
 
   await assert.rejects(
     run(['project-knowledge-capture', '--repo', repo, '--run-id', '20260711T040404Z-project-knowledge-abcdef56']),
-    /project knowledge domain detailed design missing: support/,
+    /project knowledge level-1 capability detailed design missing: commerce/,
   );
 });
 
