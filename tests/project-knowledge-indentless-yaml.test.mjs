@@ -95,7 +95,7 @@ try {
   ].join('\n'), 'utf8');
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'commerce', 'detailed-design.md'),
-    '# 商业经营\n\nsales\n\nbusiness/capabilities/commerce/secondary-capabilities/sales/detailed-design.md\n',
+    '# 商业经营\n\nsales\n\nsecondary-capabilities/sales/detailed-design.md\n',
     'utf8',
   );
   await writeFile(

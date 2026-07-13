@@ -1161,7 +1161,8 @@ async function projectKnowledgeSourceFiles(sourceRoot: string): Promise<ProjectK
         );
       }
       const childPath = `business/capabilities/${capabilityId}/secondary-capabilities/${secondaryId}/detailed-design.md`;
-      if (!capabilityDocumentBody.includes(childPath)) {
+      const relativeChildPath = `secondary-capabilities/${secondaryId}/detailed-design.md`;
+      if (!capabilityDocumentBody.includes(childPath) && !capabilityDocumentBody.includes(relativeChildPath)) {
         throw new Error(
           `project knowledge capability overview omits secondary capability link: ${capabilityId}/${secondaryId}`,
         );

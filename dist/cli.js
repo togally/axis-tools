@@ -800,7 +800,8 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
                 throw new Error(`project knowledge level-1 capability detailed design omits secondary_capability_id: ${capabilityId}/${secondaryId}`);
             }
             const childPath = `business/capabilities/${capabilityId}/secondary-capabilities/${secondaryId}/detailed-design.md`;
-            if (!capabilityDocumentBody.includes(childPath)) {
+            const relativeChildPath = `secondary-capabilities/${secondaryId}/detailed-design.md`;
+            if (!capabilityDocumentBody.includes(childPath) && !capabilityDocumentBody.includes(relativeChildPath)) {
                 throw new Error(`project knowledge capability overview omits secondary capability link: ${capabilityId}/${secondaryId}`);
             }
         }
