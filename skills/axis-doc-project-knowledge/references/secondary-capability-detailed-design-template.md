@@ -15,6 +15,8 @@
 
 > **可追溯性约定**：已实现事实必须从业务流追溯至接口、代码对象、实体/表和测试；代码证据统一写为“`文件路径:起始行-结束行#符号`”。待开发设计写明“目标设计”，无法从仓库证实的内容写“缺失证据”，不得用类名或推测代替定位。
 
+> **一级旅程同 ID 契约**：一级用户业务操作全景中的每个 `journey_id` 必须在所属二级文档中以完全相同的 `level1_journey_id` 出现，并绑定承接该操作的 `flow_id` 和/或 `api_id`；本文件也不得增加一级没有的旅程 ID。两层旅程集合双向一致，且一级为 `complete` 时本文件必须为 `interface_coverage=complete`。一级只保留 Controller/Handler、Service/UseCase、数据结果和用户可见结果摘要；本文件负责展开完整内部代码流、持久化与测试追溯。
+
 ## 1. 身份、职责与 business_id 映射
 
 | 字段 | 内容 |
@@ -23,6 +25,7 @@
 | `secondary_capability_id` | `{secondary_capability_id}` |
 | 二级能力名称 | {secondary_capability_name} |
 | `business_ids` | `{business_ids}` |
+| `level1_journey_ids` | `{level1_journey_ids}` |
 | 业务职责 | {responsibility} |
 | 输入/触发 | {input_or_trigger} |
 | 输出/完成条件 | {output_or_completion} |
@@ -36,7 +39,7 @@
 
 ## 3. 业务流与逻辑关系
 
-每条关键链路分配稳定的 `{flow_id}`，并给出流程图。图中的节点与下表、接口和代码对象使用相同标识，便于横向追溯。
+每条关键链路分配稳定的 `{flow_id}`，并从一级全景带入同值 `{level1_journey_id}`。图中的节点与下表、接口和代码对象使用相同标识，便于横向追溯。一个内部流承接多个一级旅程时，为每个 `level1_journey_id` 分别保留绑定行，不得用无法机检的合并文本代替。
 
 ```mermaid
 flowchart LR
@@ -47,9 +50,9 @@ flowchart LR
     rule --> result["{outcome_or_state}"]
 ```
 
-| `flow_id` / 步骤 | 发起方 | 业务动作与决策规则 | 输入 | 代码对象 | 读/写实体或表 | 输出/状态变化 | 失败与恢复 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{flow_id}` / {step} | {actor} | {action_and_decision} | {input} | {code_object_refs} | {entity_table_refs} | {result} | {failure_recovery} | {evidence_ref} |
+| `level1_journey_id` | `flow_id` / 步骤 | 发起方 | 业务动作与决策规则 | 输入 | 代码对象 | 读/写实体或表 | 输出/状态变化 | 失败与恢复 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{level1_journey_id}` | `{flow_id}` / {step} | {actor} | {action_and_decision} | {input} | {code_object_refs} | {entity_table_refs} | {result} | {failure_recovery} | {evidence_ref} |
 
 ## 4. 业务对象、状态与规则
 
@@ -65,9 +68,9 @@ HTTP 接口、消息、定时任务和内部命令均是接口契约。`interfac
 
 ### 5.1 接口清单与代码追踪
 
-| `api_id` | 方法与完整路径/主题 | 调用方 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{api_id}` | `{method} {path_or_topic}` | {caller} | {authentication_authorization} | `{request_type}` | `{response_type}` | {error_summary} | {idempotency_transaction} | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已实现 / 目标设计 / 缺失证据 |
+| `level1_journey_id` | `api_id` | 方法与完整路径/主题 | 调用方 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{level1_journey_id}` | `{api_id}` | `{method} {path_or_topic}` | {caller} | {authentication_authorization} | `{request_type}` | `{response_type}` | {error_summary} | {idempotency_transaction} | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已实现 / 目标设计 / 缺失证据 |
 
 ### 5.2 请求字段
 
@@ -207,11 +210,11 @@ erDiagram
 
 ## 11. 端到端追溯矩阵
 
-每个关键 `flow_id` 至少覆盖一条业务流 → 接口/入口 → Controller → Service → Mapper/Repository → 实体/表 → 测试的链路。某一跳不存在或无法定位时，保留该行并标注“缺失证据”。
+每个一级 `level1_journey_id` 至少绑定一个 `flow_id` 和/或 `api_id`，并覆盖一条业务流 → 接口/入口 → Controller → Service → Mapper/Repository → 实体/表 → 测试的链路。`level1_journey_id` 必须与一级全景中的 `journey_id` 完全相同。某一内部跳不存在或无法定位时，保留该行并标注“缺失证据”。
 
-| `flow_id` | 业务规则/状态 | API/入口 | Controller | Service | Mapper/Repository | 实体/表 | 测试 | 证据完整性 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{flow_id}` | {business_rule} | `{api_id}` | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已验证 / 部分缺失 / 目标设计 |
+| `level1_journey_id` | `flow_id` | 业务规则/状态 | `api_id` / 入口 | Controller | Service | Mapper/Repository | 实体/表 | 测试 | 证据完整性 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{level1_journey_id}` | `{flow_id}` | {business_rule} | `{api_id}` / {entrypoint} | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已验证 / 部分缺失 / 目标设计 |
 
 ## 12. 风险、假设与缺失证据
 
@@ -226,4 +229,4 @@ erDiagram
 - 下一个二级能力：`{next_secondary_document_path}`；
 - 相关需求、功能、API、数据库、测试和部署文档：{related_document_paths}；
 - 证据按 routes、controllers、pages、menus、services、entities、mappers、migrations、tests、config 和 docs 分类列出，并使用 `文件路径:起始行-结束行#符号` 格式；
-- 每个 `flow_id`、`api_id`、代码对象、实体和数据表都应能在本节找到至少一个已验证定位或明确的缺失证据。
+- 每个 `level1_journey_id`、`flow_id`、`api_id`、代码对象、实体和数据表都应能在本节找到至少一个已验证定位或明确的内部缺失证据；每个 `level1_journey_id` 都能反向定位一级全景中的同值 `journey_id`。

@@ -35,10 +35,12 @@ Invariants:
 
 - one canonical overview per level1_capability_id;
 - each level-1 overview contains every secondary capability as a summary and link; each secondary capability owns one independent detailed-design document;
+- each level-1 overview is a complete user business-operation panorama (`用户业务操作全景`), not an implementation detailed design: it covers every evidence-backed user/role operation and stops at Controller/Handler, Service/UseCase, read/write or produced-data summary, user-visible result, and the canonical secondary-document link;
+- level-1 overviews never copy field dictionaries, full call chains, Mapper/Repository detail, ER models, indexes/constraints, transaction/concurrency detail or test matrices; secondary documents own the internal code flow and persistence design;
 - `business_id` is a mapping from a secondary capability to implementation/business evidence, not a document boundary;
 - repeated rows or evidence with the same level-1 capability are merged into one document rather than producing parallel detailed designs;
 - no global business detailed-design duplicate;
-- global documents explain shared structure and boundaries, level-1 overviews explain navigation and cross-secondary design, and secondary documents contain complete local business and code design;
+- global documents explain shared structure and boundaries, level-1 overviews explain the user business-operation panorama, navigation and cross-secondary handoff summaries, and secondary documents contain complete local business, code-flow and persistence design;
 - unsupported claims remain assumptions, `missing_evidence`, `low_confidence` or `conflict`;
 - documents remain `review` until explicit human approval;
 - approved documents are superseded by new reviewed revisions, never silently rewritten.
@@ -68,6 +70,18 @@ Scan and connect:
 
 Record repository-relative paths, symbols, supported conclusions, confidence and verification time. For a secondary detailed design, use `path:begin-end#symbol` anchors for every implemented API entrypoint, code object relation, mapper/repository, entity/table mapping and test. Names alone do not prove a capability, policy, permission, state, threshold, transaction, compensation rule or external contract.
 
+Before rendering each level-1 overview, resolve and record these machine-checkable states:
+
+- `user_journey_design_status=detailed` (the only allowed value);
+- `user_journey_coverage=complete|partial`;
+- `user_journey_gap_id=<stable_gap_id>|not_applicable`.
+
+`detailed` requires the fixed user-journey table fields: `journey_id`, 用户/角色, 所属二级能力/模块, 提供的业务, 用户目标, 用户怎么操作, 接口/入口, Controller/Handler exact `path:begin-end#symbol`, Service/UseCase exact anchor, 读取数据, 写入/产生数据, 用户可见结果, 二级能力详情 and 证据. Scan all declared secondary capabilities and connected pages, menus, routes, APIs, events, jobs and commands; every declared secondary capability must have at least one fully anchored journey row, while one representative interface per module does not satisfy complete coverage. Every listed journey requires concrete Controller/Handler and Service/UseCase `path:begin-end#symbol` anchors. `complete` means every evidence-backed user business operation in that scope is represented and uses `user_journey_gap_id=not_applicable`. `partial` means additional journeys remain unlisted and requires a non-empty stable `user_journey_gap_id` in the overview and gap report, with the uncovered operation/evidence, searched scope, impact and remediation; it never permits an empty secondary capability or `missing_evidence` / `not_applicable` in place of either anchor on a listed row. Do not invent a page, button or user gesture when only backend evidence exists.
+
+The level-1 table summarizes only the exact Controller/Handler and Service/UseCase anchors plus read/write or produced-data and the user-visible result. Field-level contracts, the complete Controller-to-persistence call chain, Mapper/Repository anchors, entity/table relationships, field dictionaries, indexes, transactions, concurrency, compensation and flow-to-test traceability remain in the linked secondary document.
+
+Each level-1 `journey_id` is also a cross-layer traceability key. The owning secondary document must repeat the same identifier as `level1_journey_id` and bind it to a matching `flow_id` and/or `api_id`, then expand the internal entry-to-data and test trace. The parent and child journey-ID sets must match in both directions: a level-1 journey without that same-ID child expansion, or a child journey without a same-ID parent row, is invalid. A level-1 overview marked `complete` also requires `interface_coverage=complete` in every child.
+
 Before rendering each secondary document, resolve and record these machine-checkable states:
 
 - `interface_design_status=detailed|not_applicable` and `interface_coverage=complete|partial|not_applicable`;
@@ -83,7 +97,7 @@ Persisted multi-table capabilities require a real ER relationship whose endpoint
 2. Write `architecture/technical.md` using [project-technical-architecture-template.md](references/project-technical-architecture-template.md).
 3. Write `architecture/business.md` using [project-business-architecture-template.md](references/project-business-architecture-template.md).
 4. Build `business/inventory.yaml` with stable, unique `level1_capability_id` values; each item contains `level1_capability_name` and a complete `secondary_capabilities` array, and each secondary item contains its `business_ids` mapping.
-5. Write one `business/capabilities/{level1_capability_id}/detailed-design.md` overview per unique level-1 capability using [business-capability-detailed-design-template.md](references/business-capability-detailed-design-template.md). It must list and link every secondary capability.
+5. Write one `business/capabilities/{level1_capability_id}/detailed-design.md` user business-operation panorama per unique level-1 capability using [business-capability-detailed-design-template.md](references/business-capability-detailed-design-template.md). It must list and link every secondary capability, populate the fixed journey fields for every covered operation, resolve `user_journey_design_status`, `user_journey_coverage` and any required `user_journey_gap_id`, and ensure each `journey_id` has a same-ID expansion in its owning secondary document.
 6. Write one `business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md` using [secondary-capability-detailed-design-template.md](references/secondary-capability-detailed-design-template.md) for every inventory secondary capability.
 7. Write `gaps/doc-gap-report.md` and project metadata.
 8. Validate role separation, counts, links, evidence and lifecycle state.
@@ -95,7 +109,7 @@ Do not generate feature documents, task records or version records in this pass.
 1. Classify existing design documents as current, stale, conflicting, duplicated, orphaned or reusable evidence.
 2. Resolve every usable design to exactly one `level1_capability_id`; then map its features and evidence to one or more `secondary_capability_id` values and their `business_ids`. Stop on `zero_matches` or `multiple_matches` instead of guessing.
 3. Archive affected canonical documents before changing them.
-4. Reconcile the single level-1 overview and each affected secondary document. The overview retains the complete summary/link matrix and cross-secondary design; each child owns its flows, objects, rules, interfaces, table structures, implementation mapping, tests and gaps.
+4. Reconcile the single level-1 user business-operation panorama and each affected secondary document. The overview retains the complete summary/link matrix, every user/role operation, exact Controller/Handler and Service/UseCase anchors, data-result summaries and cross-secondary journey; each child owns its complete internal flows, objects, rules, interfaces, call chains, table structures, implementation mapping, transactions and tests.
 5. Create reviewed global revisions only when capability changes alter shared boundaries, value streams, system structure or cross-cutting principles.
 6. Preserve superseded documents and record disposition, revision links, metadata, inventory refs and gaps.
 
@@ -110,7 +124,7 @@ Do not generate feature documents, task records or version records in this pass.
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/requirements/{requirement_id}/detailed-design.md
 ```
 
-5. Update the owning secondary document and the level-1 overview's navigation/impact summary rather than duplicating the requirement body.
+5. Update the owning secondary document and the level-1 overview's journey row, navigation and impact summary rather than duplicating the requirement body or secondary implementation detail.
 6. Revise global business or technical architecture only when the impact matrix justifies it.
 7. Update inventory, metadata, traceability and gap records.
 
@@ -131,7 +145,7 @@ Archive history stays under `.axis/docs/_archive/` and must not appear as a seco
 ## Architecture Impact Rules
 
 - Local feature/API/data detail: update the owning feature/requirement and its `secondary_capability_detailed_design`.
-- Secondary-capability actor, permission, state ownership or internal flow: update the owning secondary document, its summary/link in the level-1 overview, and inventory when identity or mapping changes.
+- Secondary-capability actor, permission, state ownership or internal flow: update the owning secondary document, any affected level-1 journey row or coverage gap, its summary/link in the overview, and inventory when identity or mapping changes.
 - Level-1 boundary, value stream, shared business object or governance rule: create a reviewed `project_business_architecture` revision.
 - System boundary, shared technical capability, deployment topology, cross-cutting consistency, security or performance principle: create a reviewed `project_technical_architecture` revision.
 
@@ -152,6 +166,11 @@ Verify:
 
 - unique first-level capability count equals overview document count;
 - inventory secondary-capability count equals `secondary_capability_detailed_design` document count;
+- every level-1 overview records `user_journey_design_status=detailed`, `user_journey_coverage=complete|partial`, and `user_journey_gap_id=not_applicable` for complete coverage or a stable non-empty gap ID for partial coverage;
+- every level-1 overview uses the fixed user business-operation panorama fields and gives every declared secondary capability at least one fully anchored journey row; complete coverage includes every evidence-backed user/role operation, while a representative endpoint per module can support partial coverage only when all additional journeys have a stable gap;
+- every listed level-1 journey has a unique `journey_id`, exact interface/entry, repository-relative Controller/Handler and Service/UseCase `path:begin-end#symbol` anchors, read-data summary, write/produced-data summary, user-visible result, evidence and canonical secondary-document link; neither anchor may use `not_applicable` or `missing_evidence`, and any journey that cannot meet the row contract remains unlisted under the partial-coverage gap;
+- the level-1 `journey_id` set and owning-child `level1_journey_id` set match in both directions; each ID binds to a matching `flow_id` and/or `api_id` that expands the complete internal code, persistence and test trace, and a complete level-1 overview has only children with complete interface coverage;
+- level-1 overviews contain no field dictionaries, full call chains, Mapper/Repository detail, ER models, indexes/constraints, transaction/concurrency detail or test matrices; those details occur only in the owning secondary document;
 - every inventory `secondary_capabilities` item appears exactly once in its level-1 completeness matrix and links to its canonical child document;
 - every secondary document has resolved `interface_design_status`, `interface_coverage`, `persistence_design_status` and `relationship_model_status` values, a business-flow diagram, field-level interface design, interface-to-code trace, code-object relation map, entity/table relationship model and flow-to-test traceability matrix; every implemented hop is a repository-relative `path:begin-end#symbol` anchor or an explicit missing-evidence record;
 - every persistence-impacting secondary document includes table inventory, entity-to-table/code mapping, field structure, indexes and constraints, real relationships with join fields and `physical_fk` / `logical_relation` / `external_reference` classification, ownership, state mapping, read/write consistency, and migration/rollback evidence; an evidence-backed single-table or not-applicable model is the only exception;
@@ -169,7 +188,7 @@ Verify:
 
 ## Handoff
 
-Report mode, generated/revised paths, affected `level1_capability_id`, `secondary_capability_id`, and `business_id` values, inventory and architecture revisions, archive records, evidence coverage, confidence boundaries, gaps, validation commands and residual risk. Use `$axis-doc-drift-capture` after implementation or PR completion for task/version records and remaining drift classification.
+Report mode, generated/revised paths, affected `level1_capability_id`, `secondary_capability_id`, and `business_id` values, user-journey coverage states and gap IDs, inventory and architecture revisions, archive records, evidence coverage, confidence boundaries, gaps, validation commands and residual risk. Use `$axis-doc-drift-capture` after implementation or PR completion for task/version records and remaining drift classification.
 
 ## After Use Deposition
 

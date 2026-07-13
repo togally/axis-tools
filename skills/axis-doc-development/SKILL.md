@@ -41,7 +41,7 @@ Never present an assumption or market inference as confirmed product or reposito
 2. Execute the document lifecycle.
    Archive each canonical document before its first modification, write the requested documents, update affected detailed/global project knowledge at the correct level, preserve canonical paths for current reading, and complete the configured OSS synchronization gate. This skill designs the change; implementation code starts only when the user separately authorizes execution.
 3. Verify and report.
-   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, affected knowledge revisions, and the published OSS checksum/status. For detailed design, validate every material flow's traceability through API/entrypoint, code objects, entities/tables and tests with repository-relative `path:begin-end#symbol` anchors. Report current paths, archive paths, OSS run ID, assumptions, verification results, and any code work still awaiting authorization.
+   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, affected knowledge revisions, and the published OSS checksum/status. For a secondary detailed design, validate every material flow's traceability through API/entrypoint, code objects, entities/tables and tests with repository-relative `path:begin-end#symbol` anchors. For its level-1 overview, validate the fixed user business-operation panorama and same-ID linkage into the owning secondary document. Report current paths, archive paths, OSS run ID, assumptions, verification results, and any code work still awaiting authorization.
 
 Keep light adversarial review below 30% of the interaction. Challenge guessed scope, hidden product decisions, unsafe architecture, unmeasured performance claims, broken business flows, weak schema choices, unjustified market assumptions, or silent overwrites. Once decisions are sufficient, become decisive and produce the artifacts.
 
@@ -77,7 +77,21 @@ Default canonical path:
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md
 ```
 
-Feature and requirement documents live beneath that level-1 capability and identify the secondary capabilities they affect. Updating one feature revises the owning secondary document; the overview changes only when its summary, shared design, boundary or navigation changes.
+Feature and requirement documents live beneath that level-1 capability and identify the secondary capabilities they affect. Updating one feature revises the owning secondary document; the overview changes when its user-journey row, coverage state/gap, summary, shared design, boundary or navigation changes.
+
+### Mandatory Level-1 User-Journey Contract
+
+The level-1 `business_capability_detailed_design` is a `用户业务操作全景`, not an implementation detailed design. It records:
+
+- `user_journey_design_status=detailed` as the only valid design-status value;
+- `user_journey_coverage=complete|partial`;
+- `user_journey_gap_id=not_applicable` for complete coverage or a stable non-empty gap ID for partial coverage.
+
+Its fixed core table fields are `journey_id`, 用户/角色, 所属二级能力/模块, 提供的业务, 用户目标, 用户怎么操作, 接口/入口, `Controller/Handler`, `Service/UseCase`, 读取数据, 写入/产生数据, 用户可见结果, 二级能力详情 and 证据. Every declared secondary capability has at least one journey row. Every listed row, regardless of complete or partial coverage, requires concrete repository-relative `path:begin-end#symbol` anchors in both `Controller/Handler` and `Service/UseCase`; `missing_evidence`, `not_applicable`, class names and module names are not substitutes. `partial` means additional journeys remain unlisted and tracked by `user_journey_gap_id`, not that a declared secondary capability may be empty or a listed row may be incomplete. One representative endpoint per module is not complete panorama coverage, and UI actions must not be invented from backend-only evidence.
+
+The overview stops at Controller/Handler, Service/UseCase, read/write or produced-data summary and the user-visible result. It must not copy field dictionaries, the full call chain, Mapper/Repository detail, ER models, indexes/constraints, transaction/concurrency or compensation detail, or test matrices. The owning `secondary_capability_detailed_design` expands those internal code-flow and persistence details.
+
+Use the level-1 `journey_id` as a cross-layer traceability key. Its owning secondary document repeats the same value as `level1_journey_id`, binds it to the corresponding `flow_id` and/or `api_id`, and expands the entry-to-data and test trace. Parent and child journey-ID sets must match in both directions; never create unrelated or unpaired identifiers for the same user operation. If level-1 coverage is `complete`, every owning child must also declare `interface_coverage=complete`.
 
 ## Discovery Interview for Code-Changing Work
 
@@ -130,7 +144,7 @@ Select the smallest coherent set:
 | Requirements or product boundary | `master_draft` and, when separately needed, requirements specification |
 | 概要设计 / Overview / HLD | Overview design |
 | Technical solution | Decision-oriented technical design |
-| 详细设计 / Detailed design / LLD | One level-1 overview linking all declared secondary capabilities, plus one implementation-oriented detailed design per secondary capability |
+| 详细设计 / Detailed design / LLD | One level-1 user business-operation panorama linking all declared secondary capabilities, plus one implementation-oriented detailed design per secondary capability |
 | Database design | A detailed-design data section by default; standalone DBDD only for cross-domain schema, full data dictionary, independent DBA/compliance review, independent database release, or explicit request |
 | API contract | API document |
 | Material behavior or integration risk | Test plan |
@@ -150,8 +164,8 @@ Generating a target document is not enough. Classify and apply its knowledge imp
 | Change impact | Required update |
 | --- | --- |
 | Formatting, wording, or evidence correction only | Target feature/requirement document only |
-| Feature behavior, validation, API, state, transaction, or schema detail | Feature/requirement document plus the matching `secondary_capability_detailed_design` |
-| Secondary-capability actor, permission, state ownership, or internal business flow | Owning secondary design, level-1 overview summary/link when affected, `business_inventory`, and affected feature/requirement documents |
+| Feature behavior, validation, API, state, transaction, or schema detail | Feature/requirement document plus the matching `secondary_capability_detailed_design`; also update the level-1 journey row and coverage state when any panorama field changes |
+| Secondary-capability actor, permission, state ownership, or internal business flow | Owning secondary design, affected level-1 journey rows/coverage gaps and summary/link, `business_inventory`, and affected feature/requirement documents |
 | Level-1 capability boundary, value stream, shared business object, or governance rule | Reviewed revision of `project_business_architecture` plus affected level-1 documents |
 | System boundary, shared technical capability, deployment topology, cross-cutting consistency, security, or performance principle | Reviewed revision of `project_technical_architecture` plus affected capability/feature documents |
 
@@ -206,6 +220,10 @@ This skill may establish that code must be added or modified, but document appro
 - Current paths remain stable and archive paths stay under `_archive`.
 - `approved` content is superseded by a new `review` revision rather than overwritten.
 - There is exactly one current overview for the owning level-1 capability and one current detailed design per declared secondary capability; parent/child and adjacent-document navigation is complete.
+- Every level-1 overview records `user_journey_design_status=detailed`, `user_journey_coverage=complete|partial`, and the correct `user_journey_gap_id`; complete coverage uses `not_applicable`, while partial coverage records unlisted journeys under a stable gap ID.
+- Every declared secondary capability has at least one listed journey; every listed journey uses the fixed fields, has a unique `journey_id`, exact interface/entry, concrete Controller/Handler and Service/UseCase `path:begin-end#symbol` anchors, read/write or produced-data summary, user-visible result, evidence and a canonical secondary-document link; neither anchor may be `missing_evidence` or `not_applicable`.
+- Level-1 `journey_id` and owning-child `level1_journey_id` sets match in both directions, with every ID bound to a matching `flow_id` and/or `api_id` plus complete internal code, persistence and test traceability; a complete level-1 overview has only children with complete interface coverage.
+- Level-1 overviews do not contain field dictionaries, full call chains, Mapper/Repository detail, ER models, indexes/constraints, transaction/concurrency or compensation detail, or test matrices; those belong to secondary detailed designs.
 - Detailed, capability, global business, and global technical documents are updated only at their justified impact level.
 - Database content is a detailed-design section unless standalone delivery criteria apply.
 - Every secondary detailed design makes the business-flow logic explicit and contains an interface-to-code map, code-object relation map, entity/table relationship model, and end-to-end flow-to-test traceability. Implemented hops use repository-relative `path:begin-end#symbol` anchors; target or unverifiable hops are explicitly labelled.

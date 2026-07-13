@@ -6,7 +6,10 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { validSecondaryDetailedDesign } from './helpers/project-knowledge-fixtures.mjs';
+import {
+  validLevel1CapabilityDetailedDesign,
+  validSecondaryDetailedDesign,
+} from './helpers/project-knowledge-fixtures.mjs';
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
@@ -303,7 +306,10 @@ async function writeProjectKnowledgeDocs(repo) {
   );
   await writeFile(
     path.join(root, 'business', 'capabilities', 'commerce', 'detailed-design.md'),
-    '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n',
+    validLevel1CapabilityDetailedDesign('commerce', [
+      { id: 'sales', name: '销售交易' },
+      { id: 'support', name: '客户支持' },
+    ]),
     'utf8',
   );
   await writeFile(
@@ -891,7 +897,10 @@ await withTempDir(async (repo) => {
   );
   assert.equal(
     await readFile(path.join(packageDir, 'documents', 'business', 'capabilities', 'commerce', 'detailed-design.md'), 'utf8'),
-    '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n',
+    validLevel1CapabilityDetailedDesign('commerce', [
+      { id: 'sales', name: '销售交易' },
+      { id: 'support', name: '客户支持' },
+    ]),
   );
   assert.deepEqual(
     metadata.document.documents
@@ -982,7 +991,11 @@ await withTempDir(async (repo) => {
     'commerce',
     'detailed-design.md',
   );
-  await writeFile(sourceDetailedDesign, '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n\n同步修订版。\n', 'utf8');
+  const revisedLevel1DetailedDesign = `${validLevel1CapabilityDetailedDesign('commerce', [
+    { id: 'sales', name: '销售交易' },
+    { id: 'support', name: '客户支持' },
+  ])}\n同步修订版。\n`;
+  await writeFile(sourceDetailedDesign, revisedLevel1DetailedDesign, 'utf8');
   const secondRunId = '20260711T030303Z-project-knowledge-abcdef34';
   await run(['project-knowledge-capture', '--repo', repo, '--run-id', secondRunId]);
   const { stdout: secondUploadStdout } = await run(
@@ -996,7 +1009,7 @@ await withTempDir(async (repo) => {
   );
   assert.equal(
     await readFile(path.join(remoteProjectRoot, 'business', 'capabilities', 'commerce', 'detailed-design.md'), 'utf8'),
-    '# 商业经营详细设计\n\n## 二级能力完整性清单\n\n- [`sales`](business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md)：销售交易\n- [`support`](business/capabilities/commerce/secondary-capabilities/support/detailed-design.md)：客户支持\n\n同步修订版。\n',
+    revisedLevel1DetailedDesign,
   );
   const remoteManifest = await readJson(path.join(remoteProjectRoot, '_sync', 'manifest.json'));
   assert.equal(remoteManifest.run.run_id, secondRunId);
