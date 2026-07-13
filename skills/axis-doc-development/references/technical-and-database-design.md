@@ -55,17 +55,20 @@ Prefer implementation anchors over speculative class or method names. For implem
 14. Compatibility, Migration, Rollout and Rollback
 15. Tests, Acceptance, End-to-End Traceability, Assumptions and Risks
 
-For every material secondary flow, include a readable flow diagram and one end-to-end row linking: `level1_journey_id` → business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing internal hop as `missing_evidence`; do not infer it. A missing secondary hop does not weaken the level-1 rule that both Controller/Handler and Service/UseCase anchors must be concrete before a journey is listed there.
+Section 3 is titled `能力级流程与跨接口关系` and records only capability-level orchestration among multiple interfaces, events, topics, jobs or commands: ordering, trigger relationships, cross-contract state handoff and compensation. It does not use one generic actor-to-API diagram to stand in for an individual contract's internal behavior. When no cross-contract orchestration exists, say so and point readers to the corresponding `5.N.2` subsections.
+
+For every material secondary flow, colocate a concrete processing summary and a readable Mermaid flow/sequence/state diagram or compact step table with its owning Section 5 contract, plus one end-to-end row linking: `level1_journey_id` → business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing internal hop as `missing_evidence`; do not infer it. A missing secondary hop does not weaken the level-1 rule that both Controller/Handler and Service/UseCase anchors must be concrete before a journey is listed there.
 
 Within Section 5, organize contracts by interface rather than by field type. Each HTTP interface, EVENT/TOPIC, JOB or COMMAND is a direct `### 5.N` group and owns exactly these same-prefix subsections:
 
 1. `#### 5.N.1 接口清单与代码追溯`: a compact `项目 / 内容` table for `level1_journey_id`, `api_id`, contract type, complete path/topic/entry, purpose, caller, models and status, followed by an `实现层 / 精确定位 / 职责` table for Controller/entry, Service/use case, Mapper/Repository, entity/table and test;
-2. `#### 5.N.2 请求字段`;
-3. `#### 5.N.3 响应字段`;
-4. `#### 5.N.4 错误码与异常映射`;
-5. `#### 5.N.5 认证、授权、幂等与事务`.
+2. `#### 5.N.2 内部处理逻辑`: a concrete summary naming the applicable entry/trigger, validation, Service/UseCase orchestration, key decisions, data reads/writes, output/state/result event and failure/recovery behavior, followed by at least one actual Mermaid diagram or compact step table; generic nodes and retained template placeholders are invalid;
+3. `#### 5.N.3 请求字段`;
+4. `#### 5.N.4 响应字段`;
+5. `#### 5.N.5 错误码与异常映射`;
+6. `#### 5.N.6 认证、授权、幂等与事务`.
 
-The numeric prefix follows its parent: a `### 5.2` contract uses `5.2.1` through `5.2.5`. Never replace these groups with one horizontal interface inventory and global request, response or error sections. For EVENT/TOPIC, request means envelope/key/payload and response means acknowledgement, result event or evidence-backed one-way semantics. For JOB/COMMAND, request means execution context/parameters and response means execution result/status. A contract with no field or direct response records an explicit `not_applicable` row with reason and exact evidence; it does not leave the subsection empty.
+The numeric prefix follows its parent: a `### 5.2` contract uses `5.2.1` through `5.2.6`. Never replace these groups with one horizontal interface inventory and global logic, request, response or error sections. For EVENT/TOPIC, internal logic covers consumption, validation/deduplication, use-case processing, persistence/publication and acknowledgement or failure handling; request means envelope/key/payload and response means acknowledgement, a result event or evidence-backed one-way semantics. For JOB/COMMAND, internal logic covers trigger context, selection/locking, execution, checkpoint/result and retry/compensation; request means execution context/parameters and response means execution result/status. A contract with no field or direct response records an explicit `not_applicable` row with reason and exact evidence; it does not leave the subsection empty.
 
 ## Interface and Persistence Applicability Gate
 
@@ -76,7 +79,7 @@ Every secondary-capability detailed design records four machine-checkable states
 - `persistence_design_status=detailed|not_applicable`;
 - `relationship_model_status=relational|single_table|not_applicable`.
 
-For `interface_design_status=detailed`, interface design is mandatory and includes a concrete HTTP path, event/topic, job or command; per-contract 请求字段; 响应字段; 错误码与异常映射; authorization, idempotency and transaction behavior; and exact entry-to-test anchors. `interface_coverage=partial` requires a stable gap ID. Use interface-level `not_applicable` only with a reason and exact repository evidence; use field-row `not_applicable` when a real contract has no request field, direct response or applicable control in one dimension.
+For `interface_design_status=detailed`, interface design is mandatory and includes a concrete HTTP path, event/topic, job or command; per-contract internal processing logic, 请求字段, 响应字段, 错误码与异常映射, authorization, idempotency and transaction behavior; and exact entry-to-test anchors. `interface_coverage=partial` requires a stable gap ID. Use interface-level `not_applicable` only with a reason and exact repository evidence; use field-row `not_applicable` when a real contract has no request field, direct response or applicable control in one dimension.
 
 For `persistence_design_status=detailed`, a relationship model is mandatory. Multi-table designs render real inventory table names and join fields and classify each edge as `physical_fk`, `logical_relation` or `external_reference`. Single-table designs render the real table entity even without an edge. 禁止使用 `BUSINESS_FLOW`、`API`、`RESULT`、`TABLE`、`ENTITY_A` 或 `ENTITY_B` 作为 ER 实体。No-schema-change in the current revision does not remove the obligation to describe the current persisted model. Use persistence `not_applicable` only with a reason and exact repository evidence.
 

@@ -92,7 +92,7 @@ export function flatSecondaryDetailedDesign(secondaryCapabilityId) {
   ].join('\n');
 }
 
-export function validGroupedSecondaryDetailedDesign(secondaryCapabilityId) {
+function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityId) {
   const journeyId = `${secondaryCapabilityId.toUpperCase()}_EXECUTE`;
   const groupedInterfaceDesign = [
     '## 5. 接口详细设计',
@@ -204,6 +204,55 @@ export function validGroupedSecondaryDetailedDesign(secondaryCapabilityId) {
     /## 5\. 接口详细设计[\s\S]*?(?=## 7\. 实体、表与对象关系)/,
     `${groupedInterfaceDesign}\n\n`,
   );
+}
+
+function addInterfaceInternalLogic(document, groupNumber, logicBody) {
+  const prefix = `5.${groupNumber}`;
+  return document
+    .replace(`#### ${prefix}.5 认证、授权、幂等与事务`, `#### ${prefix}.6 认证、授权、幂等与事务`)
+    .replace(`#### ${prefix}.4 错误码与异常映射`, `#### ${prefix}.5 错误码与异常映射`)
+    .replace(`#### ${prefix}.3 响应字段`, `#### ${prefix}.4 响应字段`)
+    .replace(
+      `#### ${prefix}.2 请求字段`,
+      `#### ${prefix}.2 内部处理逻辑\n\n${logicBody}\n\n#### ${prefix}.3 请求字段`,
+    );
+}
+
+export function validGroupedSecondaryDetailedDesignWithInternalLogic(secondaryCapabilityId) {
+  const createLogic = [
+    '该接口由 `CapabilityController.execute` 校验业务单号和登录上下文，随后调用 `CapabilityService.execute` 检查业务单号是否重复；校验通过后在同一事务中由 `OrderMapper.insert` 写入 `order`，并返回新订单的 `id` 与 `status`。重复业务单号或持久化失败时整体回滚，不产生部分订单数据。',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '    A["Web 管理端提交订单"] --> B["CapabilityController.execute 校验请求"]',
+    '    B --> C["CapabilityService.execute 检查业务单号"]',
+    '    C --> D["OrderMapper.insert 写入 order"]',
+    '    D --> E["返回 OrderView 的 id 与 status"]',
+    '    C -->|"业务单号重复"| F["返回 400 且不落库"]',
+    '```',
+  ].join('\n');
+  const queryLogic = [
+    '该接口由 `CapabilityController.detail` 取得路径参数和登录用户，`CapabilityService.detail` 先校验订单归属，再由 `OrderMapper.selectById` 读取 `order`。记录存在时映射为 `OrderView` 返回；记录不存在或用户无权查看时终止后续处理且不产生数据写入。',
+    '',
+    '| 步骤 | 内部处理 | 代码对象 | 数据读写 | 失败处理 |',
+    '| --- | --- | --- | --- | --- |',
+    '| 1 | 解析并校验订单主键 | `CapabilityController.detail` | 无 | 非法主键返回 400 |',
+    '| 2 | 校验当前用户对订单的查看权限 | `CapabilityService.detail` | 读取用户上下文 | 无权查看时拒绝请求 |',
+    '| 3 | 按主键查询订单并映射响应 | `OrderMapper.selectById` | 读取 `order` | 无记录时返回 404 |',
+  ].join('\n');
+  return addInterfaceInternalLogic(
+    addInterfaceInternalLogic(
+      groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityId),
+      1,
+      createLogic,
+    ),
+    2,
+    queryLogic,
+  );
+}
+
+export function validGroupedSecondaryDetailedDesign(secondaryCapabilityId) {
+  return validGroupedSecondaryDetailedDesignWithInternalLogic(secondaryCapabilityId);
 }
 
 export function validSecondaryDetailedDesign(secondaryCapabilityId) {

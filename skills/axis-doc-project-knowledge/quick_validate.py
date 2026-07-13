@@ -55,7 +55,8 @@ REQUIRED_TERMS = {
         "logical_relation",
         "Section 5 is grouped by contract",
         "接口清单与代码追溯",
-        "5.2.5",
+        "内部处理逻辑",
+        "5.2.6",
         "not_applicable",
         "After Use Deposition",
     ],
@@ -66,16 +67,24 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "#### 5.1.1 接口清单与代码追溯",
     "| 项目 | 内容 |",
     "| 实现层 | 精确定位 | 职责 |",
-    "#### 5.1.2 请求字段",
-    "#### 5.1.3 响应字段",
-    "#### 5.1.4 错误码与异常映射",
-    "#### 5.1.5 认证、授权、幂等与事务",
+    "#### 5.1.2 内部处理逻辑",
+    "处理说明：{concrete_internal_processing_summary}",
+    "| 步骤 | 内部处理 | 代码对象 | 数据读写/状态变化 | 失败处理 |",
+    "实际输出必须替换所有花括号内容",
+    "#### 5.1.3 请求字段",
+    "#### 5.1.4 响应字段",
+    "#### 5.1.5 错误码与异常映射",
+    "#### 5.1.6 认证、授权、幂等与事务",
     "### 5.2 {next_interface_event_job_or_command_name}",
     "#### 5.2.1 接口清单与代码追溯",
-    "#### 5.2.2 请求字段",
-    "#### 5.2.3 响应字段",
-    "#### 5.2.4 错误码与异常映射",
-    "#### 5.2.5 认证、授权、幂等与事务",
+    "#### 5.2.2 内部处理逻辑",
+    "#### 5.2.3 请求字段",
+    "#### 5.2.4 响应字段",
+    "#### 5.2.5 错误码与异常映射",
+    "#### 5.2.6 认证、授权、幂等与事务",
+    "## 3. 能力级流程与跨接口关系",
+    "本章只描述二级能力内部多个接口",
+    "接口内部逻辑见各 `5.N.2`",
     "HTTP / EVENT / TOPIC / JOB / COMMAND",
     "interface_not_applicable_reason",
     "interface_not_applicable_evidence",
@@ -170,7 +179,7 @@ def validate(skill_dir: Path) -> int:
             if term not in interface_template:
                 return fail(f"grouped interface template missing required term: {term}")
         if re.search(
-            r"^### 5\.\d+ (?:接口清单与代码追踪|请求字段|响应字段|错误码与异常映射)\s*$",
+            r"^### 5\.\d+ (?:接口清单与代码追踪|内部处理逻辑|请求字段|响应字段|错误码与异常映射)\s*$",
             interface_template,
             re.MULTILINE,
         ):
@@ -181,6 +190,13 @@ def validate(skill_dir: Path) -> int:
             re.MULTILINE,
         ):
             return fail("legacy flat wide interface trace table found")
+        if re.search(
+            r"actor\[\"\{actor\}\"\][\s\S]*"
+            r"application\[\"\{application_service\}\"\][\s\S]*"
+            r"\{entity_or_table\}[\s\S]*\{outcome_or_state\}",
+            interface_template,
+        ):
+            return fail("legacy generic actor-to-api flow placeholder found")
 
     print(f"{skill_name} quick validation passed")
     return 0

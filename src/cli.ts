@@ -1176,6 +1176,39 @@ function markdownTables(body: string): MarkdownTable[] {
   return tables;
 }
 
+function hasGenericInterfaceLogicPlaceholder(body: string): boolean {
+  return /\{(?:actor|api(?:_id)?|application_service|business_rule|entity_or_table|outcome_or_state)\}/i.test(body)
+    || /\b(?:actor|application_service|business_rule|entity_or_table|outcome_or_state)\b/i.test(body)
+    || /(?:^|\n)\s*api\s*(?:-->|---|-\.->|==>)/i.test(body);
+}
+
+function hasConcreteInterfaceLogicSummary(body: string): boolean {
+  const prose = body
+    .replace(/```[\s\S]*?```/g, '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line
+      && !line.startsWith('|')
+      && !line.startsWith('#')
+      && !/^<!--.*-->$/.test(line))
+    .join(' ')
+    .replace(/[`*_>]/g, '')
+    .trim();
+  return prose.length >= 20;
+}
+
+function hasInterfaceLogicDiagramOrStepTable(body: string): boolean {
+  const hasDiagram = /```mermaid\s*[\s\S]*?\b(?:flowchart|graph|sequenceDiagram|stateDiagram(?:-v2)?)\b[\s\S]*?(?:-->|->>|-->>|==>)[\s\S]*?```/i.test(body);
+  if (hasDiagram) return true;
+  return markdownTables(body).some((table) => {
+    const headers = table.headers.map(normalizeMarkdownCell);
+    return table.rows.length > 0
+      && headers.includes('步骤')
+      && headers.some((header) => /^(?:内部处理|处理逻辑|判断或动作|判断\/动作|执行动作)$/.test(header))
+      && headers.some((header) => /^(?:代码对象|执行对象|执行对象\/方法|方法)$/.test(header));
+  });
+}
+
 function secondaryInterfaceTraceBindings(
   interfaceSection: string,
   chapterNumber: number,
@@ -1197,6 +1230,7 @@ function secondaryInterfaceTraceBindings(
 
   const expectedSubsections = [
     '接口清单与代码追溯',
+    '内部处理逻辑',
     '请求字段',
     '响应字段',
     '错误码与异常映射',
@@ -1353,14 +1387,25 @@ function secondaryInterfaceTraceBindings(
       throw new Error(`project knowledge secondary capability interface design missing exact code anchors: ${scope}`);
     }
 
-    for (const subsectionNumber of [2, 3, 4]) {
+    const internalLogic = subsectionBodies.get(2) ?? '';
+    if (hasGenericInterfaceLogicPlaceholder(internalLogic)) {
+      throw new Error(`project knowledge secondary capability interface internal logic uses generic placeholder: ${scope}/${groupPrefix}`);
+    }
+    if (!hasConcreteInterfaceLogicSummary(internalLogic)) {
+      throw new Error(`project knowledge secondary capability interface internal logic missing concrete summary: ${scope}/${groupPrefix}`);
+    }
+    if (!hasInterfaceLogicDiagramOrStepTable(internalLogic)) {
+      throw new Error(`project knowledge secondary capability interface internal logic missing flow diagram or step table: ${scope}/${groupPrefix}`);
+    }
+
+    for (const subsectionNumber of [3, 4, 5]) {
       if (!markdownTables(subsectionBodies.get(subsectionNumber) ?? '').some((table) => table.rows.length > 0)) {
         throw new Error(
           `project knowledge secondary capability interface group ${groupPrefix}.${subsectionNumber} has no field contract: ${scope}`,
         );
       }
     }
-    const policyTable = markdownTables(subsectionBodies.get(5) ?? '').find((table) => {
+    const policyTable = markdownTables(subsectionBodies.get(6) ?? '').find((table) => {
       const headers = table.headers.map(normalizeMarkdownCell);
       return headers.length === 3 && headers[0] === '维度' && headers[1] === '设计' && headers[2] === '证据';
     });
