@@ -36,6 +36,15 @@ Project knowledge uses fixed-path synchronization:
     `-- manifest.json
 ```
 
+Project document archives remain outside the current-document tree so Dashboard history never pollutes normal browsing:
+
+```text
+{prefix}/_archive/orgs/{organization_id}/projects/{project_slug}/
+`-- {canonical_path}.history/{archive_id}/
+    |-- metadata.json
+    `-- document.{ext}
+```
+
 The local snapshot may contain a `documents/` wrapper. Remove only that wrapper from OSS object keys: `documents/architecture/business.md` becomes `architecture/business.md`. Map local `metadata.json` and `manifest.json` to `_sync/metadata.json` and `_sync/manifest.json`.
 
 Other v0.2 captures remain immutable packages within the same project:
@@ -73,7 +82,7 @@ axis oss-publish --repo <repo> --run-id <run_id> --local-only
 axis oss-publish --repo <repo> --run-id <run_id>
 ```
 
-For `project_knowledge_snapshot`, update changed project document objects and upload `_sync/manifest.json` last. For other assets, upload `manifest.json` last within `packages/{run_id}`.
+For `project_knowledge_snapshot`, update changed current project documents and `_archive` objects, then upload `_sync/manifest.json` last. For other assets, upload `manifest.json` last within `packages/{run_id}`.
 
 ## Synchronization and Conflict Rules
 
@@ -88,6 +97,7 @@ For `project_knowledge_snapshot`, update changed project document objects and up
 - Local files match `manifest.files`, and organization/project/profile snapshots match resolved config.
 - Every v0.2 target contains both `orgs/{organization_id}` and `projects/{project_slug}`.
 - Project knowledge paths do not contain the local `documents/` wrapper or a remote `run_id` directory.
+- Project archive paths resolve under `{prefix}/_archive/orgs/{organization_id}/projects/{project_slug}/` and remain outside the current project-document list.
 - General package paths contain `projects/{project_slug}/packages/{run_id}`.
 - Public-safety validation is `passed` and release channel/gate match config.
 - `publish.status` is `local_ready` after dry-run or local-only and `published` only after a successful upload.

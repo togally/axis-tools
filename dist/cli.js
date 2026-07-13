@@ -893,9 +893,56 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
         },
     ];
 }
+async function projectKnowledgeArchiveSourceFiles(repo, config) {
+    if (!config.organization?.id)
+        return [];
+    const archiveRoot = path.join(repo, '.axis', 'docs', '_archive', 'orgs', config.organization.id, 'projects', config.project.slug);
+    if (!existsSync(archiveRoot))
+        return [];
+    const supportedExtensions = new Set(['.md', '.markdown', '.yaml', '.yml', '.json', '.txt', '.html', '.csv']);
+    const archiveMediaType = (filePath) => {
+        const extension = path.extname(filePath).toLowerCase();
+        if (extension === '.md' || extension === '.markdown')
+            return 'text/markdown';
+        if (extension === '.yaml' || extension === '.yml')
+            return 'application/yaml';
+        if (extension === '.json')
+            return 'application/json';
+        if (extension === '.html')
+            return 'text/html';
+        if (extension === '.csv')
+            return 'text/csv';
+        return 'text/plain';
+    };
+    const files = [];
+    const visit = async (directory) => {
+        const entries = (await readdir(directory, { withFileTypes: true }))
+            .sort((left, right) => left.name.localeCompare(right.name));
+        for (const entry of entries) {
+            const absolutePath = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                await visit(absolutePath);
+                continue;
+            }
+            if (!entry.isFile() || !supportedExtensions.has(path.extname(entry.name).toLowerCase()))
+                continue;
+            const relativePath = path.relative(archiveRoot, absolutePath).split(path.sep).join('/');
+            files.push({
+                source: relativePath,
+                sourceRoot: archiveRoot,
+                target: `documents/_archive/${relativePath}`,
+                docType: entry.name === 'metadata.json' ? 'document_archive_metadata' : 'document_archive',
+                docId: `document_archive_${createHash('sha256').update(relativePath).digest('hex').slice(0, 16)}`,
+                mediaType: archiveMediaType(relativePath),
+            });
+        }
+    };
+    await visit(archiveRoot);
+    return files;
+}
 async function assertPublicSafeProjectKnowledgeSources(sourceRoot, sourceFiles) {
     for (const sourceFile of sourceFiles) {
-        const sourcePath = path.join(sourceRoot, sourceFile.source);
+        const sourcePath = path.join(sourceFile.sourceRoot ?? sourceRoot, sourceFile.source);
         if (!existsSync(sourcePath)) {
             throw new Error(`project knowledge document missing: ${sourceFile.source}`);
         }
@@ -923,7 +970,10 @@ async function projectKnowledgeCaptureCommand() {
     const runId = buildRunId('project_knowledge_snapshot');
     const createdAt = new Date().toISOString().replace(/\.\d{3}Z$/, 'Z');
     const sourceRoot = projectKnowledgeSourceRoot(repo, config);
-    const sourceFiles = await projectKnowledgeSourceFiles(sourceRoot);
+    const sourceFiles = [
+        ...await projectKnowledgeSourceFiles(sourceRoot),
+        ...await projectKnowledgeArchiveSourceFiles(repo, config),
+    ];
     await assertPublicSafeProjectKnowledgeSources(sourceRoot, sourceFiles);
     const packageDir = packageDirFor(repo, config, runId);
     await rm(packageDir, { recursive: true, force: true });
@@ -931,7 +981,7 @@ async function projectKnowledgeCaptureCommand() {
     for (const sourceFile of sourceFiles) {
         const targetPath = path.join(packageDir, sourceFile.target);
         await mkdir(path.dirname(targetPath), { recursive: true });
-        await cp(path.join(sourceRoot, sourceFile.source), targetPath);
+        await cp(path.join(sourceFile.sourceRoot ?? sourceRoot, sourceFile.source), targetPath);
     }
     const organization = organizationSnapshot(config);
     const project = projectSnapshot(config);
@@ -1092,6 +1142,12 @@ function projectDocumentsOssPath(config) {
         throw new Error('project document sync requires contract_version "0.2" and organization.id');
     }
     return `${normalizeOssPrefix(config.oss.prefix)}/orgs/${config.organization.id}/projects/${config.project.slug}/`;
+}
+function projectDocumentArchivesOssPath(config) {
+    if (config.contract_version !== '0.2' || !config.organization?.id) {
+        throw new Error('project document archive sync requires contract_version "0.2" and organization.id');
+    }
+    return `${normalizeOssPrefix(config.oss.prefix)}/_archive/orgs/${config.organization.id}/projects/${config.project.slug}/`;
 }
 function baseUriFor(config, runId) {
     return `oss://${config.oss.bucket}/${ossPackagePath(config, runId)}`;
@@ -1445,6 +1501,9 @@ function projectKnowledgeSyncedRelativePath(packagePath) {
 }
 function objectKeyForPublish(config, runId, relativePath, assetType) {
     if (assetType === 'project_knowledge_snapshot') {
+        if (relativePath.startsWith('documents/_archive/')) {
+            return `${projectDocumentArchivesOssPath(config)}${relativePath.slice('documents/_archive/'.length)}`;
+        }
         return `${projectDocumentsOssPath(config)}${projectKnowledgeSyncedRelativePath(relativePath)}`;
     }
     return objectKeyForConfig(config, runId, relativePath);
