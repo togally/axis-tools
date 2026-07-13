@@ -726,7 +726,9 @@ function secondaryDesignStatus(body, key, allowed, capabilityId, secondaryId) {
     return match[1];
 }
 function exactCodeAnchors(body) {
-    return [...body.matchAll(/(?:[A-Za-z0-9_.@+\-]+\/)+[A-Za-z0-9_.$@+\-]+\.[A-Za-z0-9]+:\d+-\d+#[A-Za-z_$][A-Za-z0-9_$<>.\-]*/g)].map((match) => match[0]);
+    return [...body.matchAll(/(?<![A-Za-z0-9_./:@+\-])(?:[A-Za-z0-9_@+\-][A-Za-z0-9_.@+\-]*\/)+[A-Za-z0-9_$@+\-][A-Za-z0-9_.$@+\-]*\.[A-Za-z0-9]+:([1-9]\d*)-([1-9]\d*)#[A-Za-z_$][A-Za-z0-9_$<>.\-]*(?![A-Za-z0-9_$<>.()\/\-])/g)]
+        .filter((match) => Number(match[1]) <= Number(match[2]))
+        .map((match) => match[0]);
 }
 function projectKnowledgeSection(body, heading) {
     const match = heading.exec(body);
@@ -735,6 +737,267 @@ function projectKnowledgeSection(body, heading) {
     const sectionStart = match.index + match[0].length;
     const nextHeading = /^##\s+/m.exec(body.slice(sectionStart));
     return body.slice(sectionStart, nextHeading ? sectionStart + nextHeading.index : body.length);
+}
+function splitMarkdownTableRow(line) {
+    const content = line.trim().slice(1, -1);
+    const cells = [];
+    let current = '';
+    for (let index = 0; index < content.length; index += 1) {
+        const character = content[index];
+        if (character === '\\' && content[index + 1] === '|') {
+            current += '|';
+            index += 1;
+        }
+        else if (character === '|') {
+            cells.push(current.trim());
+            current = '';
+        }
+        else {
+            current += character;
+        }
+    }
+    cells.push(current.trim());
+    return cells;
+}
+function markdownTableTraceBindings(body) {
+    const lines = body.split(/\r?\n/);
+    const normalize = (value) => value.replace(/[`*]/g, '').trim();
+    const bindings = new Map();
+    for (let index = 0; index < lines.length; index += 1) {
+        const line = lines[index].trim();
+        if (!line.startsWith('|') || !line.endsWith('|'))
+            continue;
+        const headers = splitMarkdownTableRow(line).map(normalize);
+        const bindingIndex = headers.indexOf('level1_journey_id');
+        if (bindingIndex < 0)
+            continue;
+        const traceIndex = headers.findIndex((header) => header === 'api_id' || header.startsWith('flow_id'));
+        const interfaceIndex = headers.findIndex((header) => header.startsWith('方法与'));
+        const controllerIndex = headers.indexOf('Controller/入口');
+        const serviceIndex = headers.indexOf('Service/用例');
+        const mapperIndex = headers.indexOf('Mapper/Repository');
+        const entityIndex = headers.indexOf('实体/表');
+        const testIndex = headers.indexOf('测试');
+        if ([traceIndex, interfaceIndex, controllerIndex, serviceIndex, mapperIndex, entityIndex, testIndex]
+            .some((index) => index < 0))
+            continue;
+        for (let rowIndex = index + 2; rowIndex < lines.length; rowIndex += 1) {
+            const rowLine = lines[rowIndex].trim();
+            if (!rowLine.startsWith('|') || !rowLine.endsWith('|'))
+                break;
+            const cells = splitMarkdownTableRow(rowLine);
+            const traceValue = normalize(cells[traceIndex] ?? '');
+            const bindingValue = normalize(cells[bindingIndex] ?? '');
+            const interfaceEntry = normalize(cells[interfaceIndex] ?? '');
+            const controllerAnchors = exactCodeAnchors(cells[controllerIndex] ?? '');
+            const serviceAnchors = exactCodeAnchors(cells[serviceIndex] ?? '');
+            const mapperAnchors = exactCodeAnchors(cells[mapperIndex] ?? '');
+            const testAnchors = exactCodeAnchors(cells[testIndex] ?? '');
+            if (/^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/.test(bindingValue)
+                && /^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/.test(traceValue)
+                && !/^(?:missing_evidence|not_applicable|none|todo|tbd)$/i.test(traceValue)
+                && /(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceEntry)
+                && controllerAnchors.length > 0
+                && serviceAnchors.length > 0
+                && mapperAnchors.length > 0
+                && normalize(cells[entityIndex] ?? '').length > 0
+                && testAnchors.length > 0) {
+                bindings.set(bindingValue, [
+                    ...(bindings.get(bindingValue) ?? []),
+                    {
+                        apiId: traceValue,
+                        interfaceEntry,
+                        controllerAnchors,
+                        serviceAnchors,
+                    },
+                ]);
+            }
+        }
+    }
+    return bindings;
+}
+function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapabilities, gapReportBody) {
+    const userOperationPanorama = projectKnowledgeSection(body, /^##\s+\d+\.?\s+用户业务操作全景\s*$/m);
+    if (!userOperationPanorama) {
+        throw new Error(`project knowledge level-1 capability detailed design missing user operation panorama: ${capabilityId}`);
+    }
+    const journeyControlLines = body.split(/\r?\n/).filter((line) => (/\buser_journey_design_status\s*=/.test(line)
+        && /\buser_journey_coverage\s*=/.test(line)
+        && /\buser_journey_gap_id\s*=/.test(line)));
+    if (journeyControlLines.length !== 1) {
+        throw new Error(`project knowledge level-1 capability detailed design requires one user journey control line: ${capabilityId}`);
+    }
+    const journeyControlLine = journeyControlLines[0];
+    if (!/\buser_journey_design_status\s*=\s*detailed\b/.test(journeyControlLine)) {
+        throw new Error(`project knowledge level-1 capability detailed design missing user_journey_design_status: ${capabilityId}`);
+    }
+    if (!/\buser_journey_coverage\s*=\s*(?:complete|partial)\b/.test(journeyControlLine)) {
+        throw new Error(`project knowledge level-1 capability detailed design missing user_journey_coverage: ${capabilityId}`);
+    }
+    const journeyCoverage = /\buser_journey_coverage\s*=\s*(complete|partial)\b/.exec(journeyControlLine)?.[1];
+    const journeyGapId = /\buser_journey_gap_id\s*=\s*([A-Za-z0-9][A-Za-z0-9_.:\-]*)\b/
+        .exec(journeyControlLine)?.[1];
+    if (journeyCoverage === 'partial' && (!journeyGapId || journeyGapId === 'not_applicable')) {
+        throw new Error(`project knowledge level-1 capability partial user journey coverage requires an explicit gap: ${capabilityId}`);
+    }
+    if (journeyCoverage === 'complete' && journeyGapId !== 'not_applicable') {
+        throw new Error(`project knowledge level-1 capability complete user journey coverage requires user_journey_gap_id=not_applicable: ${capabilityId}`);
+    }
+    if (journeyCoverage === 'partial' && journeyGapId) {
+        const gapSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+(?:缺口与覆盖说明|验收、证据与缺口)\s*$/m);
+        const escapedGapId = journeyGapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const gapIdPattern = new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`);
+        if (!gapSection
+            || !gapIdPattern.test(gapSection)
+            || !/未覆盖/.test(gapSection)
+            || !/(?:补齐|补证|所需证据|修复)/.test(gapSection)
+            || !gapIdPattern.test(gapReportBody)) {
+            throw new Error(`project knowledge level-1 capability partial user journey gap is not traced in overview and gap report: ${capabilityId}/${journeyGapId}`);
+        }
+    }
+    const panoramaLines = userOperationPanorama.split(/\r?\n/);
+    const headerLineIndex = panoramaLines.findIndex((line) => {
+        const trimmed = line.trim();
+        return trimmed.startsWith('|') && trimmed.endsWith('|') && /`?journey_id`?/.test(trimmed);
+    });
+    if (headerLineIndex < 0 || panoramaLines.length <= headerLineIndex + 2) {
+        throw new Error(`project knowledge level-1 capability detailed design missing user journey table: ${capabilityId}`);
+    }
+    const headers = splitMarkdownTableRow(panoramaLines[headerLineIndex])
+        .map((header) => header.replace(/[`*]/g, '').trim());
+    const requiredHeaders = [
+        'journey_id',
+        '用户/角色',
+        '所属二级能力/模块',
+        '提供的业务',
+        '用户目标',
+        '用户怎么操作',
+        '接口/入口',
+        'Controller/Handler',
+        'Service/UseCase',
+        '读取数据',
+        '写入/产生数据',
+        '用户可见结果',
+        '二级能力详情',
+        '证据',
+    ];
+    for (const requiredHeader of requiredHeaders) {
+        if (!headers.includes(requiredHeader)) {
+            throw new Error(`project knowledge level-1 capability user journey table missing ${requiredHeader}: ${capabilityId}`);
+        }
+    }
+    if (headers.length !== requiredHeaders.length
+        || headers.some((header, index) => header !== requiredHeaders[index])) {
+        throw new Error(`project knowledge level-1 capability user journey table does not match fixed schema: ${capabilityId}`);
+    }
+    const separatorLine = panoramaLines[headerLineIndex + 1].trim();
+    const separatorCells = separatorLine.startsWith('|') && separatorLine.endsWith('|')
+        ? splitMarkdownTableRow(separatorLine)
+        : [];
+    if (!separatorLine.startsWith('|')
+        || !separatorLine.endsWith('|')
+        || separatorCells.length !== headers.length
+        || separatorCells.some((cell) => !/^:?-{3,}:?$/.test(cell))) {
+        throw new Error(`project knowledge level-1 capability user journey table has malformed separator: ${capabilityId}`);
+    }
+    const rows = [];
+    for (let index = headerLineIndex + 2; index < panoramaLines.length; index += 1) {
+        const line = panoramaLines[index].trim();
+        if (!line.startsWith('|') || !line.endsWith('|'))
+            break;
+        rows.push(splitMarkdownTableRow(line));
+    }
+    if (rows.some((cells) => cells.length !== headers.length)) {
+        throw new Error(`project knowledge level-1 capability user journey table has malformed row: ${capabilityId}`);
+    }
+    if (rows.length === 0) {
+        throw new Error(`project knowledge level-1 capability detailed design has no user journeys: ${capabilityId}`);
+    }
+    const field = (row, name) => row[headers.indexOf(name)] ?? '';
+    const journeySecondaryIds = new Set();
+    const journeyIds = new Set();
+    const journeyIdsBySecondary = new Map();
+    const isGenericText = (value) => {
+        const normalized = value.replace(/`/g, '').trim();
+        return /^(?:现有入口集合|现有操作|对应(?:接口|入口|方法|服务|数据)|相关(?:数据|表|对象)|详见二级能力文档|形成(?:或查询)?业务结果|返回结果|待补充|TODO|TBD)$/i.test(normalized)
+            || /^(?:读取|写入|产生)(?:相关数据|相关表|相关对象)$/i.test(normalized);
+    };
+    const concreteData = (value, operation) => {
+        if (isGenericText(value))
+            return false;
+        const concreteCodeToken = [...value.matchAll(/`([^`\n]+)`/g)]
+            .map((match) => match[1].trim())
+            .some((token) => token.length > 1
+            && !/^(?:none|n\/a|na|not_applicable|missing_evidence|data|table|object|todo|tbd|-)$/i.test(token));
+        if (concreteCodeToken)
+            return true;
+        const action = operation === '读取' ? '读取' : '(?:写入|产生|落库)';
+        return new RegExp(`^(?:无|无需|无须|不(?:需|需要)?)(?:${action})(?:数据|数据库|业务表|持久化数据)?[：:，,；;（(].{2,}`).test(value.trim());
+    };
+    for (const row of rows) {
+        const journeyId = field(row, 'journey_id').replace(/`/g, '').trim() || 'unknown';
+        if (!/^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/.test(journeyId)) {
+            throw new Error(`project knowledge level-1 capability user journey has invalid journey_id: ${capabilityId}/${journeyId}`);
+        }
+        if (journeyIds.has(journeyId)) {
+            throw new Error(`project knowledge level-1 capability user journey has duplicate journey_id: ${capabilityId}/${journeyId}`);
+        }
+        journeyIds.add(journeyId);
+        const secondaryId = field(row, '所属二级能力/模块').replace(/`/g, '').trim();
+        if (!secondaryCapabilities.some((secondary) => secondary.secondary_capability_id === secondaryId)) {
+            throw new Error(`project knowledge level-1 capability user journey references unknown secondary capability: ${capabilityId}/${journeyId}`);
+        }
+        journeySecondaryIds.add(secondaryId);
+        for (const requiredField of ['用户/角色', '提供的业务', '用户目标', '用户怎么操作', '用户可见结果']) {
+            const value = field(row, requiredField).trim();
+            if (value.length < 2 || isGenericText(value)) {
+                throw new Error(`project knowledge level-1 capability user journey missing concrete ${requiredField}: ${capabilityId}/${journeyId}`);
+            }
+        }
+        const interfaceEntry = field(row, '接口/入口');
+        if (/现有入口集合|对应接口|对应入口/.test(interfaceEntry)) {
+            throw new Error(`project knowledge level-1 capability user journey uses generic interface placeholder: ${capabilityId}/${journeyId}`);
+        }
+        if (!/(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceEntry)) {
+            throw new Error(`project knowledge level-1 capability user journey missing concrete interface: ${capabilityId}/${journeyId}`);
+        }
+        if (exactCodeAnchors(field(row, 'Controller/Handler')).length < 1) {
+            throw new Error(`project knowledge level-1 capability user journey missing exact Controller/Handler anchor: ${capabilityId}/${journeyId}`);
+        }
+        if (exactCodeAnchors(field(row, 'Service/UseCase')).length < 1) {
+            throw new Error(`project knowledge level-1 capability user journey missing exact Service/UseCase anchor: ${capabilityId}/${journeyId}`);
+        }
+        if (!concreteData(field(row, '读取数据'), '读取')) {
+            throw new Error(`project knowledge level-1 capability user journey missing concrete read data: ${capabilityId}/${journeyId}`);
+        }
+        if (!concreteData(field(row, '写入/产生数据'), '写入')) {
+            throw new Error(`project knowledge level-1 capability user journey missing concrete written or produced data: ${capabilityId}/${journeyId}`);
+        }
+        const expectedChildPath = `secondary-capabilities/${secondaryId}/detailed-design.md`;
+        const escapedChildPath = expectedChildPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`\\]\\((?:business/capabilities/${capabilityId}/)?${escapedChildPath}\\)`).test(field(row, '二级能力详情'))) {
+            throw new Error(`project knowledge level-1 capability user journey omits secondary capability link: ${capabilityId}/${journeyId}`);
+        }
+        if (exactCodeAnchors(field(row, '证据')).length < 1) {
+            throw new Error(`project knowledge level-1 capability user journey missing exact evidence anchor: ${capabilityId}/${journeyId}`);
+        }
+        journeyIdsBySecondary.set(secondaryId, [
+            ...(journeyIdsBySecondary.get(secondaryId) ?? []),
+            {
+                journeyId,
+                interfaceEntry: interfaceEntry.replace(/`/g, '').trim(),
+                controllerAnchors: exactCodeAnchors(field(row, 'Controller/Handler')),
+                serviceAnchors: exactCodeAnchors(field(row, 'Service/UseCase')),
+            },
+        ]);
+    }
+    for (const secondary of secondaryCapabilities) {
+        const secondaryId = secondary.secondary_capability_id;
+        if (!journeySecondaryIds.has(secondaryId)) {
+            throw new Error(`project knowledge level-1 capability user journeys omit secondary capability: ${capabilityId}/${secondaryId}`);
+        }
+    }
+    return journeyIdsBySecondary;
 }
 function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId) {
     const scope = `${capabilityId}/${secondaryId}`;
@@ -875,6 +1138,8 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
         throw new Error('project knowledge document missing: business/inventory.yaml');
     }
     const inventory = parseSimpleYaml(await readFile(inventoryPath, 'utf8'));
+    const gapReportPath = path.join(sourceRoot, 'gaps', 'doc-gap-report.md');
+    const gapReportBody = existsSync(gapReportPath) ? await readFile(gapReportPath, 'utf8') : '';
     const level1Capabilities = Array.isArray(inventory.level1_capabilities)
         ? inventory.level1_capabilities
         : [];
@@ -936,6 +1201,8 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
         docId: `business_capability_detailed_design_${capabilityId}`,
         mediaType: 'text/markdown',
     }));
+    const level1JourneysByCapability = new Map();
+    const level1JourneyCoverageByCapability = new Map();
     for (const capability of level1Capabilities) {
         const capabilityId = capability.level1_capability_id;
         const capabilityDocument = capabilityDetailedDesigns.find((document) => document.docId === `business_capability_detailed_design_${capabilityId}`);
@@ -944,6 +1211,10 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             throw new Error(`project knowledge level-1 capability detailed design missing: ${capabilityId}`);
         }
         const capabilityDocumentBody = await readFile(capabilityDocumentPath, 'utf8');
+        const capabilityCoverage = /\buser_journey_coverage\s*=\s*(complete|partial)\b/
+            .exec(capabilityDocumentBody)?.[1];
+        level1JourneyCoverageByCapability.set(capabilityId, capabilityCoverage);
+        level1JourneysByCapability.set(capabilityId, assertLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody));
         for (const secondary of capability.secondary_capabilities) {
             const secondaryId = secondary.secondary_capability_id;
             const escapedSecondaryId = secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -975,6 +1246,33 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
                 throw new Error(`project knowledge secondary capability detailed design has wrong identity: ${capabilityId}/${secondaryId}`);
             }
             assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId);
+            const secondaryInterfaceCoverage = /\binterface_coverage\s*=\s*(complete|partial|not_applicable)\b/
+                .exec(body)?.[1] ?? 'missing';
+            if (level1JourneyCoverageByCapability.get(capabilityId) === 'complete'
+                && secondaryInterfaceCoverage !== 'complete') {
+                throw new Error(`project knowledge level-1 complete user journey coverage conflicts with ${secondaryInterfaceCoverage} secondary interface coverage: ${capabilityId}/${secondaryId}`);
+            }
+            const expectedJourneys = level1JourneysByCapability.get(capabilityId)?.get(secondaryId) ?? [];
+            const expectedJourneyIds = new Set(expectedJourneys.map((journey) => journey.journeyId));
+            const interfaceSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+接口详细设计\s*$/m) ?? '';
+            const childJourneyBindings = markdownTableTraceBindings(interfaceSection);
+            for (const journey of expectedJourneys) {
+                const bindings = childJourneyBindings.get(journey.journeyId) ?? [];
+                if (bindings.length === 0) {
+                    throw new Error(`project knowledge secondary capability detailed design omits level-1 journey_id: ${capabilityId}/${secondaryId}/${journey.journeyId}`);
+                }
+                const matchingBinding = bindings.some((binding) => (binding.interfaceEntry === journey.interfaceEntry
+                    && journey.controllerAnchors.every((anchor) => binding.controllerAnchors.includes(anchor))
+                    && journey.serviceAnchors.every((anchor) => binding.serviceAnchors.includes(anchor))));
+                if (!matchingBinding) {
+                    throw new Error(`project knowledge secondary capability detailed design mismatches level-1 journey trace: ${capabilityId}/${secondaryId}/${journey.journeyId}`);
+                }
+            }
+            for (const journeyId of childJourneyBindings.keys()) {
+                if (!expectedJourneyIds.has(journeyId)) {
+                    throw new Error(`project knowledge secondary capability detailed design contains journey_id absent from level-1 panorama: ${capabilityId}/${secondaryId}/${journeyId}`);
+                }
+            }
             secondaryCapabilityDetailedDesigns.push({
                 source: relativePath,
                 target: `documents/${relativePath}`,

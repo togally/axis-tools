@@ -9,6 +9,19 @@ Use two internal output modes without separate top-level skills:
 
 Both should describe the approved target. Include current-versus-target comparison only for an iteration, migration or explicit correction task.
 
+## Level-1 Panorama vs Secondary Detailed Design
+
+The retained capability hierarchy has two deliberately different design depths:
+
+| Layer | Reader question | Required depth | Must not contain |
+| --- | --- | --- | --- |
+| Level-1 `business_capability_detailed_design` | 哪些用户/角色为了什么目标怎样操作，主要后台入口如何承接，读取或产生什么数据，用户最终看到什么？ | A complete `用户业务操作全景`: interface/entry, exact Controller/Handler and Service/UseCase anchors, read/write or produced-data summary, user-visible result, evidence and child link | Field dictionaries, full call chains, Mapper/Repository detail, ER models, indexes/constraints, transaction/concurrency or compensation detail, and test matrices |
+| `secondary_capability_detailed_design` | 每条一级旅程在模块内部如何完整实现和持久化？ | Complete business and internal code flow, field-level interface contract, Mapper/Repository and entity/table mapping, ER, fields, indexes, transactions, consistency, errors, compensation and flow-to-test traceability | A disconnected design that cannot identify its parent level-1 journey |
+
+Every level-1 overview records `user_journey_design_status=detailed`, `user_journey_coverage=complete|partial`, and `user_journey_gap_id=not_applicable` for complete coverage or a stable non-empty gap ID for partial coverage. Its fixed fields are `journey_id`, 用户/角色, 所属二级能力/模块, 提供的业务, 用户目标, 用户怎么操作, 接口/入口, `Controller/Handler`, `Service/UseCase`, 读取数据, 写入/产生数据, 用户可见结果, 二级能力详情 and 证据. Every declared secondary capability has at least one journey row. Each listed row requires concrete repository-relative `path:begin-end#symbol` anchors for both Controller/Handler and Service/UseCase, even when coverage is partial. `partial` tracks additional unlisted journeys; it does not permit an empty secondary capability or incomplete listed rows.
+
+The level-1 `journey_id` crosses the layer boundary unchanged. The owning secondary document repeats it as `level1_journey_id`, binds it to the corresponding `flow_id` and/or `api_id`, and expands the full entry-to-data and test trace. The two layers' journey-ID sets must match in both directions, and level-1 `complete` requires every child interface coverage to be `complete`. Do not duplicate secondary implementation content into the panorama, and do not publish a secondary flow that cannot identify its parent journey.
+
 ## Technical Design Review
 
 Verify:
@@ -24,7 +37,7 @@ Verify:
 
 Prefer implementation anchors over speculative class or method names. For implemented behavior, use the repository-relative form `path:begin-end#symbol` for every API entrypoint, service/use case, mapper/repository, entity mapping and test. Repository evidence governs current claims; the approved `master_draft` governs new target decisions.
 
-## Default Detailed-Design Structure
+## Default Secondary Detailed-Design Structure
 
 1. Document Control and Evidence Baseline
 2. Design Conclusion and Scope
@@ -42,7 +55,7 @@ Prefer implementation anchors over speculative class or method names. For implem
 14. Compatibility, Migration, Rollout and Rollback
 15. Tests, Acceptance, End-to-End Traceability, Assumptions and Risks
 
-For every material flow, include a readable flow diagram and one end-to-end row linking: business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing hop as `missing_evidence`; do not infer it.
+For every material secondary flow, include a readable flow diagram and one end-to-end row linking: `level1_journey_id` → business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing internal hop as `missing_evidence`; do not infer it. A missing secondary hop does not weaken the level-1 rule that both Controller/Handler and Service/UseCase anchors must be concrete before a journey is listed there.
 
 ## Interface and Persistence Applicability Gate
 

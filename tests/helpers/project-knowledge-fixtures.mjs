@@ -3,6 +3,7 @@ export function validSecondaryDetailedDesign(secondaryCapabilityId) {
     '# 二级能力详细设计',
     '',
     `\`secondary_capability_id\`: \`${secondaryCapabilityId}\``,
+    `\`level1_journey_id\`: \`${secondaryCapabilityId.toUpperCase()}_EXECUTE\``,
     '',
     '> 设计完整性：`interface_design_status=detailed` · `interface_coverage=complete` · `persistence_design_status=detailed` · `relationship_model_status=relational`',
     '',
@@ -10,9 +11,9 @@ export function validSecondaryDetailedDesign(secondaryCapabilityId) {
     '',
     '### 5.1 接口清单与代码追踪',
     '',
-    '| `api_id` | 方法与路径/主题 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    '| `ORDER_CREATE` | `POST /api/orders` | 登录用户与订单归属校验 | `CreateOrderRequest` | `OrderView` | 参数错误、重复订单 | 业务单号唯一约束与事务 | `src/OrderController.java:10-20#create` | `src/OrderService.java:20-40#create` | `src/OrderMapper.java:8-12#insert` | `order` | `test/OrderTest.java:10-30#createOrder` |',
+    '| `api_id` | `level1_journey_id` | 方法与路径/主题 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    `| \`ORDER_CREATE\` | \`${secondaryCapabilityId.toUpperCase()}_EXECUTE\` | \`POST /api/${secondaryCapabilityId}/actions\` | 登录用户与订单归属校验 | \`CreateOrderRequest\` | \`OrderView\` | 参数错误、重复订单 | 业务单号唯一约束与事务 | \`src/${secondaryCapabilityId}/CapabilityController.java:10-20#execute\` | \`src/${secondaryCapabilityId}/CapabilityService.java:20-40#execute\` | \`src/OrderMapper.java:8-12#insert\` | \`order\` | \`test/OrderTest.java:10-30#createOrder\` |`,
     '',
     '### 5.2 请求字段',
     '',
@@ -87,6 +88,76 @@ export function validSecondaryDetailedDesign(secondaryCapabilityId) {
     '### 8.7 数据迁移、兼容与回滚',
     '',
     '无表结构变化；当前结构由实体和迁移证据确认。',
+    '',
+  ].join('\n');
+}
+
+export function validLevel1CapabilityDetailedDesign(
+  level1CapabilityId,
+  secondaryCapabilities = [
+    { id: 'merchant_governance', name: '入驻申请、审核与门店管理' },
+    { id: 'catalog_inventory', name: '分类、品牌、商品、SKU与库存' },
+  ],
+) {
+  const moduleRows = secondaryCapabilities.map(({ id, name }) => (
+    `| \`${id}\` | ${name} | 商户、平台运营人员 | [查看实现细节](secondary-capabilities/${id}/detailed-design.md) |`
+  ));
+  const journeyRows = secondaryCapabilities.map(({ id, name }) => {
+    const apiId = `${id.toUpperCase()}_EXECUTE`;
+    return `| \`${apiId}\` | 商户或平台运营人员 | \`${id}\` | ${name} | 完成${name} | 在业务页面提交${name}操作 | \`POST /api/${id}/actions\` | \`src/${id}/CapabilityController.java:10-20#execute\` | \`src/${id}/CapabilityService.java:20-40#execute\` | 读取当前用户与 \`${id}_record\` 状态 | 写入 \`${id}_record\` 并记录处理状态 | 返回业务编号和当前状态 | [查看代码与数据设计](secondary-capabilities/${id}/detailed-design.md) | \`test/${id}/CapabilityFlowTest.java:10-30#executeJourney\` |`;
+  });
+  const navigationRows = secondaryCapabilities.map(({ id, name }) => (
+    `| \`${id}\` | ${name} | [进入二级能力](secondary-capabilities/${id}/detailed-design.md) |`
+  ));
+  return [
+    `# 示例项目 · ${level1CapabilityId} 详细设计说明书`,
+    '',
+    '> 文档状态：评审中  ',
+    `> 能力标识：\`${level1CapabilityId}\`  `,
+    '> 用户旅程完整性：`user_journey_design_status=detailed` · `user_journey_coverage=complete` · `user_journey_gap_id=not_applicable`',
+    '',
+    '## 1. 能力面向的用户与业务',
+    '',
+    '本能力面向商户和平台运营人员，说明用户能完成什么业务、如何操作以及系统产生什么结果。',
+    '',
+    '## 2. 模块与业务服务',
+    '',
+    '| 二级能力/模块 | 提供的业务 | 主要用户 | 实现细节 |',
+    '| --- | --- | --- | --- |',
+    ...moduleRows,
+    '',
+    '## 3. 用户业务操作全景',
+    '',
+    '| `journey_id` | 用户/角色 | 所属二级能力/模块 | 提供的业务 | 用户目标 | 用户怎么操作 | 接口/入口 | Controller/Handler | Service/UseCase | 读取数据 | 写入/产生数据 | 用户可见结果 | 二级能力详情 | 证据 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    ...journeyRows,
+    '',
+    '## 4. 用户操作与系统响应流程',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '    U["用户操作"] --> API["接口接收"] --> S["业务方法处理"] --> D["读取或写入数据"] --> R["返回用户结果"]',
+    '```',
+    '',
+    '## 5. 业务规则、异常与用户反馈',
+    '',
+    '| 场景 | 用户看到的规则或反馈 | 系统处理边界 |',
+    '| --- | --- | --- |',
+    '| 正常提交 | 返回业务编号和当前状态 | 具体校验、事务和异常映射在二级能力文档中展开 |',
+    '',
+    '## 6. 跨模块协作',
+    '',
+    '跨模块协作只说明业务交接和用户结果，不复制二级能力内部调用细节。',
+    '',
+    '## 7. 二级能力导航',
+    '',
+    '| 二级能力 | 业务职责 | 详细设计 |',
+    '| --- | --- | --- |',
+    ...navigationRows,
+    '',
+    '## 8. 验收、证据与缺口',
+    '',
+    '每个模块均可从用户操作追溯到接口、Controller、Service、数据影响和二级能力详细设计。',
     '',
   ].join('\n');
 }
