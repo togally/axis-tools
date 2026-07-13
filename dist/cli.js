@@ -159,7 +159,9 @@ function parseSimpleYaml(text) {
             if (rawValue.trim()) {
                 object[key] = parseScalar(rawValue);
             }
-            else if (index < lines.length && lines[index].indent > indent) {
+            else if (index < lines.length
+                && (lines[index].indent > indent
+                    || (lines[index].indent === indent && lines[index].content.startsWith('- ')))) {
                 object[key] = parseBlock(lines[index].indent);
             }
             else {
@@ -716,6 +718,157 @@ function projectKnowledgeSourceRoot(repo, config) {
     }
     return path.join(repo, '.axis', 'docs', 'orgs', config.organization.id, 'projects', config.project.slug);
 }
+function secondaryDesignStatus(body, key, allowed, capabilityId, secondaryId) {
+    const match = new RegExp(`\\b${key}\\s*=\\s*(${allowed.join('|')})\\b`).exec(body);
+    if (!match) {
+        throw new Error(`project knowledge secondary capability detailed design missing ${key}: ${capabilityId}/${secondaryId}`);
+    }
+    return match[1];
+}
+function exactCodeAnchors(body) {
+    return [...body.matchAll(/(?:[A-Za-z0-9_.@+\-]+\/)+[A-Za-z0-9_.$@+\-]+\.[A-Za-z0-9]+:\d+-\d+#[A-Za-z_$][A-Za-z0-9_$<>.\-]*/g)].map((match) => match[0]);
+}
+function projectKnowledgeSection(body, heading) {
+    const match = heading.exec(body);
+    if (!match || match.index === undefined)
+        return null;
+    const sectionStart = match.index + match[0].length;
+    const nextHeading = /^##\s+/m.exec(body.slice(sectionStart));
+    return body.slice(sectionStart, nextHeading ? sectionStart + nextHeading.index : body.length);
+}
+function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId) {
+    const scope = `${capabilityId}/${secondaryId}`;
+    const interfaceStatus = secondaryDesignStatus(body, 'interface_design_status', ['detailed', 'not_applicable'], capabilityId, secondaryId);
+    const interfaceCoverage = secondaryDesignStatus(body, 'interface_coverage', ['complete', 'partial', 'not_applicable'], capabilityId, secondaryId);
+    const persistenceStatus = secondaryDesignStatus(body, 'persistence_design_status', ['detailed', 'not_applicable'], capabilityId, secondaryId);
+    const relationshipStatus = secondaryDesignStatus(body, 'relationship_model_status', ['relational', 'single_table', 'not_applicable'], capabilityId, secondaryId);
+    if (interfaceStatus === 'not_applicable') {
+        if (interfaceCoverage !== 'not_applicable'
+            || !/\binterface_not_applicable_reason\s*=\s*[^`\n|·]+/.test(body)
+            || !/\binterface_not_applicable_evidence\s*=\s*(?:`)?(?:[A-Za-z0-9_.@+\-]+\/)+[A-Za-z0-9_.$@+\-]+\.[A-Za-z0-9]+:\d+-\d+#[A-Za-z_$][A-Za-z0-9_$<>.\-]*/.test(body)) {
+            throw new Error(`project knowledge secondary capability interface not_applicable requires reason and evidence: ${scope}`);
+        }
+    }
+    else {
+        if (interfaceCoverage === 'not_applicable') {
+            throw new Error(`project knowledge secondary capability interface coverage conflicts with detailed status: ${scope}`);
+        }
+        const interfaceSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+接口详细设计\s*$/m);
+        if (!interfaceSection) {
+            throw new Error(`project knowledge secondary capability detailed design missing interface detail section: ${scope}`);
+        }
+        if (/现有入口集合|对应应用服务|以\s*DTO\/BO\s*校验为准|以统一响应和领域异常为准/.test(interfaceSection)) {
+            throw new Error(`project knowledge secondary capability detailed design uses generic interface placeholder: ${scope}`);
+        }
+        if (!/(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceSection)) {
+            throw new Error(`project knowledge secondary capability interface design missing concrete contract: ${scope}`);
+        }
+        for (const requiredHeading of ['请求字段', '响应字段', '错误码与异常映射']) {
+            if (!new RegExp(`^###\\s+\\d+\\.\\d+\\s+${requiredHeading}\\s*$`, 'm').test(interfaceSection)) {
+                throw new Error(`project knowledge secondary capability interface design missing ${requiredHeading}: ${scope}`);
+            }
+        }
+        const interfaceAnchors = exactCodeAnchors(interfaceSection);
+        if (interfaceAnchors.length < 4 && !/目标设计/.test(interfaceSection)) {
+            throw new Error(`project knowledge secondary capability interface design missing exact code anchors: ${scope}`);
+        }
+        if (interfaceCoverage === 'partial' && !/(?:interface_gap_id\s*=|missing_evidence|缺失证据)/.test(body)) {
+            throw new Error(`project knowledge secondary capability partial interface coverage requires an explicit gap: ${scope}`);
+        }
+    }
+    if (persistenceStatus === 'not_applicable') {
+        if (relationshipStatus !== 'not_applicable'
+            || !/\bpersistence_not_applicable_reason\s*=\s*[^`\n|·]+/.test(body)
+            || !/\bpersistence_not_applicable_evidence\s*=\s*(?:`)?(?:[A-Za-z0-9_.@+\-]+\/)+[A-Za-z0-9_.$@+\-]+\.[A-Za-z0-9]+:\d+-\d+#[A-Za-z_$][A-Za-z0-9_$<>.\-]*/.test(body)) {
+            throw new Error(`project knowledge secondary capability persistence not_applicable requires reason and evidence: ${scope}`);
+        }
+        return;
+    }
+    if (relationshipStatus === 'not_applicable') {
+        throw new Error(`project knowledge secondary capability relationship model conflicts with persistence status: ${scope}`);
+    }
+    const relationshipSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+实体、表与对象关系\s*$/m);
+    const tableSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+表结构设计\s*$/m);
+    if (!relationshipSection || !tableSection) {
+        throw new Error(`project knowledge secondary capability detailed design missing persistence sections: ${scope}`);
+    }
+    const erBlock = /```mermaid\s*\r?\nerDiagram\s*\r?\n([\s\S]*?)```/.exec(relationshipSection)?.[1] ?? '';
+    if (!erBlock) {
+        throw new Error(`project knowledge secondary capability detailed design missing ER diagram: ${scope}`);
+    }
+    if (/\b(?:BUSINESS_FLOW|API|RESULT|TABLE|ENTITY_A|ENTITY_B|CONTROLLER|SERVICE)\b/i.test(erBlock)) {
+        throw new Error(`project knowledge secondary capability detailed design uses non-entity ER placeholder: ${scope}`);
+    }
+    const tableInventoryHeading = /^###\s+8\.1\s+数据表清单\s*$/m.exec(tableSection);
+    const tableInventoryRemainder = tableInventoryHeading
+        ? tableSection.slice((tableInventoryHeading.index ?? 0) + tableInventoryHeading[0].length)
+        : '';
+    const nextTableSubsection = /^###\s+8\./m.exec(tableInventoryRemainder);
+    const tableInventorySection = tableInventoryRemainder.slice(0, nextTableSubsection?.index ?? tableInventoryRemainder.length);
+    const tableNames = new Set([...tableInventorySection.matchAll(/^\|\s*`([^`]+)`\s*\|/gm)]
+        .map((match) => match[1].toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')));
+    if (tableNames.size === 0) {
+        throw new Error(`project knowledge secondary capability table inventory is empty: ${scope}`);
+    }
+    const relationships = [...erBlock.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\s+([|o}{]{2}--[|o}{]{2})\s+([A-Za-z][A-Za-z0-9_]*)\s*:\s*"([^"]+)"/gm)];
+    if (relationshipStatus === 'relational') {
+        if (relationships.length === 0) {
+            throw new Error(`project knowledge secondary capability ER diagram missing table relationship: ${scope}`);
+        }
+        for (const relationship of relationships) {
+            for (const entityName of [relationship[1], relationship[3]]) {
+                const normalized = entityName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+                if (!tableNames.has(normalized)) {
+                    throw new Error(`project knowledge secondary capability ER relationship must reference table inventory: ${scope}/${entityName}`);
+                }
+            }
+            const relationshipLabel = relationship[4];
+            if (!/[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*\s*=\s*[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*/.test(relationshipLabel)
+                || !/\b(?:physical_fk|logical_relation|external_reference)\b/.test(relationshipLabel)) {
+                throw new Error(`project knowledge secondary capability ER relationship missing join fields or relationship type: ${scope}`);
+            }
+            const sourceName = relationship[1].toLowerCase();
+            const targetName = relationship[3].toLowerCase();
+            const relationshipRow = relationshipSection
+                .split(/\r?\n/)
+                .filter((line) => /^\s*\|/.test(line))
+                .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim().replace(/`/g, '')))
+                .find((cells) => cells.length >= 8
+                && cells[0].toLowerCase() === sourceName
+                && cells[2].toLowerCase() === targetName);
+            if (!relationshipRow
+                || !/[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*\s*=\s*[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*/.test(relationshipRow[3] ?? '')
+                || !/^(?:\d+(?:\.\.(?:\d+|\*))?|[NM]):(?:\d+(?:\.\.(?:\d+|\*))?|[NM])$/i.test(relationshipRow[4] ?? '')
+                || !/^(?:physical_fk|logical_relation|external_reference)$/.test(relationshipRow[5] ?? '')
+                || (!exactCodeAnchors(relationshipRow.join(' | ')).length
+                    && !/(?:目标设计|missing_evidence|缺失证据)/.test(relationshipRow.join(' | ')))) {
+                throw new Error(`project knowledge secondary capability relationship table missing fields, cardinality, type or evidence: ${scope}`);
+            }
+        }
+    }
+    else {
+        if (tableNames.size !== 1 || relationships.length > 0) {
+            throw new Error(`project knowledge secondary capability single_table model must contain exactly one table and no relationship: ${scope}`);
+        }
+        const [tableName] = tableNames;
+        if (!new RegExp(`\\b${tableName.toUpperCase()}\\s*\\{`).test(erBlock.toUpperCase())) {
+            throw new Error(`project knowledge secondary capability single_table ER must define the inventory table: ${scope}`);
+        }
+    }
+    for (const requiredText of [
+        '关联字段/业务键',
+        '实体-表-代码映射',
+        '表定义与字段结构',
+        '索引与约束',
+        '状态与字段映射',
+        '读写路径与一致性',
+        '数据迁移、兼容与回滚',
+    ]) {
+        if (!body.includes(requiredText)) {
+            throw new Error(`project knowledge secondary capability persistence design missing ${requiredText}: ${scope}`);
+        }
+    }
+}
 async function projectKnowledgeSourceFiles(sourceRoot) {
     const inventoryPath = path.join(sourceRoot, 'business', 'inventory.yaml');
     if (!existsSync(inventoryPath)) {
@@ -799,7 +952,8 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
                 throw new Error(`project knowledge level-1 capability detailed design omits secondary_capability_id: ${capabilityId}/${secondaryId}`);
             }
             const childPath = `business/capabilities/${capabilityId}/secondary-capabilities/${secondaryId}/detailed-design.md`;
-            if (!capabilityDocumentBody.includes(childPath)) {
+            const relativeChildPath = `secondary-capabilities/${secondaryId}/detailed-design.md`;
+            if (!capabilityDocumentBody.includes(childPath) && !capabilityDocumentBody.includes(relativeChildPath)) {
                 throw new Error(`project knowledge capability overview omits secondary capability link: ${capabilityId}/${secondaryId}`);
             }
         }
@@ -820,6 +974,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             if (!secondaryIdPattern.test(body)) {
                 throw new Error(`project knowledge secondary capability detailed design has wrong identity: ${capabilityId}/${secondaryId}`);
             }
+            assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId);
             secondaryCapabilityDetailedDesigns.push({
                 source: relativePath,
                 target: `documents/${relativePath}`,

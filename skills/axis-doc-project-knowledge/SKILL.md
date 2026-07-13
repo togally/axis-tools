@@ -68,6 +68,15 @@ Scan and connect:
 
 Record repository-relative paths, symbols, supported conclusions, confidence and verification time. For a secondary detailed design, use `path:begin-end#symbol` anchors for every implemented API entrypoint, code object relation, mapper/repository, entity/table mapping and test. Names alone do not prove a capability, policy, permission, state, threshold, transaction, compensation rule or external contract.
 
+Before rendering each secondary document, resolve and record these machine-checkable states:
+
+- `interface_design_status=detailed|not_applicable` and `interface_coverage=complete|partial|not_applicable`;
+- `persistence_design_status=detailed|not_applicable` and `relationship_model_status=relational|single_table|not_applicable`.
+
+`detailed` interface design requires a concrete HTTP path, event, job or command; field-level request and response contracts; error mapping; and exact entry, service, persistence and test anchors. `partial` coverage requires a stable gap identifier. `not_applicable` requires a reason and an exact repository evidence anchor.
+
+Persisted multi-table capabilities require a real ER relationship whose endpoints match the table inventory. Each edge records both join fields, cardinality, ownership, evidence and one of `physical_fk`, `logical_relation` or `external_reference`. A single-table capability still renders its real entity block. Never use `BUSINESS_FLOW`, `API`, `RESULT`, `TABLE`, `ENTITY_A` or `ENTITY_B` as database entities. `not_applicable` persistence requires a reason and exact evidence; “no schema change in this revision” does not make the current table design optional.
+
 ## bootstrap
 
 1. Establish source baseline and language.
@@ -144,8 +153,8 @@ Verify:
 - unique first-level capability count equals overview document count;
 - inventory secondary-capability count equals `secondary_capability_detailed_design` document count;
 - every inventory `secondary_capabilities` item appears exactly once in its level-1 completeness matrix and links to its canonical child document;
-- every secondary document has a business-flow diagram, interface-to-code trace, code-object relation map, entity/table relationship model and flow-to-test traceability matrix; every implemented hop is a repository-relative `path:begin-end#symbol` anchor or an explicit missing-evidence record;
-- every persistence-impacting secondary document includes table inventory, entity-to-table/code mapping, field structure, indexes and constraints, relationships and ownership, state mapping, read/write consistency, and migration/rollback evidence, or explicitly records that no table structure changes are required;
+- every secondary document has resolved `interface_design_status`, `interface_coverage`, `persistence_design_status` and `relationship_model_status` values, a business-flow diagram, field-level interface design, interface-to-code trace, code-object relation map, entity/table relationship model and flow-to-test traceability matrix; every implemented hop is a repository-relative `path:begin-end#symbol` anchor or an explicit missing-evidence record;
+- every persistence-impacting secondary document includes table inventory, entity-to-table/code mapping, field structure, indexes and constraints, real relationships with join fields and `physical_fk` / `logical_relation` / `external_reference` classification, ownership, state mapping, read/write consistency, and migration/rollback evidence; an evidence-backed single-table or not-applicable model is the only exception;
 - business architecture links to every level-1 overview; every overview returns to business architecture and links to adjacent overviews; every secondary document returns to its overview and links to adjacent secondary documents;
 - every `business_id` maps to exactly one secondary capability unless an explicit reviewed exception is recorded;
 - metadata, inventory refs, document revisions and gap report agree;

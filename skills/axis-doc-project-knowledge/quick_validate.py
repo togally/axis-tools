@@ -35,6 +35,12 @@ REQUIRED_TERMS = {
         "business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md",
         "doc_gap_report",
         "missing_evidence",
+        "interface_design_status",
+        "interface_coverage",
+        "persistence_design_status",
+        "relationship_model_status",
+        "physical_fk",
+        "logical_relation",
         "After Use Deposition",
     ],
 }

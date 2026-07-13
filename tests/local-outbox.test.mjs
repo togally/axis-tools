@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { validSecondaryDetailedDesign } from './helpers/project-knowledge-fixtures.mjs';
 
 const execFileAsync = promisify(execFile);
 const cli = path.resolve('dist/cli.js');
@@ -58,9 +59,18 @@ async function initializeProject(repo, extraArgs = []) {
   for (const decision of decisions) {
     if (decision.key === 'organization.id') decision.value = 'org_axis_tools';
     if (decision.key === 'oss_profile.name') decision.value = 'private_beta_main';
+    if (decision.key === 'oss_profile.bucket') decision.value = 'axis-v02-private-beta-example';
+    if (decision.key === 'oss_profile.prefix') decision.value = 'axis/v0.2';
     if (decision.key === 'project.slug') decision.value = 'demo-project';
     if (decision.key === 'project.display_name') decision.value = 'Demo Project';
-    if (decision.key === 'organization.id' || decision.key === 'oss_profile.name' || decision.key === 'project.slug' || decision.key === 'project.display_name') {
+    if (
+      decision.key === 'organization.id'
+      || decision.key === 'oss_profile.name'
+      || decision.key === 'oss_profile.bucket'
+      || decision.key === 'oss_profile.prefix'
+      || decision.key === 'project.slug'
+      || decision.key === 'project.display_name'
+    ) {
       decision.decision = 'change';
     }
   }
@@ -298,12 +308,12 @@ async function writeProjectKnowledgeDocs(repo) {
   );
   await writeFile(
     path.join(root, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'sales', 'detailed-design.md'),
-    '# 销售交易详细设计\n\n`secondary_capability_id`: `sales`\n',
+    validSecondaryDetailedDesign('sales'),
     'utf8',
   );
   await writeFile(
     path.join(root, 'business', 'capabilities', 'commerce', 'secondary-capabilities', 'support', 'detailed-design.md'),
-    '# 客户支持详细设计\n\n`secondary_capability_id`: `support`\n',
+    validSecondaryDetailedDesign('support'),
     'utf8',
   );
   await writeFile(
