@@ -57,6 +57,16 @@ Prefer implementation anchors over speculative class or method names. For implem
 
 For every material secondary flow, include a readable flow diagram and one end-to-end row linking: `level1_journey_id` → business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing internal hop as `missing_evidence`; do not infer it. A missing secondary hop does not weaken the level-1 rule that both Controller/Handler and Service/UseCase anchors must be concrete before a journey is listed there.
 
+Within Section 5, organize contracts by interface rather than by field type. Each HTTP interface, EVENT/TOPIC, JOB or COMMAND is a direct `### 5.N` group and owns exactly these same-prefix subsections:
+
+1. `#### 5.N.1 接口清单与代码追溯`: a compact `项目 / 内容` table for `level1_journey_id`, `api_id`, contract type, complete path/topic/entry, purpose, caller, models and status, followed by an `实现层 / 精确定位 / 职责` table for Controller/entry, Service/use case, Mapper/Repository, entity/table and test;
+2. `#### 5.N.2 请求字段`;
+3. `#### 5.N.3 响应字段`;
+4. `#### 5.N.4 错误码与异常映射`;
+5. `#### 5.N.5 认证、授权、幂等与事务`.
+
+The numeric prefix follows its parent: a `### 5.2` contract uses `5.2.1` through `5.2.5`. Never replace these groups with one horizontal interface inventory and global request, response or error sections. For EVENT/TOPIC, request means envelope/key/payload and response means acknowledgement, result event or evidence-backed one-way semantics. For JOB/COMMAND, request means execution context/parameters and response means execution result/status. A contract with no field or direct response records an explicit `not_applicable` row with reason and exact evidence; it does not leave the subsection empty.
+
 ## Interface and Persistence Applicability Gate
 
 Every secondary-capability detailed design records four machine-checkable states before expansion:
@@ -66,7 +76,7 @@ Every secondary-capability detailed design records four machine-checkable states
 - `persistence_design_status=detailed|not_applicable`;
 - `relationship_model_status=relational|single_table|not_applicable`.
 
-For `interface_design_status=detailed`, interface design is mandatory and includes a concrete HTTP path, event, job or command; 请求字段; 响应字段; 错误码与异常映射; authorization, idempotency and transaction behavior; and exact entry-to-test anchors. `interface_coverage=partial` requires a stable gap ID. Use `not_applicable` only with a reason and exact repository evidence.
+For `interface_design_status=detailed`, interface design is mandatory and includes a concrete HTTP path, event/topic, job or command; per-contract 请求字段; 响应字段; 错误码与异常映射; authorization, idempotency and transaction behavior; and exact entry-to-test anchors. `interface_coverage=partial` requires a stable gap ID. Use interface-level `not_applicable` only with a reason and exact repository evidence; use field-row `not_applicable` when a real contract has no request field, direct response or applicable control in one dimension.
 
 For `persistence_design_status=detailed`, a relationship model is mandatory. Multi-table designs render real inventory table names and join fields and classify each edge as `physical_fk`, `logical_relation` or `external_reference`. Single-table designs render the real table entity even without an edge. 禁止使用 `BUSINESS_FLOW`、`API`、`RESULT`、`TABLE`、`ENTITY_A` 或 `ENTITY_B` 作为 ER 实体。No-schema-change in the current revision does not remove the obligation to describe the current persisted model. Use persistence `not_applicable` only with a reason and exact repository evidence.
 
