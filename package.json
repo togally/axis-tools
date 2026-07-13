@@ -10,11 +10,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "node --loader ts-node/esm src/cli.ts",
-    "test": "npm run test:cli && npm run test:install-script && npm run test:protocol-migrations && npm run test:project-init && npm run test:project-init-transaction && npm run test:local-outbox && npm run test:doc-dashbord-skill && npm run test:skill-deposit && npm run test:axis-skills && npm run test:public-governance",
+    "test": "npm run test:cli && npm run test:install-script && npm run test:protocol-migrations && npm run test:project-init && npm run test:project-init-transaction && npm run test:local-outbox && npm run test:doc-dashbord-skill && npm run test:doc-development-consolidation && npm run test:skill-deposit && npm run test:axis-skills && npm run test:public-governance",
     "test:cli": "npm run build && node tests/cli-install.test.mjs",
     "test:install-script": "node tests/install-script.test.mjs",
     "test:local-outbox": "npm run build && node tests/local-outbox.test.mjs",
     "test:doc-dashbord-skill": "node tests/doc-dashbord-skill.test.mjs",
+    "test:doc-development-consolidation": "npm run build && node tests/doc-development-consolidation.test.mjs",
     "test:protocol-migrations": "npm run build && node tests/protocol-migrations.test.mjs",
     "test:project-init": "npm run build && node tests/project-init-v02.test.mjs",
     "test:project-init-transaction": "npm run build && node tests/project-init-transaction.test.mjs",

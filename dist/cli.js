@@ -18,7 +18,7 @@ const skillNames = {
     projectInit: 'axis-doc-project-init',
     codingCapture: 'axis-code-capture',
     testReport: 'axis-test-report',
-    projectKnowledgeBootstrap: 'axis-doc-project-knowledge-bootstrap',
+    projectKnowledge: 'axis-doc-project-knowledge',
     ossPublish: 'axis-ops-oss-publish',
 };
 const protocolVersions = {
@@ -721,33 +721,117 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     if (!existsSync(inventoryPath)) {
         throw new Error('project knowledge document missing: business/inventory.yaml');
     }
-    const inventory = await readFile(inventoryPath, 'utf8');
-    const businessIds = [...inventory.matchAll(/\bbusiness_id:\s*([a-z][a-z0-9_]*)\b/g)]
-        .map((match) => match[1])
-        .filter((businessId) => businessId !== 'null');
-    const uniqueBusinessIds = [...new Set(businessIds)];
-    if (uniqueBusinessIds.length === 0) {
-        throw new Error('project knowledge inventory must contain at least one business_id');
+    const inventory = parseSimpleYaml(await readFile(inventoryPath, 'utf8'));
+    const level1Capabilities = Array.isArray(inventory.level1_capabilities)
+        ? inventory.level1_capabilities
+        : [];
+    if (level1Capabilities.length === 0) {
+        throw new Error('project knowledge inventory must contain at least one level1_capability_id');
     }
-    if (uniqueBusinessIds.length !== businessIds.length) {
-        throw new Error('project knowledge inventory contains duplicate business_id values');
+    const capabilityIdPattern = /^[a-z][a-z0-9_]*$/;
+    const level1CapabilityIds = level1Capabilities.map((capability) => capability.level1_capability_id ?? '');
+    if (level1CapabilityIds.some((capabilityId) => !capabilityIdPattern.test(capabilityId))) {
+        throw new Error('project knowledge inventory contains an invalid level1_capability_id');
     }
-    const domainDetailedDesigns = uniqueBusinessIds.map((businessId) => ({
-        source: `business/domains/${businessId}/detailed-design.md`,
-        target: `documents/business/domains/${businessId}/detailed-design.md`,
-        docType: 'business_domain_detailed_design',
-        docId: `business_domain_detailed_design_${businessId}`,
+    if (new Set(level1CapabilityIds).size !== level1CapabilityIds.length) {
+        throw new Error('project knowledge inventory contains duplicate level1_capability_id values');
+    }
+    const businessArchitecturePath = path.join(sourceRoot, 'architecture', 'business.md');
+    if (!existsSync(businessArchitecturePath)) {
+        throw new Error('project knowledge document missing: architecture/business.md');
+    }
+    const businessArchitectureBody = await readFile(businessArchitecturePath, 'utf8');
+    for (const capabilityId of level1CapabilityIds) {
+        const overviewPath = `business/capabilities/${capabilityId}/detailed-design.md`;
+        if (!businessArchitectureBody.includes(overviewPath)) {
+            throw new Error(`project knowledge business architecture omits capability overview link: ${capabilityId}`);
+        }
+    }
+    const assignedBusinessIds = new Set();
+    for (const capability of level1Capabilities) {
+        const capabilityId = capability.level1_capability_id;
+        const secondaryCapabilities = Array.isArray(capability.secondary_capabilities)
+            ? capability.secondary_capabilities
+            : [];
+        if (secondaryCapabilities.length === 0) {
+            throw new Error(`project knowledge level-1 capability has no secondary capabilities: ${capabilityId}`);
+        }
+        const secondaryIds = secondaryCapabilities.map((secondary) => secondary.secondary_capability_id ?? '');
+        if (secondaryIds.some((secondaryId) => !capabilityIdPattern.test(secondaryId))) {
+            throw new Error(`project knowledge inventory contains an invalid secondary_capability_id: ${capabilityId}`);
+        }
+        if (new Set(secondaryIds).size !== secondaryIds.length) {
+            throw new Error(`project knowledge inventory contains duplicate secondary_capability_id values: ${capabilityId}`);
+        }
+        for (const secondary of secondaryCapabilities) {
+            const businessIds = Array.isArray(secondary.business_ids) ? secondary.business_ids : [];
+            if (businessIds.length === 0 || businessIds.some((businessId) => !capabilityIdPattern.test(businessId))) {
+                throw new Error(`project knowledge secondary capability must contain valid business_ids: ${capabilityId}/${secondary.secondary_capability_id}`);
+            }
+            for (const businessId of businessIds) {
+                if (assignedBusinessIds.has(businessId)) {
+                    throw new Error(`project knowledge business_id is assigned to multiple secondary capabilities: ${businessId}`);
+                }
+                assignedBusinessIds.add(businessId);
+            }
+        }
+    }
+    const capabilityDetailedDesigns = level1CapabilityIds.map((capabilityId) => ({
+        source: `business/capabilities/${capabilityId}/detailed-design.md`,
+        target: `documents/business/capabilities/${capabilityId}/detailed-design.md`,
+        docType: 'business_capability_detailed_design',
+        docId: `business_capability_detailed_design_${capabilityId}`,
         mediaType: 'text/markdown',
     }));
-    for (const domainDocument of domainDetailedDesigns) {
-        if (!existsSync(path.join(sourceRoot, domainDocument.source))) {
-            const businessId = domainDocument.docId.replace('business_domain_detailed_design_', '');
-            throw new Error(`project knowledge domain detailed design missing: ${businessId}`);
+    for (const capability of level1Capabilities) {
+        const capabilityId = capability.level1_capability_id;
+        const capabilityDocument = capabilityDetailedDesigns.find((document) => document.docId === `business_capability_detailed_design_${capabilityId}`);
+        const capabilityDocumentPath = path.join(sourceRoot, capabilityDocument.source);
+        if (!existsSync(capabilityDocumentPath)) {
+            throw new Error(`project knowledge level-1 capability detailed design missing: ${capabilityId}`);
+        }
+        const capabilityDocumentBody = await readFile(capabilityDocumentPath, 'utf8');
+        for (const secondary of capability.secondary_capabilities) {
+            const secondaryId = secondary.secondary_capability_id;
+            const escapedSecondaryId = secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const secondaryIdPattern = new RegExp(`(^|[^a-z0-9_])${escapedSecondaryId}([^a-z0-9_]|$)`);
+            if (!secondaryIdPattern.test(capabilityDocumentBody)) {
+                throw new Error(`project knowledge level-1 capability detailed design omits secondary_capability_id: ${capabilityId}/${secondaryId}`);
+            }
+            const childPath = `business/capabilities/${capabilityId}/secondary-capabilities/${secondaryId}/detailed-design.md`;
+            if (!capabilityDocumentBody.includes(childPath)) {
+                throw new Error(`project knowledge capability overview omits secondary capability link: ${capabilityId}/${secondaryId}`);
+            }
+        }
+    }
+    const secondaryCapabilityDetailedDesigns = [];
+    for (const capability of level1Capabilities) {
+        const capabilityId = capability.level1_capability_id;
+        for (const secondary of capability.secondary_capabilities) {
+            const secondaryId = secondary.secondary_capability_id;
+            const relativePath = `business/capabilities/${capabilityId}/secondary-capabilities/${secondaryId}/detailed-design.md`;
+            const absolutePath = path.join(sourceRoot, relativePath);
+            if (!existsSync(absolutePath)) {
+                throw new Error(`project knowledge secondary capability detailed design missing: ${capabilityId}/${secondaryId}`);
+            }
+            const body = await readFile(absolutePath, 'utf8');
+            const escapedSecondaryId = secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const secondaryIdPattern = new RegExp(`(^|[^a-z0-9_])${escapedSecondaryId}([^a-z0-9_]|$)`);
+            if (!secondaryIdPattern.test(body)) {
+                throw new Error(`project knowledge secondary capability detailed design has wrong identity: ${capabilityId}/${secondaryId}`);
+            }
+            secondaryCapabilityDetailedDesigns.push({
+                source: relativePath,
+                target: `documents/${relativePath}`,
+                docType: 'secondary_capability_detailed_design',
+                docId: `secondary_capability_detailed_design_${capabilityId}_${secondaryId}`,
+                mediaType: 'text/markdown',
+            });
         }
     }
     const requirementDetailedDesigns = [];
-    for (const businessId of uniqueBusinessIds) {
-        const requirementsRoot = path.join(sourceRoot, 'business', 'domains', businessId, 'requirements');
+    for (const capabilityId of level1CapabilityIds) {
+        const requirementsRoot = path.join(sourceRoot, 'business', 'capabilities', capabilityId, 'requirements');
         if (!existsSync(requirementsRoot))
             continue;
         const requirementDirectories = (await readdir(requirementsRoot, { withFileTypes: true }))
@@ -756,17 +840,17 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
         for (const requirementDirectory of requirementDirectories) {
             const requirementId = requirementDirectory.name;
             if (!/^[a-z0-9][a-z0-9-]*$/.test(requirementId)) {
-                throw new Error(`project knowledge requirement_id is invalid: ${businessId}/${requirementId}`);
+                throw new Error(`project knowledge requirement_id is invalid: ${capabilityId}/${requirementId}`);
             }
-            const relativePath = `business/domains/${businessId}/requirements/${requirementId}/detailed-design.md`;
+            const relativePath = `business/capabilities/${capabilityId}/requirements/${requirementId}/detailed-design.md`;
             if (!existsSync(path.join(sourceRoot, relativePath))) {
-                throw new Error(`project knowledge requirement detailed design missing: ${businessId}/${requirementId}`);
+                throw new Error(`project knowledge requirement detailed design missing: ${capabilityId}/${requirementId}`);
             }
             requirementDetailedDesigns.push({
                 source: relativePath,
                 target: `documents/${relativePath}`,
                 docType: 'requirement_detailed_design',
-                docId: `requirement_detailed_design_${businessId}_${requirementId}`,
+                docId: `requirement_detailed_design_${capabilityId}_${requirementId}`,
                 mediaType: 'text/markdown',
             });
         }
@@ -796,7 +880,8 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             docType: 'business_inventory',
             mediaType: 'application/yaml',
         },
-        ...domainDetailedDesigns,
+        ...capabilityDetailedDesigns,
+        ...secondaryCapabilityDetailedDesigns,
         ...requirementDetailedDesigns,
         {
             source: 'gaps/doc-gap-report.md',
@@ -892,7 +977,7 @@ async function projectKnowledgeCaptureCommand() {
             finished_at: createdAt,
         },
         skill: {
-            name: skillNames.projectKnowledgeBootstrap,
+            name: skillNames.projectKnowledge,
             responsibility: 'Package the reviewed project knowledge source documents for explicit OSS publishing.',
         },
         public_safety: {
@@ -922,7 +1007,7 @@ async function projectKnowledgeCaptureCommand() {
         organization,
         project,
         oss_profile: ossProfile,
-        producer: { skill: skillNames.projectKnowledgeBootstrap, agent: 'codex' },
+        producer: { skill: skillNames.projectKnowledge, agent: 'codex' },
         run: { run_id: runId, git },
         release: config.release,
         files: [
@@ -946,7 +1031,7 @@ async function projectKnowledgeCaptureCommand() {
         protocols: protocolVersions,
         document_refs: documentRefs,
         skill_refs: [{
-                skill_id: skillNames.projectKnowledgeBootstrap,
+                skill_id: skillNames.projectKnowledge,
                 canonical_family: 'project_knowledge',
                 status: 'active',
             }],

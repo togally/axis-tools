@@ -39,16 +39,6 @@
       ]
     },
     {
-      "name": "axis-doc-business-domain",
-      "description": "Use when reconciling existing detailed designs into one business-domain design and business architecture, or designing a requirement under one business_id and summarizing its architecture impact. / 用于扫描梳理已有详细设计并补充业务域详细设计与业务架构，或按需求生成所属业务域的需求详细设计并汇总业务架构影响。",
-      "path": "skills/axis-doc-business-domain",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "quick_validate.py"
-      ]
-    },
-    {
       "name": "axis-doc-dashbord",
       "description": "Use when a user wants to start and open the local Axis document dashboard, and the standalone application may need to be pulled or scaffolded first. / 用于启动并打开本地 Axis 文档看板；当独立应用不存在时，先让用户选择拉取公开仓库或使用内置模板本地自建。",
       "path": "skills/axis-doc-dashbord",
@@ -60,21 +50,18 @@
       ]
     },
     {
-      "name": "axis-doc-db-design",
-      "description": "Use when the user asks for a database design document, data dictionary, schema design, ER/table documentation, or a Word DBDD. / 用于生成数据库设计文档、数据字典、Schema 设计、ER 表结构文档或 Word 版 DBDD。",
-      "path": "skills/axis-doc-db-design",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
-      ]
-    },
-    {
       "name": "axis-doc-development",
-      "description": "Use when the user asks to create one or more development documents such as 概要设计, 详细设计, database design, API docs, test plans, deployment docs, or Word/DOCX outputs from a prompt or repo evidence. / 用于根据提示词或仓库证据生成一个或多个开发文档，包括概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。",
+      "description": "Use when a user needs to export, create, correct, or iterate development documents for an existing or planned feature, including discovery, master-draft expansion, design impact updates, and traceable archival. / 用于为已有或规划功能输出、生成、修正或迭代开发文档，并完成需求问询、原始稿扩写、设计影响更新与可追溯归档。",
       "path": "skills/axis-doc-development",
       "files": [
         "SKILL.md",
-        "agents/openai.yaml"
+        "agents/openai.yaml",
+        "references/discovery-and-master-draft.md",
+        "references/document-archive-contract.md",
+        "references/feature-detailed-design-template.md",
+        "references/feature-resolution-and-lifecycle.md",
+        "references/technical-and-database-design.md",
+        "scripts/archive_document.py"
       ]
     },
     {
@@ -88,16 +75,6 @@
       ]
     },
     {
-      "name": "axis-doc-feature-detailed-design",
-      "description": "Use when the user asks for a detailed design of one specific feature and the feature must first be resolved from repository evidence without guessing. / 用于为某个单独功能生成详细设计；必须先从仓库证据定位功能，找不到或存在歧义时停止生成并向用户确认。",
-      "path": "skills/axis-doc-feature-detailed-design",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml",
-        "references/feature-detailed-design-template.md"
-      ]
-    },
-    {
       "name": "axis-doc-project-init",
       "description": "Use when a repository needs conversational Axis v0.2 project configuration, migration from an older contract, or one consolidated confirmation of organization, project, OSS profile, release, directory, language, and environment-name settings. / 用于通过一次汇总确认配置 Axis v0.2 项目、迁移旧协议，并统一确认组织、项目、OSS、发布、目录、语言及环境变量名称。",
       "path": "skills/axis-doc-project-init",
@@ -107,24 +84,17 @@
       ]
     },
     {
-      "name": "axis-doc-project-knowledge-bootstrap",
-      "description": "Use when a repository needs its first Axis v0.2 project knowledge set with global technical architecture, global business architecture, one detailed design per business domain, business inventory, and document gap report. / 用于为存量项目首次生成 Axis v0.2 项目知识文档集，包括全局技术架构、全局业务架构、每个业务域一份详细设计、业务清单和文档缺口报告。",
-      "path": "skills/axis-doc-project-knowledge-bootstrap",
+      "name": "axis-doc-project-knowledge",
+      "description": "Use when a repository needs its first Axis v0.2 project knowledge set or existing global, capability-overview, secondary-design, inventory, navigation, and gap documents must be reconciled after requirements or implementation changes. / 用于首次生成 Axis v0.2 项目知识集，或在需求与实现变化后梳理更新全局架构、能力总览、二级详细设计、业务清单、导航和文档缺口。",
+      "path": "skills/axis-doc-project-knowledge",
       "files": [
         "SKILL.md",
         "agents/openai.yaml",
-        "references/business-domain-detailed-design-template.md",
+        "quick_validate.py",
+        "references/business-capability-detailed-design-template.md",
         "references/project-business-architecture-template.md",
-        "references/project-technical-architecture-template.md"
-      ]
-    },
-    {
-      "name": "axis-doc-tech-design",
-      "description": "Use when the user asks to write, refine, or finalize a technical design document or solution design for retention. / 用于撰写、优化或定稿可留档的技术设计文档和方案设计，尤其适合区分业务设计与技术设计。",
-      "path": "skills/axis-doc-tech-design",
-      "files": [
-        "SKILL.md",
-        "agents/openai.yaml"
+        "references/project-technical-architecture-template.md",
+        "references/secondary-capability-detailed-design-template.md"
       ]
     },
     {

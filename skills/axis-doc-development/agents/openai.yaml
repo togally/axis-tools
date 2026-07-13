@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-doc-development"
-  short_description: "Generate development document sets / 生成开发文档集"
-  default_prompt: "Use $axis-doc-development to generate one or more development documents from my prompt."
+  short_description: "Create and evolve traceable development docs / 创建并演进可追溯开发文档"
+  default_prompt: "Use $axis-doc-development to resolve my feature, create or revise its master draft and document set, update affected project knowledge, and archive every document before modification."
 
 policy:
   allow_implicit_invocation: true

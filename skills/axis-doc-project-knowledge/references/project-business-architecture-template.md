@@ -25,9 +25,11 @@
 
 提供分层业务能力地图，区分核心能力、支撑能力和治理能力。能力是稳定的“能做什么”，不要用页面、接口或技术模块名称代替业务能力。
 
-| 一级能力 | 二级能力 | 类型 | 说明 | 对应 business_id | 证据/置信度 |
-| --- | --- | --- | --- | --- | --- |
-| {level_1_capability} | {level_2_capability} | 核心 | {description} | {business_id} | {evidence_ref} |
+| level1_capability_id | 一级能力 | secondary_capability_id | 二级能力 | 类型 | 说明 | 对应 business_id | 能力总览 | 证据/置信度 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{level1_capability_id}` | {level1_capability_name} | `{secondary_capability_id}` | {secondary_capability_name} | 核心 | {description} | `{business_id}` | [打开](business/capabilities/{level1_capability_id}/detailed-design.md) | {evidence_ref} |
+
+相同一级能力的所有行必须使用同一个 `level1_capability_id`。项目知识为该 ID 生成一份总览，并为每个二级能力生成独立详细设计；Dashboard 支持从本业务架构跳转能力总览，再进入二级能力设计。
 
 ## 5. 价值流
 
@@ -51,11 +53,11 @@
 
 分别说明关键业务规则、状态机、角色权限、数据归属和租户边界。命名证据不足时标记低置信度，不根据字段名编造业务规则。
 
-## 9. 业务域与系统支撑关系
+## 9. 一级/二级能力与系统支撑关系
 
-| 业务能力 | 业务域 | 支撑系统/容器 | 主要接口 | 数据对象 | 文档状态 |
+| 一级能力 | 二级能力 | business_id | 支撑系统/容器 | 主要接口 | 数据对象 | 文档状态 |
 | --- | --- | --- | --- | --- | --- |
-| {capability} | {business_domain} | {system_or_container} | {interface} | {business_object} | review |
+| {level1_capability_name} | {secondary_capability_name} | `{business_id}` | {system_or_container} | {interface} | {business_object} | review |
 
 ## 10. 外部参与方与业务协作
 
@@ -69,7 +71,15 @@
 
 ## 12. 业务清单导航
 
-引用 `business/inventory.yaml`，说明后续使用 `axis-doc-business-domain` 生成哪些领域文档；不要在正文中复制完整 YAML 清单。
+引用 `business/inventory.yaml`，说明由 `axis-doc-project-knowledge` 维护哪些一级能力文档及其二级能力完整性；不要在正文中复制完整 YAML 清单。
+
+### 12.1 详细设计导航
+
+| 顺序 | 能力 | `level1_capability_id` | 二级能力数量 | 详细设计总览 |
+| --- | --- | --- | --- | --- |
+| 1 | {level1_capability_name} | `{level1_capability_id}` | {secondary_capability_count} | [进入](business/capabilities/{level1_capability_id}/detailed-design.md) |
+
+Dashboard 按稳定的能力标识顺序提供上一个能力和下一个能力；能力总览提供返回业务架构入口。
 
 ## 13. 证据索引
 

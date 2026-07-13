@@ -12,11 +12,15 @@ status: review
 doc_status: needs_review
 organization_id: "{organization_id}"
 project_slug: "{project_slug}"
-business_id: "{business_id}"
+level1_capability_id: "{level1_capability_id}"
+secondary_capability_ids:
+  - "{secondary_capability_id}"
+business_ids:
+  - "{business_id}"
 feature_id: "{feature_id}"
 revision: 1
 source_commit: "{source_commit}"
-generated_by_skill: axis-doc-feature-detailed-design
+generated_by_skill: axis-doc-development
 
 ---
 
@@ -28,7 +32,9 @@ generated_by_skill: axis-doc-feature-detailed-design
 
 ### 1.2 适用范围
 
-- 所属业务域：`{business_id}`
+- 所属一级能力：`{level1_capability_id}`
+- 涉及二级能力：`{secondary_capability_ids}`
+- 对应 business_id：`{business_ids}`
 - 功能标识：`{feature_id}`
 - 纳入范围：`{included_scope}`
 - 排除范围：`{excluded_scope}`
@@ -54,7 +60,9 @@ generated_by_skill: axis-doc-feature-detailed-design
 | --- | --- |
 | 功能名称 | `{feature_name}` |
 | feature_id | `{feature_id}` |
-| business_id | `{business_id}` |
+| level1_capability_id | `{level1_capability_id}` |
+| secondary_capability_ids | `{secondary_capability_ids}` |
+| business_ids | `{business_ids}` |
 | 用户入口 | `{user_entry}` |
 | 技术入口 | `{technical_entry}` |
 

@@ -1,214 +1,205 @@
 ---
 name: axis-doc-development
-description: Use when the user asks to create one or more development documents such as 概要设计, 详细设计, database design, API docs, test plans, deployment docs, or Word/DOCX outputs from a prompt or repo evidence. / 用于根据提示词或仓库证据生成一个或多个开发文档，包括概要设计、详细设计、数据库设计、接口文档、测试方案、部署文档或 Word 文档。
+description: Use when a user needs to export, create, correct, or iterate development documents for an existing or planned feature, including discovery, master-draft expansion, design impact updates, and traceable archival. / 用于为已有或规划功能输出、生成、修正或迭代开发文档，并完成需求问询、原始稿扩写、设计影响更新与可追溯归档。
 ---
 
-# Development Document Creation
+# Unified Development Documentation
 
-Use this skill to generate one or more development documents from a user prompt, repository evidence, pasted requirements, schemas, APIs, or previous discussion. It acts as the document-set router for development work, while specialized skills such as `$axis-doc-tech-design` and `$axis-doc-db-design` remain the preferred deep workflows for technical design and database design documents.
+Use this skill as the single front door for feature and development-document work. It owns feature resolution, discovery for code-changing work, `master_draft` creation, document-set expansion, technical and database design depth, affected project-knowledge updates, and pre-change archival.
 
-Keep this skill public-repo safe. Do not embed private repository names, hostnames, table names, credentials, customer names, or project-specific facts in this reusable workflow. Put task-specific facts only in the generated documents for that task.
+Do not use retired top-level document generators. Their durable rules now live in this bundle's `references/` directory. Keep project facts in generated documents, never in this reusable public skill.
 
-## When to Use
+## Four Operating Modes
 
-- The user asks to create `开发文档`, `概要设计`, `详细设计`, `需求规格`, `接口文档`, `数据库设计`, `测试方案`, `部署方案`, `运维手册`, `验收文档`, or a mix of those documents.
-- The user gives a prompt and expects one document or a document set rather than implementation code.
-- The user asks for Word/DOCX output for one or more development documents.
-- The user wants industry-standard or formal document structure, but does not specify an exact template.
-- The request needs routing between existing document skills, especially `$axis-doc-tech-design` for technical design and `$axis-doc-db-design` for database design.
+Classify every request as exactly one mode before writing:
 
-Do not use this for tiny README edits, code comments, changelog notes, or a pure code review unless the user asks to produce retained development documentation.
+| Mode | Use when | Required result |
+| --- | --- | --- |
+| `existing_feature_export` | The feature already exists and the user wants one or more documents describing the confirmed current or approved target behavior. | Resolve the feature, gather evidence, and output the requested document set. Do not change code or canonical documents unless requested. |
+| `planned_feature_generation` | The feature is not implemented and its future implementation will add or modify code. | Run discovery, produce and confirm one `master_draft`, then expand the approved draft into the selected design documents. |
+| `implemented_feature_correction` | The feature exists, but its retained document is missing, stale, or factually wrong while product behavior is not intentionally changing. | Resolve against code, archive every canonical document before modification, and correct the documents from evidence. If intended behavior or code must change, switch to `implemented_feature_iteration`. |
+| `implemented_feature_iteration` | An implemented feature must change behavior and therefore needs code additions or modifications plus updated documents. | Run discovery, produce and confirm one `master_draft`, archive affected canonical documents, then generate iteration documents and reviewed revisions. |
 
-## Core Principle
+If wording fits more than one mode, show the inferred mode and the evidence that determined it. Ask only when choosing the wrong mode would change code scope, archival behavior, or the deliverable.
 
-Turn the user's prompt into the smallest complete set of useful development documents, grounded in evidence and written as final deliverables. Preserve the user's literal business wording when it defines scope, names, statistics口径, states, or acceptance criteria.
+## Inputs and Source Priority
 
-When the user says the document should describe the final target, write the final contract directly. Avoid current-state, migration, investigation-history, old-vs-new, or background sections unless the user explicitly asks for them.
+Prefer, in order:
+
+1. the user's latest confirmed requirement and literal business wording;
+2. approved requirements and current canonical Axis project knowledge;
+3. connected repository evidence from routes through tests;
+4. existing draft/review documents;
+5. explicit assumptions and recommendations.
+
+Never present an assumption or market inference as confirmed product or repository behavior.
 
 ## Three-Step Work Contract
 
-1. Co-create the document target with the user.
-   Identify requested document types, audience, output format, source of truth, final-only vs current-state preference, standards or template basis, and acceptance criteria. Ask only for missing information that materially changes the document; otherwise proceed with explicit assumptions.
-2. Execute the document set.
-   Produce the requested document or documents using the selection matrix below. Reuse specialized skills when they apply, inspect repo evidence when available, and keep each artifact independently useful.
-3. Verify the result.
-   Check every generated document against required sections, evidence coverage, no-placeholder rules, requested output format, and Word/DOCX rendering or parse checks when applicable. Report generated paths and what was verified.
+1. Co-create and resolve the target.
+   Select the operating mode, run the Feature Resolution Confirmation Gate where applicable, and gather only the decisions needed for the mode. For `planned_feature_generation` and `implemented_feature_iteration`, run the structured discovery interview and obtain explicit approval of the `master_draft` before expansion.
+2. Execute the document lifecycle.
+   Archive each canonical document before its first modification, write the requested documents, update affected detailed/global project knowledge at the correct level, and preserve canonical paths for current reading. This skill designs the change; implementation code starts only when the user separately authorizes execution.
+3. Verify and report.
+   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, and affected knowledge revisions. Report current paths, archive paths, assumptions, verification results, and any code work still awaiting authorization.
 
-Keep light adversarial review below 30% of the interaction. Use it to catch missing evidence, unsafe assumptions, weak boundaries, guessed schema/API facts, or conflicts between multiple documents. Once scope is clear, write the documents decisively.
+Keep light adversarial review below 30% of the interaction. Challenge guessed scope, hidden product decisions, unsafe architecture, unmeasured performance claims, broken business flows, weak schema choices, unjustified market assumptions, or silent overwrites. Once decisions are sufficient, become decisive and produce the artifacts.
 
-## Light Adversarial Review
+## Feature Resolution Confirmation Gate
 
-Before finalizing a development document set, pressure-test it:
+Read [feature-resolution-and-lifecycle.md](references/feature-resolution-and-lifecycle.md) before resolving an existing feature.
 
-- Does the document set match the user's latest prompt and corrections?
-- Are business terms, statistics口径, state names, endpoint names, and visible labels preserved exactly where the user specified them?
-- Is each claim grounded in repo code, schema, API definitions, logs, screenshots, pasted text, or an explicit assumption?
-- Are generated documents consistent with each other on module boundaries, data ownership, states, APIs, permissions, error handling, and acceptance criteria?
-- Are final-only documents polluted with current implementation history or migration notes?
-- Are database, API, testing, and deployment documents routed to the right specialized workflow instead of being guessed from a generic template?
+- `zero_matches`: do not invent an existing feature. Ask for a route, page, menu, symbol, API, table, event, job, screenshot, source path, or approved wording.
+- `multiple_matches`: present two to five evidence-backed candidates and ask the user to select one.
+- `confirmed_feature`: require a connected entrypoint-to-implementation match plus explicit user confirmation of the resolved target, its `level1_capability_id`, its `secondary_capability_id`, and associated `business_ids`.
+- A planned feature may use `confirmed_planned_feature` only after the user confirms its name, owning level-1 capability, owning secondary capability, goal, non-goals, and acceptance boundary. Absence from code is expected in this mode.
 
-If a risk changes the final deliverable, fix the document. If it does not block the deliverable, state it as an assumption, risk, or verification item.
+The gate runs before creating or modifying a feature document.
 
-## Document Selection Matrix
+## Detailed-Design Aggregation Contract
 
-| User asks for | Generate | Preferred workflow |
-| --- | --- | --- |
-| `概要设计`, high-level design, HLD | Overview design document | Use this skill's `概要设计` structure, and reuse `$axis-doc-tech-design` when architecture or technical solution depth is required. |
-| `详细设计`, low-level design, LLD | Detailed design document | Use this skill's `详细设计` structure, with implementation anchors, algorithms, state transitions, APIs, data interactions, errors, and tests. |
-| `技术方案`, `技术设计`, solution design | Technical design document | Invoke or follow `$axis-doc-tech-design`. |
-| `数据库设计`, data dictionary, schema design, DBDD | Database design document | Invoke or follow `$axis-doc-db-design`. |
-| `接口文档`, API document | API contract document | Ground in controllers, route definitions, OpenAPI, DTOs, mapper SQL, or pasted API examples. |
-| `需求规格`, PRD, SRS | Requirements specification | Capture scope, roles, user stories, business rules, states, non-functional needs, and acceptance criteria. |
-| `测试方案`, test plan | Test design document | Cover scope, environments, test data, scenarios, boundary cases, regression cases, and acceptance checks. |
-| `部署方案`, `运维手册`, runbook | Deployment or operations document | Cover environments, configuration, release steps, observability, rollback, permissions, and troubleshooting. |
-| `开发文档`, `多种文档`, `文档集` | Document set | Select the smallest coherent set from this matrix; explain the selection briefly in the final response. |
+The retained detailed-design hierarchy uses a level-1 overview plus independently reviewable secondary-capability documents:
 
-If the user names multiple documents, generate all named documents. If the user gives a broad prompt without naming document types, infer the smallest useful set and proceed unless the ambiguity is high-risk.
+- use `business_capability_detailed_design` for the level-1 overview and `secondary_capability_detailed_design` for each child;
+- create one overview document per level-1 capability and one detailed-design document per declared secondary capability;
+- use `level1_capability_id` as the canonical document key and `level1_capability_name` as its reader-facing title;
+- read the complete `secondary_capabilities` array from `business/inventory.yaml` before drafting;
+- include every secondary capability in the level-1 overview as a summary and canonical link, even when only one secondary capability changed;
+- give each `secondary_capability_id` an independent document containing its complete business and code design;
+- keep `business_ids` inside the owning secondary-capability entry as traceability to business/implementation evidence; a `business_id` never creates another level-1 detailed-design document;
+- when multiple inventory rows or evidence groups share the same level-1 capability, merge them into one overview and preserve every distinct secondary document;
+- do not mark the hierarchy complete while any declared secondary capability, parent/child link, or adjacent-document navigation is missing, duplicated, or unresolved.
 
-## Default Document Set
+Default canonical path:
 
-For a non-trivial feature request that only says `开发文档`, default to:
+```text
+.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/detailed-design.md
+.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md
+```
 
-1. Requirements or scope summary, if business behavior is not already clear.
-2. 概要设计文档.
-3. 详细设计文档.
-4. Database design only when persistent schema or field dictionaries are part of the work.
-5. API document only when external or frontend-backend contracts are part of the work.
-6. Test plan when behavior, data, or integration risk is material.
+Feature and requirement documents live beneath that level-1 capability and identify the secondary capabilities they affect. Updating one feature revises the owning secondary document; the overview changes only when its summary, shared design, boundary or navigation changes.
 
-Do not inflate the set with documents that add no decision value.
+## Discovery Interview for Code-Changing Work
 
-## 概要设计 Structure
+For `planned_feature_generation` and `implemented_feature_iteration`, read [discovery-and-master-draft.md](references/discovery-and-master-draft.md) and ask one compact, prioritized batch covering these decision dimensions:
 
-Use this structure for overview design unless the user provides a stricter template:
+- `product`: target users, problem, value, scope, non-goals, visible behavior, success criteria;
+- `architecture`: ownership, boundaries, dependencies, reuse, integration, consistency, rollout and rollback;
+- `performance`: load shape, latency/throughput goals, data volume, hot paths, capacity, degradation and observability;
+- `business_flow`: actors, main path, branches, states, permissions, failure, recovery and compensation;
+- `database_design`: ownership, persisted/derived data, tables, fields, relationships, constraints, indexes, lifecycle and migration;
+- `market`: alternatives, differentiation, pricing/compliance/channel constraints, only when they can materially change product scope or acceptance.
 
-1. Document Control
-2. Purpose and Scope
-3. Template Basis and References
-4. Business Context and Goals
-5. Overall Architecture
-6. Functional Modules
-7. Data Overview
-8. External Interfaces and Dependencies
-9. Key Workflows
-10. Non-Functional Design
-11. Security and Permissions
-12. Risks, Assumptions, and Acceptance Criteria
+Do not demand that the user already knows technical answers. For every unresolved material decision:
 
-The overview should explain what is built, why it exists, who uses it, major components, key flows, and the main design boundaries. It should not duplicate every method, SQL detail, or test case from the detailed design.
+1. explain why it matters in plain language;
+2. offer a recommended option first;
+3. give one or two alternatives with trade-offs;
+4. record the user's choice, accepted recommendation, or unresolved status.
 
-## 详细设计 Structure
+Skip irrelevant dimensions with a recorded reason. Market research that depends on current external facts requires current sources and citations; do not browse merely to decorate a design.
 
-Use this structure for detailed design unless the user provides a stricter template:
+## master_draft and Expansion Gate
 
-1. Document Control
-2. Scope and Design Inputs
-3. Module Responsibilities
-4. Domain Model and Data Mapping
-5. API and Interface Contracts
-6. State Model and Lifecycle
-7. Core Algorithms and Calculation Rules
-8. Transaction, Idempotency, and Concurrency Design
-9. Error Handling and Compensation
-10. Security, Permissions, and Audit
-11. Observability
-12. Test Design
-13. Deployment, Rollback, and Compatibility Notes
-14. Open Assumptions and Risks
+The `master_draft` is the single approved source for downstream documents in code-changing modes. It is not a loose brainstorming transcript.
 
-The detailed design should be specific enough for implementation. Include pseudo-code, state transition tables, sequence diagrams, request/response contracts, validation rules, and data dictionary references when they materially reduce ambiguity.
+Default path:
 
-## API Document Structure
+```text
+.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/requirements/{requirement_id}/master-draft.md
+```
 
-For interface documents, include:
+It must contain the final requirement framing, product conclusions, market conclusions when used, actors and business flow, architecture direction, performance targets, data/database direction, security and operations, acceptance criteria, non-goals, decision log, recommendations accepted by the user, assumptions, and unresolved items.
 
-- API inventory and versioning.
-- Authentication, authorization, and tenant or actor context.
-- Endpoint path, method, purpose, request parameters, response fields, examples, and error codes.
-- Idempotency, pagination, sorting, filtering, upload/download, callbacks, and retry behavior where relevant.
-- Backward compatibility and deprecation notes.
+### Expansion Gate
 
-Ground API claims in routes, controllers, OpenAPI files, DTOs, tests, logs, or pasted source.
+1. Produce the complete `master_draft` first.
+2. Show the user its design conclusion, decisions, recommendations, assumptions, and intended expansion set.
+3. Ask for explicit approval or corrections.
+4. Do not expand it into retained design documents until approval is present.
+5. After approval, downstream documents must trace their claims to the approved `master_draft` plus repository evidence.
 
-## Test Plan Structure
+If the user corrects the draft, revise the draft first and repeat the gate once as a consolidated confirmation. Do not patch downstream documents independently from an outdated draft.
 
-For test documents, include:
+## Document Selection and Expansion
 
-- Test objectives and scope.
-- Environment and dependency assumptions.
-- Test data and reset rules.
-- Functional scenarios, boundary scenarios, negative cases, concurrency/idempotency cases, integration cases, and regression cases.
-- Acceptance criteria mapped back to requirements and design guarantees.
-- Evidence expected from logs, metrics, screenshots, database rows, API responses, or generated files.
+Select the smallest coherent set:
 
-## Word/DOCX Output
+| Request or need | Output |
+| --- | --- |
+| Requirements or product boundary | `master_draft` and, when separately needed, requirements specification |
+| 概要设计 / Overview / HLD | Overview design |
+| Technical solution | Decision-oriented technical design |
+| 详细设计 / Detailed design / LLD | One level-1 overview linking all declared secondary capabilities, plus one implementation-oriented detailed design per secondary capability |
+| Database design | A detailed-design data section by default; standalone DBDD only for cross-domain schema, full data dictionary, independent DBA/compliance review, independent database release, or explicit request |
+| API contract | API document |
+| Material behavior or integration risk | Test plan |
+| Release/operations need | Deployment or runbook document |
+| Implemented feature iteration | Iteration design describing approved target, affected current contracts, compatibility, rollout, rollback, and required canonical revisions |
 
-When the user requests Word/DOCX:
+Read [technical-and-database-design.md](references/technical-and-database-design.md) for technical and schema depth. Read [feature-detailed-design-template.md](references/feature-detailed-design-template.md) for one-feature detailed-design structure.
 
-- Generate real `.docx` files using available document tooling such as python-docx, LibreOffice, or the local document skill/tooling. Do not rename Markdown to `.docx`.
-- Use a cover page, revision table, table of contents when feasible, consistent heading levels, page numbers, and readable tables.
-- Put generated files under `output/doc/` unless the repository has a stronger convention.
-- For multiple Word documents, use stable filenames such as `<feature>概要设计文档.docx` and `<feature>详细设计文档.docx`.
-- Verify the DOCX by parsing headings and tables, and render or visually inspect representative pages when tooling is available.
+## Output Formats
 
-## Evidence Gathering
+Default to one Markdown file per independently reviewable document. When the user requests Word/DOCX, create a real `.docx` with a cover, revision table, consistent heading levels, readable tables, page numbering and a table of contents when feasible; never rename Markdown to DOCX. Parse the generated file and render or visually inspect representative pages before delivery. Generate PDF or another retained format only when requested, while keeping the canonical Markdown/project-knowledge source when the repository requires it.
 
-Prefer real sources over memory or guesses:
+## Project-Knowledge Impact Updates
 
-- Existing requirements, user prompt, screenshots, logs, or pasted business rules.
-- Code modules, controllers, services, entities, migrations, mapper SQL, DTOs, tests, scripts, and configuration.
-- Existing docs as secondary context.
-- Current standards or public templates only when the user asks for formal standards or citations.
+Generating a target document is not enough. Classify and apply its knowledge impact:
 
-If a standard, law, regulation, or current product/library behavior could have changed, verify it from current primary sources before citing it.
+| Change impact | Required update |
+| --- | --- |
+| Formatting, wording, or evidence correction only | Target feature/requirement document only |
+| Feature behavior, validation, API, state, transaction, or schema detail | Feature/requirement document plus the matching `secondary_capability_detailed_design` |
+| Secondary-capability actor, permission, state ownership, or internal business flow | Owning secondary design, level-1 overview summary/link when affected, `business_inventory`, and affected feature/requirement documents |
+| Level-1 capability boundary, value stream, shared business object, or governance rule | Reviewed revision of `project_business_architecture` plus affected level-1 documents |
+| System boundary, shared technical capability, deployment topology, cross-cutting consistency, security, or performance principle | Reviewed revision of `project_technical_architecture` plus affected capability/feature documents |
 
-## Output Rules
+Do not rewrite global documents when the impact is local. Update `metadata.yaml`, document refs, revision links, `doc_gap_report`, and traceability when the repository uses Axis v0.2 project knowledge. Use `$axis-doc-project-knowledge` for whole-project bootstrap or multi-capability reconciliation, not as a second feature-document generator.
 
-- Default to Markdown unless the user asks for Word/DOCX, PDF, or another format.
-- For multiple documents, create one file per document unless the user asks for a combined document.
-- Use Chinese headings when the user's request is Chinese, and preserve exact Chinese business wording.
-- Keep final retention documents focused on the target design. Put assumptions and risks in bounded sections rather than mixing uncertainty into every paragraph.
-- Avoid placeholders such as `TBD`, `TODO`, `待补充`, `待定`, `xxx`, or empty tables.
-- Include diagrams using Mermaid when they clarify architecture, sequence, ER, state machine, or deployment flow.
+## Mandatory Pre-Change Archive
+
+Read [document-archive-contract.md](references/document-archive-contract.md). Before modifying any existing canonical document:
+
+1. run `scripts/archive_document.py` with the reason, request summary, source revision, and target revision;
+2. verify the archived content hash matches the current file;
+3. keep the current canonical path unchanged for normal readers;
+4. place history only under `.axis/docs/_archive/`;
+5. never mutate an `approved` document in place: archive it, create a new `review` revision, and record `supersedes`;
+6. update current content only after archive verification succeeds.
+
+If archival fails, stop the modification. A missing or failed archive is a blocking error, not a warning.
+
+## Code-Change Boundary
+
+This skill may establish that code must be added or modified, but document approval is not implementation authorization. After the expanded document set is approved, summarize the implementation slices, tests, migration, rollout, and rollback, then ask whether to execute. If authorized, hand off to the appropriate code/TDD workflow and later use `$axis-doc-drift-capture` for task/version evidence and residual document drift.
 
 ## Verification Checklist
 
-Before delivery, verify:
+- Exactly one operating mode is recorded.
+- Existing-feature resolution is confirmed, or planned-feature ownership and boundary are explicitly confirmed with one `level1_capability_id` and at least one `secondary_capability_id`.
+- Code-changing modes have a user-approved `master_draft` before expansion.
+- Product, architecture, performance, business_flow, database_design, and applicable market decisions are answered, recommended-and-accepted, skipped with reason, or visibly unresolved.
+- Every modified canonical document has a verified archive record created before modification.
+- Current paths remain stable and archive paths stay under `_archive`.
+- `approved` content is superseded by a new `review` revision rather than overwritten.
+- There is exactly one current overview for the owning level-1 capability and one current detailed design per declared secondary capability; parent/child and adjacent-document navigation is complete.
+- Detailed, capability, global business, and global technical documents are updated only at their justified impact level.
+- Database content is a detailed-design section unless standalone delivery criteria apply.
+- Every persistence-impacting secondary document contains a data-table inventory, field structure, indexes and constraints, relationships and ownership, state-to-column mapping, read/write consistency, and migration/rollback design; when no table changes are needed, it records that conclusion and its evidence explicitly.
+- Cross-document terminology, states, APIs, data ownership, performance targets, acceptance, rollout, and rollback agree.
+- Claims are backed by the approved `master_draft`, repository evidence, cited current market sources, or explicit assumptions.
+- No unresolved filler, credentials, private URLs, raw production payloads, or customer identifiers leak into reusable or public material.
 
-1. The generated document types match the user's request or the documented selection logic.
-2. 概要设计 and 详细设计 are clearly separated when both are requested.
-3. Specialized database and technical design needs reuse or follow `$axis-doc-db-design` and `$axis-doc-tech-design`.
-4. Required sections are present and not empty.
-5. Source evidence or explicit assumptions back important business, API, database, state, and calculation claims.
-6. Cross-document terms, state names, API names, and data ownership are consistent.
-7. Final-only documents do not include unwanted current-state, old implementation, or investigation-history sections.
-8. Word/DOCX files are real documents and have been parsed, rendered, or visually checked when tooling allows.
-9. Generated paths are reported clearly.
-
-Useful local checks:
-
-```bash
-rg -n "TODO|TBD|待补|待定|xxx|XXX|\\.\\.\\." output/doc
-```
-
-For this reusable skill itself, run the skill validator, repository tests, and local skill refresh workflow before claiming it is installed:
+Useful checks:
 
 ```bash
-python3 <codex-skill-validator> <axis-tools>/skills/axis-doc-development
-npm test
-node scripts/axis-skill-update.mjs --repo <axis-tools> --agent codex --no-pull --json
+python3 scripts/archive_document.py --help
+rg -n "TODO|TBD|待补|待定|placeholder|dummy|filler" .axis/docs
 ```
 
-## Common Mistakes
-
-- Generating only a generic template when the user asked for a real document.
-- Writing 概要设计 and 详细设计 with the same level of detail.
-- Guessing database fields or API responses without source evidence.
-- Creating a document set that is larger than the user's actual need.
-- Forgetting Word/DOCX verification after generating files.
-- Treating earlier discussion as final when the user's latest correction changed the contract.
-- Copying private project facts into the reusable skill instead of the generated task document.
+For this bundle, run its focused acceptance test, the packaged-skill validator, repository tests, and local refresh before claiming installation.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+After use, check whether the session produced reusable discovery questions, recommendations, archive edge cases, expansion rules, or impact-classification corrections. Update only public-safe reusable material, validate the bundle, refresh the local installation, and push when authorized. Otherwise report that no skill update is needed.

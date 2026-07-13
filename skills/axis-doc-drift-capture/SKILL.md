@@ -18,7 +18,7 @@ Produce project-specific record drafts and document drift decisions:
 - `affected_docs`
 - `doc_gap_report` update recommendations
 
-Do not replace `business_domain_detailed_design`, global architecture documents, or experience cards with a task record. Do not approve documents, publish packages, upload OSS artifacts, or silently modify `approved` project knowledge documents.
+Do not replace `business_capability_detailed_design`, `secondary_capability_detailed_design`, global architecture documents, or experience cards with a task record. Do not approve documents, publish packages, upload OSS artifacts, or silently modify `approved` project knowledge documents.
 
 ## Three-Step Work Contract
 
@@ -39,7 +39,7 @@ Collect these inputs before writing records:
 - PR and commit evidence: PR URL, PR number, base commit, head commit, commit SHA list, merge status when known;
 - change evidence: changed files, change summary, changed modules, generated files, deleted files, migration or config changes;
 - verification evidence: build, lint, tests, benchmark, review, manual checks, skipped checks, failed checks;
-- existing project knowledge: global architecture docs, `business_inventory`, domain docs, previous task records, version records, gap report;
+- existing project knowledge: global architecture docs, `business_inventory`, level-1 capability docs, previous task records, version records, gap report;
 - authorization: whether this run may write new document revisions or only mark stale and create follow-up items.
 
 If PR diff, changed files, verification output, or approved docs are unavailable, record that as evidence missing and set the relevant drift decision to `blocked` or `low_confidence`.
@@ -119,10 +119,22 @@ Record decisions in `affected_docs`:
 
 ```yaml
 affected_docs:
-  - doc_type: business_domain_detailed_design
-    path: .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/domains/example/detailed-design.md
+  - doc_type: secondary_capability_detailed_design
+    path: .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/example_capability/secondary-capabilities/example_secondary/detailed-design.md
     status: stale
-    reason: Service and permission changes affect this business domain.
+    reason: Service and permission changes affect this secondary capability.
+    change_categories:
+      - code
+      - permission
+    evidence_refs:
+      - kind: changed_file
+        path: src/example-service.ts
+        summary: Public-safe change summary.
+    recommended_action: generate_new_revision
+  - doc_type: business_capability_detailed_design
+    path: .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/example_capability/detailed-design.md
+    status: needs_revision
+    reason: The overview summary or navigation must reflect the revised secondary document.
     change_categories:
       - code
       - permission
@@ -149,7 +161,7 @@ doc_update_authorization:
 Rules:
 
 - Always create or propose a task record when public-safety validation passes.
-- If `may_create_new_doc_revisions` is false, do not edit project architecture, inventory, or domain docs. Mark them `stale`, `missing`, `conflict`, or `needs_revision`, and create follow-up items.
+- If `may_create_new_doc_revisions` is false, do not edit project architecture, inventory, or level-1 capability docs. Mark them `stale`, `missing`, `conflict`, or `needs_revision`, and create follow-up items.
 - If a document is `approved`, never mutate it in place. Create a new review revision with `supersedes` only when authorization explicitly allows new revisions.
 - If verification failed, a task record may still exist, but the version record must not mark the work as completed or release-ready.
 - If public-safety validation fails, stop writing records that contain unsafe evidence and produce a redacted follow-up only.

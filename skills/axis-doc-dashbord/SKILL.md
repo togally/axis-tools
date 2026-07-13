@@ -5,13 +5,13 @@ description: Use when a user wants to start and open the local Axis document das
 
 # Axis Document Dashbord
 
-启动只读的 Axis 文档看板，按 `bucket / organization / project` 查看本地与 OSS 文档。独立应用公开仓库为 <https://github.com/togally/axis-document-review>。
+启动只读的 Axis 文档看板，按 `bucket / organization / project` 查看本地与 OSS 当前文档，通过折叠树浏览业务架构、能力总览和二级能力设计，并通过独立“历史追溯”面板查阅 `_archive` 中的修订快照。独立应用公开仓库为 <https://github.com/togally/axis-document-review>。
 
 ## Three-Step Work Contract
 
 1. **Assess**：确认目标项目路径，运行 `status` 检查独立应用是否已存在；明确数据源和端口，不猜测路径或配置。
 2. **Execute**：应用存在时直接 `start`；应用不存在时执行下面的确认门，随后只走用户选择的 `clone` 或 `scaffold` 路径。
-3. **Verify**：确认 `/api/health` 可访问、`/api/catalog` 返回目录，并打开 `http://127.0.0.1:<port>` 预览页面。
+3. **Verify**：确认 `/api/health` 可访问、`/api/catalog` 分离返回当前文档与 `archives`，并打开 `http://127.0.0.1:<port>` 预览页面。
 
 ## Defaults
 
@@ -19,6 +19,8 @@ description: Use when a user wants to start and open the local Axis document das
 - 项目目录：用户指定的 Axis 项目仓库；未指定时使用当前工作目录。
 - 地址：`http://127.0.0.1:4177`。
 - 数据源：`all`，即本地文档与项目配置声明的 OSS；凭据只留在本地服务进程。
+- 当前文档仍只从 `.axis/docs/orgs/` 进入默认目录、搜索、计数和默认打开逻辑。
+- 存档只从 `.axis/docs/_archive/orgs/` 进入项目级 `archives`，通过当前文档的“历史追溯”按钮查阅，不得混入当前文档列表。
 
 脚本路径：
 
@@ -85,7 +87,9 @@ curl --fail http://127.0.0.1:4177/api/health
 curl --fail http://127.0.0.1:4177/api/catalog
 ```
 
-检查 catalog 是否含预期的 bucket、organization、project。OSS 缺少凭据时可为 partial，但本地数据源应保持可用；不要把 partial 描述为全量同步成功。
+检查 catalog 是否含预期的 bucket、organization、project。`totals.documents` 和项目 `document_count` 只统计当前文档，`archives` / `archive_count` 独立统计存档。能力目录应按总览/二级文档折叠；业务架构应能进入能力总览，能力总览应能返回业务架构并切换相邻能力，二级文档应能返回能力总览并切换相邻二级能力。有历史的当前文档应显示“历史追溯”，可查看 revision、时间、修改原因和哈希，并可“返回当前版本”。默认项目选择、当前文档列表、搜索、复制、全屏和深链接不得被存档污染。
+
+OSS 缺少凭据时可为 partial，但本地数据源应保持可用；不要把 partial 描述为全量同步成功。
 
 ## Light Adversarial Review
 
