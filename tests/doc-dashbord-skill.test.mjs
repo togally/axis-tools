@@ -39,6 +39,7 @@ for (const requiredText of [
   '历史追溯',
   '.axis/docs/_archive/orgs/',
   'archive_count',
+  '_sync/manifest.json',
   'AXIS_DOC_DASHBORD_DIR',
   'After Use Deposition',
 ]) {
@@ -68,6 +69,9 @@ try {
     assert.ok(scaffoldPackage.dependencies?.[dependency], `${dependency} should be bundled in the local scaffold`);
   }
   const scaffoldBrowser = await readFile(path.join(scaffoldTarget, 'src', 'browser.mjs'), 'utf8');
+  const scaffoldCore = await readFile(path.join(scaffoldTarget, 'src', 'core.mjs'), 'utf8');
+  assert.match(scaffoldCore, /axis\.package\.manifest/);
+  assert.match(scaffoldCore, /synchronizedProjectDocumentPaths/);
   assert.match(scaffoldBrowser, /mermaid\.run/);
   assert.match(scaffoldBrowser, /DEFAULT_DOCUMENT_TYPE\s*=\s*['"]MD['"]/);
   assert.match(scaffoldBrowser, /document-link/);
