@@ -22,17 +22,17 @@ Verify:
 - performance assumptions, hot paths, capacity, metrics and alerts;
 - rollout, compatibility, rollback and test scope.
 
-Prefer implementation anchors over speculative class or method names. Repository evidence governs current claims; the approved `master_draft` governs new target decisions.
+Prefer implementation anchors over speculative class or method names. For implemented behavior, use the repository-relative form `path:begin-end#symbol` for every API entrypoint, service/use case, mapper/repository, entity mapping and test. Repository evidence governs current claims; the approved `master_draft` governs new target decisions.
 
 ## Default Detailed-Design Structure
 
 1. Document Control and Evidence Baseline
 2. Design Conclusion and Scope
-3. Actors, Permissions and Business Flow
-4. Module Responsibilities and Dependencies
-5. API, Event and Job Contracts
+3. Actors, Permissions, Business Flow and Logic Relations
+4. Module Responsibilities, Code Objects and Dependencies
+5. API, Event and Job Contracts with Entry-to-Implementation Traceability
 6. State Model and Lifecycle
-7. Domain Model and Data Mapping
+7. Domain Model, Entity/Table Relations and Data Mapping
 8. Core Algorithms and Decision Rules
 9. Transaction, Idempotency, Concurrency and Consistency
 10. Error Handling, Retry, Timeout and Compensation
@@ -40,7 +40,9 @@ Prefer implementation anchors over speculative class or method names. Repository
 12. Performance, Capacity and Degradation
 13. Observability and Operations
 14. Compatibility, Migration, Rollout and Rollback
-15. Tests, Acceptance, Assumptions and Risks
+15. Tests, Acceptance, End-to-End Traceability, Assumptions and Risks
+
+For every material flow, include a readable flow diagram and one end-to-end row linking: business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing hop as `missing_evidence`; do not infer it.
 
 ## Database Design as Part of Detailed Design
 

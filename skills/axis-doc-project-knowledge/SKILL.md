@@ -66,7 +66,7 @@ Scan and connect:
 - unit, integration, contract, end-to-end and benchmark tests;
 - runtime configuration, deployment descriptors and accepted docs.
 
-Record repository-relative paths, symbols, supported conclusions, confidence and verification time. Names alone do not prove a capability, policy, permission, state, threshold, transaction, compensation rule or external contract.
+Record repository-relative paths, symbols, supported conclusions, confidence and verification time. For a secondary detailed design, use `path:begin-end#symbol` anchors for every implemented API entrypoint, code object relation, mapper/repository, entity/table mapping and test. Names alone do not prove a capability, policy, permission, state, threshold, transaction, compensation rule or external contract.
 
 ## bootstrap
 
@@ -144,7 +144,8 @@ Verify:
 - unique first-level capability count equals overview document count;
 - inventory secondary-capability count equals `secondary_capability_detailed_design` document count;
 - every inventory `secondary_capabilities` item appears exactly once in its level-1 completeness matrix and links to its canonical child document;
-- every persistence-impacting secondary document includes table inventory, field structure, indexes and constraints, relationships and ownership, state mapping, read/write consistency, and migration/rollback evidence, or explicitly records that no table structure changes are required;
+- every secondary document has a business-flow diagram, interface-to-code trace, code-object relation map, entity/table relationship model and flow-to-test traceability matrix; every implemented hop is a repository-relative `path:begin-end#symbol` anchor or an explicit missing-evidence record;
+- every persistence-impacting secondary document includes table inventory, entity-to-table/code mapping, field structure, indexes and constraints, relationships and ownership, state mapping, read/write consistency, and migration/rollback evidence, or explicitly records that no table structure changes are required;
 - business architecture links to every level-1 overview; every overview returns to business architecture and links to adjacent overviews; every secondary document returns to its overview and links to adjacent secondary documents;
 - every `business_id` maps to exactly one secondary capability unless an explicit reviewed exception is recorded;
 - metadata, inventory refs, document revisions and gap report agree;

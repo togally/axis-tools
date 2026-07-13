@@ -41,7 +41,7 @@ Never present an assumption or market inference as confirmed product or reposito
 2. Execute the document lifecycle.
    Archive each canonical document before its first modification, write the requested documents, update affected detailed/global project knowledge at the correct level, and preserve canonical paths for current reading. This skill designs the change; implementation code starts only when the user separately authorizes execution.
 3. Verify and report.
-   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, and affected knowledge revisions. Report current paths, archive paths, assumptions, verification results, and any code work still awaiting authorization.
+   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, and affected knowledge revisions. For detailed design, validate every material flow's traceability through API/entrypoint, code objects, entities/tables and tests with repository-relative `path:begin-end#symbol` anchors. Report current paths, archive paths, assumptions, verification results, and any code work still awaiting authorization.
 
 Keep light adversarial review below 30% of the interaction. Challenge guessed scope, hidden product decisions, unsafe architecture, unmeasured performance claims, broken business flows, weak schema choices, unjustified market assumptions, or silent overwrites. Once decisions are sufficient, become decisive and produce the artifacts.
 
@@ -186,7 +186,8 @@ This skill may establish that code must be added or modified, but document appro
 - There is exactly one current overview for the owning level-1 capability and one current detailed design per declared secondary capability; parent/child and adjacent-document navigation is complete.
 - Detailed, capability, global business, and global technical documents are updated only at their justified impact level.
 - Database content is a detailed-design section unless standalone delivery criteria apply.
-- Every persistence-impacting secondary document contains a data-table inventory, field structure, indexes and constraints, relationships and ownership, state-to-column mapping, read/write consistency, and migration/rollback design; when no table changes are needed, it records that conclusion and its evidence explicitly.
+- Every secondary detailed design makes the business-flow logic explicit and contains an interface-to-code map, code-object relation map, entity/table relationship model, and end-to-end flow-to-test traceability. Implemented hops use repository-relative `path:begin-end#symbol` anchors; target or unverifiable hops are explicitly labelled.
+- Every persistence-impacting secondary document contains a data-table inventory, entity-to-table/code mapping, field structure, indexes and constraints, relationships and ownership, state-to-column mapping, read/write consistency, and migration/rollback design; when no table changes are needed, it records that conclusion and its evidence explicitly.
 - Cross-document terminology, states, APIs, data ownership, performance targets, acceptance, rollout, and rollback agree.
 - Claims are backed by the approved `master_draft`, repository evidence, cited current market sources, or explicit assumptions.
 - No unresolved filler, credentials, private URLs, raw production payloads, or customer identifiers leak into reusable or public material.
