@@ -56,7 +56,7 @@ def archive(args: argparse.Namespace) -> dict:
         raise RuntimeError("document must be under .axis/docs/orgs/{organization_id}/projects/{project_slug}") from error
 
     parts = relative_current.parts
-    if len(parts) < 5 or parts[1] != "projects":
+    if len(parts) < 4 or parts[1] != "projects":
         raise RuntimeError("document path must include orgs/{organization_id}/projects/{project_slug}/{canonical_path}")
     if not document.is_file():
         raise RuntimeError(f"canonical document does not exist: {document}")
