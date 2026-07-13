@@ -508,6 +508,13 @@ for (const requiredText of [
   '表关系与数据所有权',
   '状态与字段映射',
   '数据迁移、兼容与回滚',
+  '业务流与逻辑关系',
+  '接口到代码追踪',
+  '代码对象与关系',
+  '实体、表与对象关系',
+  '实体-表-代码映射',
+  '端到端追溯矩阵',
+  '文件路径:起始行-结束行#符号',
 ]) {
   assert.match(secondaryCapabilityDetailedDesignTemplate, new RegExp(requiredText));
 }
