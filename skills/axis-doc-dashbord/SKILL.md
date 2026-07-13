@@ -18,7 +18,8 @@ description: Use when a user wants to start and open the local Axis document das
 - 应用目录：`${AXIS_DOC_DASHBORD_DIR:-~/Documents/axis/axis-document-review}`。默认复用同一台电脑上的共享应用目录；只有显式设置环境变量时才改用其他位置。
 - 项目目录：用户指定的 Axis 项目仓库；未指定时使用当前工作目录。
 - 地址：`http://127.0.0.1:4177`。
-- 数据源：`all`，即本地文档与项目配置声明的 OSS；凭据只留在本地服务进程。
+- 数据源：`all`，即本地文档与项目配置声明的 OSS；健康 OSS 是默认跨组织/跨项目阅读源，本地仅用于当前仓库核验；凭据只留在本地服务进程。
+- Dashboard 不后台轮询或自动替换正在阅读的文档。文档生产流程负责及时同步 OSS，用户需要时点击“刷新”重新读取所有 Provider。
 - 当前文档仍只从 `.axis/docs/orgs/` 进入默认目录、搜索、计数和默认打开逻辑。
 - 存档只从 `.axis/docs/_archive/orgs/` 进入项目级 `archives`，通过当前文档的“历史追溯”按钮查阅，不得混入当前文档列表。
 
