@@ -20,7 +20,7 @@ description: Use when a user wants to start and open the local Axis document das
 - 地址：`http://127.0.0.1:4177`。
 - 数据源：`all`，即本地文档与项目配置声明的 OSS；健康 OSS 是默认跨组织/跨项目阅读源，本地仅用于当前仓库核验；凭据只留在本地服务进程。
 - Dashboard 不后台轮询或自动替换正在阅读的文档。文档生产流程负责及时同步 OSS，用户需要时点击“刷新”重新读取所有 Provider。
-- 当前文档仍只从 `.axis/docs/orgs/` 进入默认目录、搜索、计数和默认打开逻辑。
+- 本地当前文档只从 `.axis/docs/orgs/` 进入默认目录、搜索、计数和默认打开逻辑；OSS 当前文档以项目最新已发布的 `_sync/manifest.json` 为准，未被该 manifest 声明的旧对象不得混入当前列表。
 - 存档只从 `.axis/docs/_archive/orgs/` 进入项目级 `archives`，通过当前文档的“历史追溯”按钮查阅，不得混入当前文档列表。
 
 脚本路径：
@@ -88,7 +88,7 @@ curl --fail http://127.0.0.1:4177/api/health
 curl --fail http://127.0.0.1:4177/api/catalog
 ```
 
-检查 catalog 是否含预期的 bucket、organization、project。`totals.documents` 和项目 `document_count` 只统计当前文档，`archives` / `archive_count` 独立统计存档。能力目录应按总览/二级文档折叠；业务架构应能进入能力总览，能力总览应能返回业务架构并切换相邻能力，二级文档应能返回能力总览并切换相邻二级能力。有历史的当前文档应显示“历史追溯”，可查看 revision、时间、修改原因和哈希，并可“返回当前版本”。默认项目选择、当前文档列表、搜索、复制、全屏和深链接不得被存档污染。
+检查 catalog 是否含预期的 bucket、organization、project。`totals.documents` 和项目 `document_count` 只统计当前文档，`archives` / `archive_count` 独立统计存档。对已发布 project-knowledge 项目，确认当前列表与 `_sync/manifest.json` 声明的项目文档一致，旧 `business/domains/` 等已迁移对象即使仍保留在 OSS 也不再出现。能力目录应按总览/二级文档折叠；业务架构应能进入能力总览，能力总览应能返回业务架构并切换相邻能力，二级文档应能返回能力总览并切换相邻二级能力。有历史的当前文档应显示“历史追溯”，可查看 revision、时间、修改原因和哈希，并可“返回当前版本”。默认项目选择、当前文档列表、搜索、复制、全屏和深链接不得被存档污染。
 
 OSS 缺少凭据时可为 partial，但本地数据源应保持可用；不要把 partial 描述为全量同步成功。
 
