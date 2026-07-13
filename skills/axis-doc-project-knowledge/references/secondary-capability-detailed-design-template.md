@@ -7,6 +7,8 @@
 > 对应业务标识：`{business_ids}`<br>
 > 证据基线：{source_commit}
 
+> 设计完整性：`interface_design_status={detailed_or_not_applicable}` · `interface_coverage={complete_partial_or_not_applicable}` · `persistence_design_status={detailed_or_not_applicable}` · `relationship_model_status={relational_single_table_or_not_applicable}`
+
 [返回能力总览](business/capabilities/{level1_capability_id}/detailed-design.md) · [上一个二级能力]({previous_secondary_document_path}) · [下一个二级能力]({next_secondary_document_path})
 
 本文件保存 `{secondary_capability_name}` 的完整业务与代码设计。Dashboard 根据规范路径把它挂载到所属能力下；业务架构和能力总览只保留摘要、关系和链接，不复制本文件正文。
@@ -55,13 +57,37 @@ flowchart LR
 | --- | --- | --- | --- | --- | --- | --- |
 | {object_or_rule} | {source_of_truth} | {condition} | {trigger} | {result} | {constraint} | {evidence_ref} |
 
-## 5. 接口到代码追踪
+## 5. 接口详细设计
 
-HTTP 接口、消息、定时任务和内部命令均需列出。已实现接口必须精确到 Controller、Service、Mapper/Repository 的文件和行号；没有对应实现时标记“目标设计”或“缺失证据”。
+HTTP 接口、消息、定时任务和内部命令均是接口契约。`interface_design_status=detailed` 时，必须列出具体方法与完整路径/主题、字段级请求和响应、错误映射，以及入口到测试的代码链；不得用“现有入口集合”“对应应用服务”或仅列类名代替。`interface_coverage=partial` 时必须记录稳定的 `interface_gap_id`，并说明未覆盖入口及影响。
 
-| `api_id` / 契约 | 调用方 | 传输与路径 | 输入/输出语义 | Controller/入口定位 | Service/用例定位 | Mapper/Repository 定位 | 实体/表 | 测试定位 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{api_id}` | {caller} | `{method} {path_or_topic}` | {request_response_semantics} | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已实现 / 目标设计 / 缺失证据 |
+只有仓库证据能证明本能力不存在任何可调用入口、事件、任务或命令时，才可使用 `interface_design_status=not_applicable` 与 `interface_coverage=not_applicable`，并填写 `interface_not_applicable_reason` 和精确的 `interface_not_applicable_evidence`。
+
+### 5.1 接口清单与代码追踪
+
+| `api_id` | 方法与完整路径/主题 | 调用方 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{api_id}` | `{method} {path_or_topic}` | {caller} | {authentication_authorization} | `{request_type}` | `{response_type}` | {error_summary} | {idempotency_transaction} | `{controller_file_line_symbol}` | `{service_file_line_symbol}` | `{mapper_file_line_symbol}` | {entity_table_refs} | `{test_file_line_symbol}` | 已实现 / 目标设计 / 缺失证据 |
+
+### 5.2 请求字段
+
+为 5.1 中每个接口逐项列出 Header、Path、Query 与 Body 字段；无请求体也必须说明原因。
+
+| `api_id` | 字段 | 位置 | 类型 | 必填 | 约束/枚举 | 业务语义 | 敏感处理 | 证据/状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{api_id}` | `{field_name}` | Header / Path / Query / Body | `{field_type}` | 是 / 否 | {validation_or_enum} | {business_semantics} | {sensitivity_control} | {evidence_or_target} |
+
+### 5.3 响应字段
+
+| `api_id` | HTTP/消息状态 | 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据/状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `{api_id}` | `{status}` | `{field_name}` | `{field_type}` | 是 / 否 | {business_semantics} | {producer} | {evidence_or_target} |
+
+### 5.4 错误码与异常映射
+
+| `api_id` | HTTP/错误码 | 触发条件 | 用户可见语义 | 重试/回滚/补偿 | 代码证据/状态 |
+| --- | --- | --- | --- | --- | --- |
+| `{api_id}` | `{http_or_error_code}` | {trigger_condition} | {visible_semantics} | {recovery_behavior} | {evidence_or_target} |
 
 ## 6. 代码对象与关系
 
@@ -69,18 +95,20 @@ HTTP 接口、消息、定时任务和内部命令均需列出。已实现接口
 
 ```mermaid
 classDiagram
-    class Controller {
+    class {controller_symbol} {
       +{entry_method}()
     }
-    class ApplicationService {
+    class {application_service_symbol} {
       +{use_case_method}()
     }
-    class Entity
-    class Repository
-    Controller --> ApplicationService : invokes
-    ApplicationService --> Repository : reads/writes
-    Repository --> Entity : maps
+    class {repository_symbol}
+    class {entity_symbol}
+    {controller_symbol} --> {application_service_symbol} : invokes
+    {application_service_symbol} --> {repository_symbol} : reads/writes
+    {repository_symbol} --> {entity_symbol} : maps
 ```
+
+图中的节点必须替换为仓库中的实际符号或已批准的目标符号，不能保留 `Controller`、`ApplicationService`、`Repository`、`Entity` 等泛化节点名。
 
 | 对象标识 | 类型 | 职责 | 输入/输出 | 依赖或被依赖关系 | 对应实体/表 | 源码定位 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -88,16 +116,18 @@ classDiagram
 
 ## 7. 实体、表与对象关系
 
-本节先说明业务实体、物理表和代码对象的关系，再展开字段与索引。实体关系图应覆盖主实体、关系表、审计/日志表和跨服务引用；物理外键、逻辑外键、对象聚合分别标注。
+本节先说明业务实体、物理表和代码对象的关系，再展开字段与索引。`persistence_design_status=detailed` 时关系图必填，图中表名必须与 8.1 数据表清单一致。多表使用 `relationship_model_status=relational`，单表使用 `relationship_model_status=single_table` 并展示该表实体块。禁止使用 `BUSINESS_FLOW`、`API`、`RESULT`、`TABLE`、`ENTITY_A` 或 `ENTITY_B` 作为 ER 实体。
+
+每条边必须写出两端关联字段、基数、关系类型和证据。数据库存在真实外键约束时标为 `physical_fk`；仅由字段、Mapper、查询或业务规则维持时标为 `logical_relation`；跨系统引用标为 `external_reference`，不得把逻辑关系写成物理外键。
 
 ```mermaid
 erDiagram
-    ENTITY_A ||--o{ ENTITY_B : "{relation_meaning}"
+    {source_table} ||--o{ {target_table} : "{source_key} = {target_key}; {relationship_type}"
 ```
 
-| 业务实体 | 关系 | 目标实体 | 基数 | 关联字段/业务键 | Java/代码对象 | 物理表 | 关系实现 | 证据/状态 |
+| 来源实体/表 | 关系 | 目标实体/表 | 基数 | 关联字段/业务键 | Java/代码对象 | 关系类型 | 数据所有者 | 证据/状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{source_entity}` | 拥有 / 引用 / 关联 / 审计 | `{target_entity}` | 1:1 / 1:N / N:M | `{join_or_business_key}` | `{code_object_ref}` | `{table_name}` | 物理 FK / 逻辑关联 / 事件 / API | {evidence_or_target} |
+| `{source_table}` | 拥有 / 引用 / 关联 / 审计 | `{target_table}` | 1:1 / 1:N / N:M | `{source_table}.{source_key} = {target_table}.{target_key}` | `{code_object_ref}` | `physical_fk` / `logical_relation` / `external_reference` | {data_owner} | {evidence_or_target} |
 
 ## 8. 表结构设计
 
@@ -137,9 +167,9 @@ erDiagram
 
 ### 8.5 表关系与数据所有权
 
-| 来源表 | 关系 | 目标表 | 关联字段 | 基数 | 级联/删除策略 | 权威所有者 | 跨库/跨服务处理 | 证据/状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{source_table}` | 关联 / 聚合 / 引用 / 冗余 | `{target_table}` | `{join_columns}` | 1:1 / 1:N / N:M | {cascade_or_retention} | {data_owner} | {cross_boundary_strategy} | {evidence_or_target} |
+| 来源表 | 关系 | 目标表 | 关联字段 | 基数 | 关系类型 | 级联/删除策略 | 权威所有者 | 跨库/跨服务处理 | 证据/状态 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `{source_table}` | 关联 / 聚合 / 引用 / 冗余 | `{target_table}` | `{source_table}.{source_key} = {target_table}.{target_key}` | 1:1 / 1:N / N:M | `physical_fk` / `logical_relation` / `external_reference` | {cascade_or_retention} | {data_owner} | {cross_boundary_strategy} | {evidence_or_target} |
 
 物理外键、逻辑外键和跨服务引用必须区分。跨服务数据不得用共享写表代替 API、事件或同步契约。
 

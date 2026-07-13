@@ -4,9 +4,11 @@ import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { validSecondaryDetailedDesign } from './helpers/project-knowledge-fixtures.mjs';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const skillNames = manifest.skills.map((skill) => skill.name);
 
@@ -66,6 +68,26 @@ for (const requiredText of [
   'OSS-first',
 ]) {
   assert.match(developmentBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+}
+
+const technicalAndDatabaseDesign = await readFile(
+  path.join(repoRoot, development.path, 'references', 'technical-and-database-design.md'),
+  'utf8',
+);
+for (const requiredText of [
+  'Interface and Persistence Applicability Gate',
+  'interface_design_status',
+  'interface_coverage',
+  'persistence_design_status',
+  'relationship_model_status',
+  '请求字段',
+  '响应字段',
+  '错误码与异常映射',
+  'physical_fk',
+  'logical_relation',
+  '禁止使用 `BUSINESS_FLOW`',
+]) {
+  assert.match(technicalAndDatabaseDesign, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 
 const projectKnowledge = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge');
@@ -132,6 +154,10 @@ for (const requiredText of [
   '返回能力总览',
   '上一个二级能力',
   '下一个二级能力',
+  'interface_design_status',
+  'interface_coverage',
+  'persistence_design_status',
+  'relationship_model_status',
   '表结构设计',
   '数据表清单',
   '字段结构',
@@ -140,7 +166,13 @@ for (const requiredText of [
   '状态与字段映射',
   '数据迁移、兼容与回滚',
   '业务流与逻辑关系',
-  '接口到代码追踪',
+  '接口详细设计',
+  '请求字段',
+  '响应字段',
+  '错误码与异常映射',
+  '禁止使用 `BUSINESS_FLOW`',
+  'physical_fk',
+  'logical_relation',
   '代码对象与关系',
   '实体、表与对象关系',
   '实体-表-代码映射',
@@ -255,34 +287,35 @@ try {
   await writeFile(businessArchitecturePath, '# 业务架构\n\n[商户经营](business/capabilities/merchant_operations/detailed-design.md)\n', 'utf8');
   await writeFile(path.join(projectRoot, 'business', 'inventory.yaml'), [
     'level1_capabilities:',
-    '  - level1_capability_id: merchant_operations',
-    '    level1_capability_name: 商户经营',
-    '    secondary_capabilities:',
-    '      - secondary_capability_id: merchant_governance',
-    '        name: 入驻申请、审核与门店管理',
-    '        business_ids:',
-    '          - merchant_shop_governance',
-    '      - secondary_capability_id: catalog_inventory',
-    '        name: 分类、品牌、商品、SKU与库存',
-    '        business_ids:',
-    '          - product_catalog_inventory',
+    '- level1_capability_id: merchant_operations',
+    '  level1_capability_name: 商户经营',
+    '  secondary_capabilities:',
+    '  - secondary_capability_id: merchant_governance',
+    '    name: 入驻申请、审核与门店管理',
+    '    business_ids:',
+    '    - merchant_shop_governance',
+    '  - secondary_capability_id: catalog_inventory',
+    '    name: 分类、品牌、商品、SKU与库存',
+    '    business_ids:',
+    '    - product_catalog_inventory',
   ].join('\n'), 'utf8');
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
-    '# 商户经营详细设计\n\n## 二级能力完整性清单\n\n- [`merchant_governance`](business/capabilities/merchant_operations/secondary-capabilities/merchant_governance/detailed-design.md)：入驻申请、审核与门店管理\n- [`catalog_inventory`](business/capabilities/merchant_operations/secondary-capabilities/catalog_inventory/detailed-design.md)：分类、品牌、商品、SKU与库存\n',
+    '# 商户经营详细设计\n\n## 二级能力完整性清单\n\n- [`merchant_governance`](secondary-capabilities/merchant_governance/detailed-design.md)：入驻申请、审核与门店管理\n- [`catalog_inventory`](secondary-capabilities/catalog_inventory/detailed-design.md)：分类、品牌、商品、SKU与库存\n',
     'utf8',
   );
-  await writeFile(
-    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'secondary-capabilities', 'merchant_governance', 'detailed-design.md'),
-    '# 入驻与门店管理详细设计\n\n`secondary_capability_id`: `merchant_governance`\n',
-    'utf8',
+  const merchantSecondaryPath = path.join(
+    projectRoot,
+    'business',
+    'capabilities',
+    'merchant_operations',
+    'secondary-capabilities',
+    'merchant_governance',
+    'detailed-design.md',
   );
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
   const catalogSecondaryPath = path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'secondary-capabilities', 'catalog_inventory', 'detailed-design.md');
-  await writeFile(
-    catalogSecondaryPath,
-    '# 商品与库存详细设计\n\n`secondary_capability_id`: `catalog_inventory`\n',
-    'utf8',
-  );
+  await writeFile(catalogSecondaryPath, validSecondaryDetailedDesign('catalog_inventory'), 'utf8');
   await writeFile(path.join(projectRoot, 'gaps', 'doc-gap-report.md'), '# 文档缺口\n', 'utf8');
   const archiveRelativeRoot = path.join(
     'business',
@@ -355,6 +388,74 @@ try {
       'secondary_capability_detailed_design_merchant_operations_merchant_governance',
     ],
   );
+  await writeFile(
+    merchantSecondaryPath,
+    validSecondaryDetailedDesign('merchant_governance').replace('`POST /api/orders`', '现有入口集合'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010105Z-project-knowledge-generic-interface-e5f6a7b8',
+    ]),
+    /secondary capability detailed design uses generic interface placeholder: merchant_operations\/merchant_governance/,
+  );
+  await writeFile(
+    merchantSecondaryPath,
+    validSecondaryDetailedDesign('merchant_governance')
+      .replace('src/OrderController.java:10-20#create', 'OrderController#create')
+      .replace('src/OrderService.java:20-40#create', 'OrderService#create')
+      .replace('src/OrderMapper.java:8-12#insert', 'OrderMapper#insert')
+      .replace('test/OrderTest.java:10-30#createOrder', 'OrderTest#createOrder'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010105Z-project-knowledge-interface-anchors-e5f6a7b9',
+    ]),
+    /secondary capability interface design missing exact code anchors: merchant_operations\/merchant_governance/,
+  );
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
+  await writeFile(
+    catalogSecondaryPath,
+    validSecondaryDetailedDesign('catalog_inventory').replace(
+      'ORDER ||--o{ ORDER_ITEM : "order.id = order_item.order_id; logical_relation"',
+      'BUSINESS_FLOW ||--o{ ORDER : "writes"',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010106Z-project-knowledge-pseudo-er-f6a7b8c9',
+    ]),
+    /secondary capability detailed design uses non-entity ER placeholder: merchant_operations\/catalog_inventory/,
+  );
+  await writeFile(
+    catalogSecondaryPath,
+    validSecondaryDetailedDesign('catalog_inventory').replace(
+      'order.id = order_item.order_id; logical_relation',
+      'order_id',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010106Z-project-knowledge-er-contract-f6a7b8ca',
+    ]),
+    /secondary capability ER relationship missing join fields or relationship type: merchant_operations\/catalog_inventory/,
+  );
+  await writeFile(catalogSecondaryPath, validSecondaryDetailedDesign('catalog_inventory'), 'utf8');
   await rm(catalogSecondaryPath);
   await assert.rejects(
     execFileAsync(process.execPath, [
@@ -365,11 +466,7 @@ try {
     ]),
     /secondary capability detailed design missing: merchant_operations\/catalog_inventory/,
   );
-  await writeFile(
-    catalogSecondaryPath,
-    '# 商品与库存详细设计\n\n`secondary_capability_id`: `catalog_inventory`\n',
-    'utf8',
-  );
+  await writeFile(catalogSecondaryPath, validSecondaryDetailedDesign('catalog_inventory'), 'utf8');
   await writeFile(businessArchitecturePath, '# 业务架构\n', 'utf8');
   await assert.rejects(
     execFileAsync(process.execPath, [
@@ -383,7 +480,7 @@ try {
   await writeFile(businessArchitecturePath, '# 业务架构\n\n[商户经营](business/capabilities/merchant_operations/detailed-design.md)\n', 'utf8');
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
-    '# 商户经营详细设计\n\n## 二级能力完整性清单\n\n- [`merchant_governance`](business/capabilities/merchant_operations/secondary-capabilities/merchant_governance/detailed-design.md)：入驻申请、审核与门店管理\n',
+    '# 商户经营详细设计\n\n## 二级能力完整性清单\n\n- [`merchant_governance`](secondary-capabilities/merchant_governance/detailed-design.md)：入驻申请、审核与门店管理\n',
     'utf8',
   );
   await assert.rejects(

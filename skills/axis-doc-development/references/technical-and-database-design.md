@@ -44,6 +44,19 @@ Prefer implementation anchors over speculative class or method names. For implem
 
 For every material flow, include a readable flow diagram and one end-to-end row linking: business rule/state → API or entrypoint → controller/handler → service/use case → mapper/repository → entity/table → test. Include an ER-style relation diagram for persisted entities and a code-object relation diagram for the entrypoint-to-data path. Mark a missing hop as `missing_evidence`; do not infer it.
 
+## Interface and Persistence Applicability Gate
+
+Every secondary-capability detailed design records four machine-checkable states before expansion:
+
+- `interface_design_status=detailed|not_applicable`;
+- `interface_coverage=complete|partial|not_applicable`;
+- `persistence_design_status=detailed|not_applicable`;
+- `relationship_model_status=relational|single_table|not_applicable`.
+
+For `interface_design_status=detailed`, interface design is mandatory and includes a concrete HTTP path, event, job or command; 请求字段; 响应字段; 错误码与异常映射; authorization, idempotency and transaction behavior; and exact entry-to-test anchors. `interface_coverage=partial` requires a stable gap ID. Use `not_applicable` only with a reason and exact repository evidence.
+
+For `persistence_design_status=detailed`, a relationship model is mandatory. Multi-table designs render real inventory table names and join fields and classify each edge as `physical_fk`, `logical_relation` or `external_reference`. Single-table designs render the real table entity even without an edge. 禁止使用 `BUSINESS_FLOW`、`API`、`RESULT`、`TABLE`、`ENTITY_A` 或 `ENTITY_B` 作为 ER 实体。No-schema-change in the current revision does not remove the obligation to describe the current persisted model. Use persistence `not_applicable` only with a reason and exact repository evidence.
+
 ## Database Design as Part of Detailed Design
 
 Default to a data/database section inside the detailed design. Include:
