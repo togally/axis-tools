@@ -530,6 +530,21 @@ for (const requiredText of [
   );
 }
 assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /一级能力详细设计说明书/);
+assert.doesNotMatch(
+  businessCapabilityDetailedDesignTemplate,
+  /^##\s+\d+\.?\s+用户旅程覆盖契约\s*$/m,
+);
+for (const requiredHeading of [
+  '## 2. 二级能力完整性与导航',
+  '## 3. 用户业务操作全景',
+  '## 4. 跨二级能力用户旅程',
+  '## 5. 共享业务语义与一级治理',
+  '## 6. 缺口与覆盖说明',
+  '## 7. 文档完整性校验',
+  '## 8. 文档导航、证据索引与术语表',
+]) {
+  assert.match(businessCapabilityDetailedDesignTemplate, new RegExp(`^${requiredHeading}$`, 'm'));
+}
 
 const level1CapabilityDependencyGraphTemplate = await readFile(
   path.join(

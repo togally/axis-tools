@@ -198,6 +198,31 @@ def validate(skill_dir: Path) -> int:
         return fail("credential-like value or private network URL found")
 
     if skill_name == "axis-doc-project-knowledge":
+        level1_overview_template_path = (
+            skill_dir / "references" / "business-capability-detailed-design-template.md"
+        )
+        if not level1_overview_template_path.exists():
+            return fail("level-1 capability overview template not found")
+        level1_overview_template = level1_overview_template_path.read_text(
+            encoding="utf-8"
+        )
+        if re.search(
+            r"^##\s+\d+\.?\s+用户旅程覆盖契约\s*$",
+            level1_overview_template,
+            re.MULTILINE,
+        ):
+            return fail("reader-facing journey coverage contract section found")
+        for heading in [
+            "## 2. 二级能力完整性与导航",
+            "## 3. 用户业务操作全景",
+            "## 4. 跨二级能力用户旅程",
+            "## 5. 共享业务语义与一级治理",
+            "## 6. 缺口与覆盖说明",
+            "## 7. 文档完整性校验",
+            "## 8. 文档导航、证据索引与术语表",
+        ]:
+            if heading not in level1_overview_template:
+                return fail(f"level-1 capability overview missing heading: {heading}")
         dependency_template_path = (
             skill_dir / "references" / "level1-capability-dependency-graph-template.yaml"
         )

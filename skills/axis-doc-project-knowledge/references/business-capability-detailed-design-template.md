@@ -40,15 +40,7 @@
 
 本文件的历史版本进入 `_archive`。二级能力独立修订和存档；只有用户业务操作全景、一级边界、共享规则、跨能力协作或导航发生变化时才修订本文件。
 
-## 2. 用户旅程覆盖契约
-
-- `user_journey_design_status` 固定为 `detailed`，不得使用其他值；这表示全景表逐项记录已发现的用户业务操作，而不是只挑选代表接口。
-- `user_journey_coverage` 只能是 `complete` 或 `partial`。`complete` 表示该一级能力及其全部二级能力中，经证据扫描识别出的用户业务操作均已进入全景表；此时 `user_journey_gap_id=not_applicable`。
-- `partial` 必须填写稳定、非空的 `user_journey_gap_id`，并在“缺口与覆盖说明”及 `gaps/doc-gap-report.md` 中记录尚未列入全景表的操作、已检查范围、影响和补证动作。`partial` 只表示仍有未列旅程，不降低已列旅程的行内证据要求，也不允许某个已声明二级能力完全没有旅程行。
-- 页面、按钮或用户动作没有证据时，不得虚构前端入口；应按已证实的 API、事件、任务或命令语义描述，并将页面证据缺失纳入覆盖缺口。
-- 后台运营、商户、外部渠道和系统触发方都可以是“用户/角色”，但必须写清真实发起方及其与用户目标的关系。
-
-## 3. 二级能力完整性与导航
+## 2. 二级能力完整性与导航
 
 先从 inventory 读取完整 `secondary_capabilities`，再生成本表。不得遗漏任何二级能力。
 
@@ -64,7 +56,7 @@
 - 缺失证据的二级能力仍保留清单行和独立文档并标记，不得删除以制造完整假象；
 - Dashboard 以本表和规范路径构建可折叠父子导航。
 
-## 4. 用户业务操作全景
+## 3. 用户业务操作全景
 
 以下表头是一级能力文档的固定核心字段，不得重命名、删减或用一条“代表接口”替代同一模块的其他用户业务操作。`Controller/Handler` 与 `Service/UseCase` 两列的每个单元格都必须是精确的仓库相对 `path:begin-end#symbol` 锚点。
 
@@ -83,7 +75,7 @@
 - “二级能力详情”必须链接所属二级能力的规范路径；内部代码流、持久化细节和测试证据由该二级文档展开。
 - 每个一级 `journey_id` 必须在所属二级文档中以同值 `level1_journey_id` 出现，并绑定对应的 `flow_id` 和/或 `api_id`；二级也不得出现一级没有的旅程 ID。一级与二级旅程集合必须双向一致。一级为 `complete` 时，所属二级的 `interface_coverage` 也必须全部为 `complete`。
 
-## 5. 跨二级能力用户旅程
+## 4. 跨二级能力用户旅程
 
 仅当一个用户目标跨越多个二级能力时记录本节。一级文档说明业务接力和用户可见结果，内部编排、事件顺序、事务和补偿引用二级文档。
 
@@ -91,7 +83,7 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | {user_goal_or_scenario} | `{journey_ids}` | {secondary_capability_ids} | {handoff_summary} | {visible_result} | {secondary_document_links} | {evidence_ref} |
 
-## 6. 共享业务语义与一级治理
+## 5. 共享业务语义与一级治理
 
 | 共享对象/规则/状态 | 权威二级能力 | 使用方 | 一级统一语义 | 用户可见影响 | 二级能力详情 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -99,7 +91,7 @@
 
 只保留跨二级能力必须统一的业务语义、安全/隐私/审计边界、质量目标、发布兼容责任和运行度量摘要。局部规则及其实现细节放入所属二级能力文档。
 
-## 7. 缺口与覆盖说明
+## 6. 缺口与覆盖说明
 
 | `user_journey_gap_id` | 未覆盖用户业务操作/证据 | 所属二级能力 | 已检查范围 | 对用户全景的影响 | 所需证据/确认 | 责任角色 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -107,7 +99,7 @@
 
 当 `user_journey_coverage=complete` 时，本节明确写 `user_journey_gap_id=not_applicable` 及覆盖基线；不得用 `complete` 隐藏未扫描模块或未解释的入口。
 
-## 8. 文档完整性校验
+## 7. 文档完整性校验
 
 - `user_journey_design_status=detailed`，且 `user_journey_coverage` 只取 `complete|partial`；`partial` 具有稳定 `user_journey_gap_id`，`complete` 使用 `not_applicable`；
 - inventory 中该 `level1_capability_id` 只对应一个当前用户业务操作全景；
@@ -119,7 +111,7 @@
 - `dependency_graph_status`、`dependency_graph_revision` 和 `dependency_graph_gap_id` 与项目级图一致；pending 时上下游均为 `not_derived`，derived 时分别精确等于直接入边和直接出边；
 - 当前文件状态、revision、metadata、archive 和 `supersedes` 一致。
 
-## 9. 文档导航、证据索引与术语表
+## 8. 文档导航、证据索引与术语表
 
 - 返回业务架构：`architecture/business.md`；
 - 上一个能力：`{previous_capability_document_path}`；
