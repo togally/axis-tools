@@ -163,9 +163,9 @@ const capabilityTemplate = await readFile(
   'utf8',
 );
 for (const requiredText of [
-  '# {project_name} · {level1_capability_name} 用户业务操作全景',
+  '# {project_name} · {level1_capability_name} 一级能力接口详情设计',
   'level1_capability_id',
-  '用户业务操作全景',
+  '对外业务能力与接口实现',
   'user_journey_design_status',
   'user_journey_coverage',
   'user_journey_gap_id',
@@ -177,6 +177,11 @@ for (const requiredText of [
   'secondary_capabilities',
   'business_id',
   '二级能力完整性与导航',
+  '二级能力与接口实现逻辑',
+  '业务语义',
+  '表结构设计',
+  'table_design_status',
+  'erDiagram',
   '不得遗漏任何二级能力',
   '二级能力文档',
   '返回业务架构',
@@ -185,7 +190,28 @@ for (const requiredText of [
 ]) {
   assert.match(capabilityTemplate, new RegExp(requiredText));
 }
+for (const fixedTableDesignHeading of [
+  '### 5.1 表清单',
+  '### 5.2 ER 图',
+  '#### 5.2.1 ER 关系证据',
+  '### 5.3 `{physical_table_name}`',
+]) {
+  assert.ok(
+    capabilityTemplate.includes(fixedTableDesignHeading),
+    `missing fixed level-1 table-design heading: ${fixedTableDesignHeading}`,
+  );
+}
+assert.doesNotMatch(capabilityTemplate, /^###\s+5\.3\s+ER\s*关系证据\s*$/m);
+assert.doesNotMatch(capabilityTemplate, /^###\s+5\.3\s+`?\{physical_table_name\}`?\s+字段设计\s*$/m);
 assert.doesNotMatch(capabilityTemplate, /^##\s+\d+\.?\s+用户旅程覆盖契约\s*$/m);
+assert.doesNotMatch(
+  capabilityTemplate,
+  /^##\s+\d+\.?\s+(?:用户业务操作全景|跨二级能力用户旅程|共享业务语义与一级治理)\s*$/m,
+);
+assert.doesNotMatch(
+  capabilityTemplate,
+  /^\|\s*`journey_id`\s*\|\s*用户\/角色\s*\|\s*所属二级能力\/模块\s*\|/m,
+);
 
 const secondaryCapabilityTemplate = await readFile(
   path.join(repoRoot, projectKnowledge.path, 'references', 'secondary-capability-detailed-design-template.md'),
@@ -425,7 +451,7 @@ try {
       '--repo', capabilityRepo,
       '--run-id', '20260713T010100Z-project-knowledge-user-journey-a0b1c2d3',
     ]),
-    /level-1 capability detailed design missing user operation panorama: merchant_operations/,
+    /level-1 capability detailed design missing outward capability implementation: merchant_operations/,
   );
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
@@ -596,16 +622,16 @@ try {
   );
   await writeFile(capabilityDependencyGraphPath, validLevel1CapabilityDependencyGraph(), 'utf8');
   await writeFile(path.join(projectRoot, 'gaps', 'doc-gap-report.md'), '# 文档缺口\n', 'utf8');
-  const validLevel1WithRows = validLevel1CapabilityDetailedDesign('merchant_operations');
-  const merchantJourneyRow = validLevel1WithRows
+  const validLevel1WithOutwardCapabilities = validLevel1CapabilityDetailedDesign('merchant_operations');
+  const merchantJourneyRow = validLevel1WithOutwardCapabilities
     .split('\n')
-    .find((line) => line.startsWith('| `MERCHANT_GOVERNANCE_EXECUTE`'));
+    .find((line) => line === '| `journey_id` | `MERCHANT_GOVERNANCE_EXECUTE` |');
   assert.ok(merchantJourneyRow);
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
-    validLevel1WithRows.replace(
+    validLevel1WithOutwardCapabilities.replace(
       merchantJourneyRow,
-      `${merchantJourneyRow.replace('在业务页面', '在业务 | 页面')}\n${merchantJourneyRow}`,
+      '| `journey_id` |',
     ),
     'utf8',
   );
@@ -614,22 +640,22 @@ try {
       path.join(repoRoot, 'dist', 'cli.js'),
       'project-knowledge-capture',
       '--repo', capabilityRepo,
-      '--run-id', '20260713T010100Z-project-knowledge-malformed-level1-row-a0b1c2dc',
+      '--run-id', '20260713T010100Z-project-knowledge-missing-level1-summary-a0b1c2dc',
     ]),
-    /level-1 capability user journey table has malformed row: merchant_operations/,
+    /vertical table does not match fixed schema: merchant_operations\/3\.1\.1/,
   );
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations'),
     'utf8',
   );
-  const invalidSeparatorLines = validLevel1CapabilityDetailedDesign('merchant_operations').split('\n');
-  const journeyHeaderIndex = invalidSeparatorLines.findIndex((line) => line.includes('| `journey_id` |'));
-  assert.ok(journeyHeaderIndex >= 0);
-  invalidSeparatorLines[journeyHeaderIndex + 1] = merchantJourneyRow;
+  const level1WithoutGraphApi = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    'api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions',
+    'api_id: OMITTED_FROM_GRAPH · POST /api/merchant_governance/actions',
+  );
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
-    invalidSeparatorLines.join('\n'),
+    level1WithoutGraphApi,
     'utf8',
   );
   await assert.rejects(
@@ -637,14 +663,57 @@ try {
       path.join(repoRoot, 'dist', 'cli.js'),
       'project-knowledge-capture',
       '--repo', capabilityRepo,
-      '--run-id', '20260713T010100Z-project-knowledge-level1-separator-a0b1c2df',
+      '--run-id', '20260713T010100Z-project-knowledge-level1-graph-node-a0b1c2df',
     ]),
-    /level-1 capability user journey table has malformed separator: merchant_operations/,
+    /level-1 outward capability diagram must place api_id and interface on one edge: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE\/merchant_governance_execute_step/,
+  );
+  const level1WithApiAndInterfaceNodes = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1["secondary_capability_id: merchant_governance"]',
+    [
+      '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] --> A["api_id: MERCHANT_GOVERNANCE_EXECUTE"]',
+      '    A --> I["POST /api/merchant_governance/actions"]',
+      '    I --> S1["secondary_capability_id: merchant_governance"]',
+    ].join('\n'),
+  );
+  assert.doesNotMatch(
+    level1WithApiAndInterfaceNodes,
+    /--\>\|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST \/api\/merchant_governance\/actions"\|/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    level1WithApiAndInterfaceNodes,
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-api-interface-nodes-a0b1c2ed',
+    ]),
+    /level-1 outward capability diagram uses api_id or interface as a node: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE\/merchant_governance_execute_step/,
   );
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations'),
     'utf8',
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '#### 3.1.2 二级能力与接口实现逻辑',
+      '#### 3.1.2 跨二级能力用户旅程',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-subsection-title-a0b1c2ee',
+    ]),
+    /level-1 outward capability has invalid fixed subsection structure: merchant_operations\/1/,
   );
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
@@ -690,8 +759,8 @@ try {
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations')
       .replace(
-        '| 入驻申请、审核与门店管理 | 完成入驻申请、审核与门店管理 |',
-        '| 入驻申请、审核与门店管理 | 完成入驻申请\\|审核与门店管理 |',
+        '| 提供的业务 | 入驻申请、审核与门店管理 |',
+        '| 提供的业务 | 入驻申请\\|审核与门店管理 |',
       ),
     'utf8',
   );
@@ -877,7 +946,7 @@ try {
   await writeFile(
     merchantSecondaryPath,
     validSecondaryDetailedDesign('merchant_governance')
-      .replace('| `api_id` | `ORDER_CREATE` |', '| `api_id` | `missing_evidence` |'),
+      .replace('| `api_id` | `MERCHANT_GOVERNANCE_EXECUTE` |', '| `api_id` | `missing_evidence` |'),
     'utf8',
   );
   await assert.rejects(
@@ -912,7 +981,7 @@ try {
       '--repo', capabilityRepo,
       '--run-id', '20260713T010100Z-project-knowledge-unlisted-child-journey-a0b1c2e2',
     ]),
-    /secondary capability detailed design contains journey_id absent from level-1 panorama: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_QUERY/,
+    /secondary capability detailed design contains journey_id absent from level-1 outward capabilities: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_QUERY/,
   );
   await writeFile(
     merchantSecondaryPath,
@@ -961,6 +1030,689 @@ try {
     ]),
     /level-1 capability detailed design requires one user journey control line: merchant_operations/,
   );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      /## 5\. 表结构设计[\s\S]*?(?=## 6\. 缺口与覆盖说明)/,
+      '',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-table-design-a0b1c2e7',
+    ]),
+    /level-1 capability detailed design missing fixed section 5\. 表结构设计: merchant_operations/,
+  );
+  const validLevel1WithEr = validLevel1CapabilityDetailedDesign('merchant_operations');
+  const level1ErDiagram = validLevel1WithEr.match(/```mermaid\nerDiagram[\s\S]*?```/)?.[0];
+  assert.ok(level1ErDiagram);
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1WithEr.replace(
+      level1ErDiagram,
+      level1ErDiagram.replaceAll('catalog_inventory_record', 'catalog_inventory_omitted'),
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-coverage-a0b1c2e8',
+    ]),
+    /level-1 capability ER diagram omits table: merchant_operations\/catalog_inventory_record/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      /### 5\.4 `catalog_inventory_record`[\s\S]*?(?=## 6\. 缺口与覆盖说明)/,
+      '',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-table-fields-a0b1c2e9',
+    ]),
+    /level-1 capability table inventory and field structures differ: merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '#### 5.2.1 ER 关系证据',
+      '### 5.3 ER 关系证据',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-subsection-a0b1c2ea',
+    ]),
+    /level-1 capability table design has invalid fixed subsection structure: merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '### 5.3 `merchant_governance_record`',
+      '### 5.3 `merchant_governance_record` 字段设计',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-table-title-a0b1c2eb',
+    ]),
+    /level-1 capability table field section title mismatches physical table: merchant_operations\/merchant_governance_record/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '### 5.4 `catalog_inventory_record`',
+      '### 5.5 `catalog_inventory_record`',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-table-numbering-a0b1c2ec',
+    ]),
+    /level-1 capability table design has invalid fixed subsection structure: merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '| 读写 `table_id` | `merchant_governance_record` |',
+      '| 读写 `table_id` | `merchant_governance_record`, `merchant_governance_audit` |',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-step-table-set-a0b1c2f0',
+    ]),
+    /level-1 capability step table_id set and table inventory differ: merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      'merchant_governance_record.id -> catalog_inventory_record.parent_record_id',
+      'merchant_governance_record.id -> catalog_inventory_record.missing_parent_id',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-key-a0b1c2f1',
+    ]),
+    /level-1 capability ER relationship key mismatches fields: merchant_operations\/relation_merchant_governance_to_catalog_inventory/,
+  );
+  const notApplicableTableDesign = [
+    '## 5. 表结构设计',
+    '',
+    '> 表结构设计完整性：`table_design_status=not_applicable` · `table_design_coverage=not_applicable` · `table_design_gap_id=not_applicable`',
+    '',
+    '### 5.1 不适用说明',
+    '',
+    '| 项目 | 内容 |',
+    '| --- | --- |',
+    '| `table_design_status` | `not_applicable` |',
+    '| 原因 | 当前能力仅编排外部服务，不产生本地持久化数据 |',
+    '| 证据 | `src/merchant_governance/CapabilityService.java:20-40#execute` |',
+    '',
+  ].join('\n');
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      /## 5\. 表结构设计[\s\S]*?(?=## 6\. 缺口与覆盖说明)/,
+      `${notApplicableTableDesign}\n`,
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-table-not-applicable-a0b1c2f2',
+    ]),
+    /level-1 capability table design not_applicable conflicts with persisted table trace: merchant_operations/,
+  );
+  const singleSecondaryCapabilities = [
+    { id: 'merchant_governance', name: '入驻申请、审核与门店管理' },
+  ];
+  await writeFile(path.join(projectRoot, 'business', 'inventory.yaml'), [
+    'level1_capabilities:',
+    '- level1_capability_id: merchant_operations',
+    '  level1_capability_name: 商户经营',
+    '  secondary_capabilities:',
+    '  - secondary_capability_id: merchant_governance',
+    '    name: 入驻申请、审核与门店管理',
+    '    business_ids:',
+    '    - merchant_shop_governance',
+  ].join('\n'), 'utf8');
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations', singleSecondaryCapabilities).replace(
+      'ER 关系证据：not_applicable（单表，无需跨表关系）',
+      '当前只有一张表。',
+    ),
+    'utf8',
+  );
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-single-table-er-a0b1c2f3',
+    ]),
+    /level-1 capability single-table design must declare ER relationship not_applicable: merchant_operations/,
+  );
+  await writeFile(path.join(projectRoot, 'business', 'inventory.yaml'), [
+    'level1_capabilities:',
+    '- level1_capability_id: merchant_operations',
+    '  level1_capability_name: 商户经营',
+    '  secondary_capabilities:',
+    '  - secondary_capability_id: merchant_governance',
+    '    name: 入驻申请、审核与门店管理',
+    '    business_ids:',
+    '    - merchant_shop_governance',
+    '  - secondary_capability_id: catalog_inventory',
+    '    name: 分类、品牌、商品、SKU与库存',
+    '    business_ids:',
+    '    - product_catalog_inventory',
+  ].join('\n'), 'utf8');
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '## 3. 对外业务能力与接口实现',
+      '## 3. 用户业务操作全景',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-legacy-flat-a0b1c2ea',
+    ]),
+    /level-1 capability detailed design uses a legacy flat or separate cross-capability section: merchant_operations/,
+  );
+  const merchantLevel1DetailedDesignPath = path.join(
+    projectRoot,
+    'business',
+    'capabilities',
+    'merchant_operations',
+    'detailed-design.md',
+  );
+  const legacyHorizontalJourneyTable = [
+    '| `journey_id` | 用户/角色 | 所属二级能力/模块 | 接口/入口 | 用户可见结果 |',
+    '| --- | --- | --- | --- | --- |',
+    '| `LEGACY_MERCHANT_FLOW` | 商户 | `merchant_governance` | `POST /api/merchant_governance/actions` | 返回审核结果 |',
+    '',
+  ].join('\n');
+  await writeFile(
+    merchantLevel1DetailedDesignPath,
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      '## 3. 对外业务能力与接口实现\n',
+      `## 3. 对外业务能力与接口实现\n\n${legacyHorizontalJourneyTable}`,
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-legacy-horizontal-a0b1c2f4',
+    ]),
+    /level-1 outward capability section contains a legacy flat list: merchant_operations/,
+  );
+
+  const disconnectedCrossSecondaryGraph = validLevel1CapabilityDetailedDesign(
+    'merchant_operations',
+    undefined,
+    {},
+    { crossSecondary: true },
+  ).replace(
+    '    S1 -->|"api_id: CATALOG_INVENTORY_EXECUTE · POST /api/catalog_inventory/actions"| S2["secondary_capability_id: catalog_inventory"]',
+    '    S1_ALIAS["secondary_capability_id: merchant_governance"] -->|"api_id: CATALOG_INVENTORY_EXECUTE · POST /api/catalog_inventory/actions"| S2["secondary_capability_id: catalog_inventory"]',
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, disconnectedCrossSecondaryGraph, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-disconnected-cross-secondary-a0b1c2f5',
+    ]),
+    /level-1 outward capability diagram step order or secondary nodes mismatch: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE\/merchant_governance_to_catalog_inventory_execute_step/,
+  );
+
+  const level1GraphWithoutUserStart = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    'U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"]',
+    'U["内部调度器发起处理"]',
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1GraphWithoutUserStart, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-missing-user-start-a0b1c2f6',
+    ]),
+    /level-1 outward capability diagram step order or secondary nodes mismatch: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE\/merchant_governance_execute_step/,
+  );
+
+  const level1GraphWithoutVisibleResult = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    'S1 --> R["返回业务编号和当前状态"]',
+    'S1 --> R["内部处理结束"]',
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1GraphWithoutVisibleResult, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-missing-visible-result-a0b1c2f7',
+    ]),
+    /level-1 outward capability diagram does not end at the user-visible result: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE/,
+  );
+
+  const level1GraphWithDisconnectedBranch = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    '    S1 --> R["返回业务编号和当前状态"]',
+    [
+      '    S1 --> R["返回业务编号和当前状态"]',
+      '    X["旁路开始"] --> Y["旁路结束"]',
+    ].join('\n'),
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1GraphWithDisconnectedBranch, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-disconnected-branch-a0b1c2ff',
+    ]),
+    /level-1 outward capability diagram contains a disconnected branch: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE/,
+  );
+
+  const commentOnlyErDiagram = [
+    '```mermaid',
+    'erDiagram',
+    '    %% merchant_governance_record {',
+    '    %%     BIGINT id PK',
+    '    %% }',
+    '    %% catalog_inventory_record {',
+    '    %%     BIGINT id PK',
+    '    %% }',
+    '    %% merchant_governance_record ||--o{ catalog_inventory_record : "业务协作"',
+    '```',
+  ].join('\n');
+  await writeFile(
+    merchantLevel1DetailedDesignPath,
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      /```mermaid\nerDiagram[\s\S]*?```/,
+      commentOnlyErDiagram,
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-comment-forgery-a0b1c2f8',
+    ]),
+    /level-1 capability ER diagram omits table: merchant_operations\/merchant_governance_record/,
+  );
+
+  await writeFile(
+    merchantLevel1DetailedDesignPath,
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      'merchant_governance_record ||--o{ catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+      'merchant_governance_record ||--|| catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-cardinality-a0b1c2f9',
+    ]),
+    /level-1 capability ER diagram omits evidenced relationship: merchant_operations\/relation_merchant_governance_to_catalog_inventory/,
+  );
+
+  const level1ErWithGhostEntity = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    '    merchant_governance_record ||--o{ catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+    [
+      '    ghost_audit_record {',
+      '        BIGINT id PK',
+      '    }',
+      '    merchant_governance_record ||--o{ catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+    ].join('\n'),
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1ErWithGhostEntity, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-ghost-entity-a0b1c300',
+    ]),
+    /level-1 capability ER diagram contains an entity absent from table inventory: merchant_operations/,
+  );
+
+  const level1ErWithUnevidencedRelationship = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    '    merchant_governance_record ||--o{ catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+    [
+      '    merchant_governance_record ||--o{ catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+      '    catalog_inventory_record ||--|| merchant_governance_record : "额外镜像关系"',
+    ].join('\n'),
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1ErWithUnevidencedRelationship, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-unevidenced-relation-a0b1c301',
+    ]),
+    /level-1 capability ER diagram contains an unevidenced relationship: merchant_operations/,
+  );
+
+  const level1ErWithMismatchedRelationshipSemantics = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    'catalog_inventory_record : "分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链"',
+    'catalog_inventory_record : "仅用于展示的错误关系语义"',
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1ErWithMismatchedRelationshipSemantics, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-er-semantics-a0b1c302',
+    ]),
+    /level-1 capability ER diagram omits evidenced relationship: merchant_operations\/relation_merchant_governance_to_catalog_inventory/,
+  );
+
+  const level1WithReversedFieldSections = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+    /(### 5\.3 `merchant_governance_record`[\s\S]*?)(### 5\.4 `catalog_inventory_record`[\s\S]*?)(?=## 6\. 缺口与覆盖说明)/,
+    (_matched, merchantFieldSection, catalogFieldSection) => (
+      `${catalogFieldSection.replace('### 5.4', '### 5.3')}${merchantFieldSection.replace('### 5.3', '### 5.4')}`
+    ),
+  );
+  assert.notEqual(
+    level1WithReversedFieldSections,
+    validLevel1CapabilityDetailedDesign('merchant_operations'),
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, level1WithReversedFieldSections, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-reversed-field-order-a0b1c303',
+    ]),
+    /level-1 capability table field sections do not follow inventory order: merchant_operations\/catalog_inventory_record/,
+  );
+
+  const validSemanticsDocument = validLevel1CapabilityDetailedDesign('merchant_operations');
+  const merchantStatusTermRow = validSemanticsDocument
+    .split('\n')
+    .find((line) => line.startsWith('| 入驻申请、审核与门店管理处理状态 |'));
+  assert.ok(merchantStatusTermRow);
+  await writeFile(
+    merchantLevel1DetailedDesignPath,
+    validSemanticsDocument.replace(merchantStatusTermRow, `${merchantStatusTermRow}\n${merchantStatusTermRow}`),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-duplicate-term-a0b1c2fa',
+    ]),
+    /level-1 capability business semantics has generic term: merchant_operations/,
+  );
+
+  const extraGovernanceTable = [
+    '| 治理对象 | 治理规则 |',
+    '| --- | --- |',
+    '| 接口发布 | 统一审批 |',
+    '',
+  ].join('\n');
+  await writeFile(
+    merchantLevel1DetailedDesignPath,
+    validSemanticsDocument.replace(
+      '## 5. 表结构设计',
+      `${extraGovernanceTable}## 5. 表结构设计`,
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-extra-governance-table-a0b1c2fb',
+    ]),
+    /level-1 capability business semantics missing terminology rows: merchant_operations/,
+  );
+
+  await writeFile(
+    merchantLevel1DetailedDesignPath,
+    validSemanticsDocument.replace(
+      '## 5. 表结构设计',
+      '### 4.1 一级治理\n\n接口发布统一经过审批。\n\n## 5. 表结构设计',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-governance-subsection-a0b1c2fc',
+    ]),
+    /level-1 capability business semantics contains a governance subsection: merchant_operations/,
+  );
+
+  const pureChineseDataSummaryDocument = validLevel1CapabilityDetailedDesign('merchant_operations')
+    .replace('读取当前用户与 `merchant_governance_record` 状态', '读取当前会员的实名状态与门店审核进度')
+    .replace('写入 `merchant_governance_record` 并记录处理状态', '保存门店审核结论并更新入驻进度')
+    .replace('读取当前用户与 `catalog_inventory_record` 状态', '读取当前商户的商品分类与库存状态')
+    .replace('写入 `catalog_inventory_record` 并记录处理状态', '保存商品信息并更新可售库存');
+  await writeFile(merchantLevel1DetailedDesignPath, pureChineseDataSummaryDocument, 'utf8');
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
+  await writeFile(catalogSecondaryPath, validSecondaryDetailedDesign('catalog_inventory'), 'utf8');
+  const { stdout: pureChineseDataSummaryStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010100Z-project-knowledge-level1-chinese-data-summary-a0b1c2fd',
+  ]);
+  assert.equal(JSON.parse(pureChineseDataSummaryStdout).ok, true);
+
+  const shortBusinessObjectSummaryDocument = validLevel1CapabilityDetailedDesign('merchant_operations')
+    .replace('读取当前用户与 `merchant_governance_record` 状态', '订单')
+    .replace('读取当前用户与 `catalog_inventory_record` 状态', '库存');
+  await writeFile(merchantLevel1DetailedDesignPath, shortBusinessObjectSummaryDocument, 'utf8');
+  const { stdout: shortBusinessObjectSummaryStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010100Z-project-knowledge-level1-short-data-summary-a0b1c304',
+  ]);
+  assert.equal(JSON.parse(shortBusinessObjectSummaryStdout).ok, true);
+
+  const repeatedApiBaseDocument = validLevel1CapabilityDetailedDesign('merchant_operations');
+  const repeatedApiOriginalStep = repeatedApiBaseDocument
+    .match(/##### 步骤 1 · 入驻申请、审核与门店管理[\s\S]*?(?=### 3\.2)/)?.[0]
+    ?.trimEnd();
+  assert.ok(repeatedApiOriginalStep);
+  const repeatedApiSecondStep = repeatedApiOriginalStep
+    .replace(
+      '##### 步骤 1 · 入驻申请、审核与门店管理',
+      '##### 步骤 2 · 再次执行入驻申请、审核与门店管理',
+    )
+    .replace(
+      '| `step_id` | `merchant_governance_execute_step` |',
+      '| `step_id` | `merchant_governance_repeat_execute_step` |',
+    );
+  const repeatedApiOriginalGraph = [
+    '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1["secondary_capability_id: merchant_governance"]',
+    '    S1 --> R["返回业务编号和当前状态"]',
+  ].join('\n');
+  const repeatedApiSequentialGraph = [
+    '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1["secondary_capability_id: merchant_governance"]',
+    '    S1 -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S2["secondary_capability_id: merchant_governance"]',
+    '    S2 --> R["返回业务编号和当前状态"]',
+  ].join('\n');
+  const repeatedApiJourneyDocument = repeatedApiBaseDocument
+    .replace(repeatedApiOriginalGraph, repeatedApiSequentialGraph)
+    .replace(
+      repeatedApiOriginalStep,
+      `${repeatedApiOriginalStep}\n\n${repeatedApiSecondStep}`,
+    );
+  assert.match(repeatedApiJourneyDocument, /merchant_governance_repeat_execute_step/);
+  assert.equal(
+    repeatedApiJourneyDocument.match(/api_id: MERCHANT_GOVERNANCE_EXECUTE · POST \/api\/merchant_governance\/actions/g)?.length,
+    2,
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, repeatedApiJourneyDocument, 'utf8');
+  const { stdout: repeatedApiJourneyStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010100Z-project-knowledge-level1-repeated-api-edges-a0b1c305',
+  ]);
+  assert.equal(JSON.parse(repeatedApiJourneyStdout).ok, true);
+
+  const firstRelationshipSemantics = '分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链';
+  const secondRelationshipSemantics = '分类库存记录通过复核字段关联同一条上游审核记录';
+  const firstRelationshipEvidenceRow = '| `relation_merchant_governance_to_catalog_inventory` | `merchant_governance_record` | `1:N` | `catalog_inventory_record` | `merchant_governance_record.id -> catalog_inventory_record.parent_record_id` | 分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链 | `db/catalog_inventory/catalog_inventory_record.sql:3-3#parentRecordId` |';
+  const secondRelationshipEvidenceRow = '| `relation_merchant_governance_to_catalog_review` | `merchant_governance_record` | `1:N` | `catalog_inventory_record` | `merchant_governance_record.id -> catalog_inventory_record.review_record_id` | 分类库存记录通过复核字段关联同一条上游审核记录 | `db/catalog_inventory/catalog_inventory_record.sql:4-4#reviewRecordId` |';
+  const catalogParentFieldRow = '| `parent_record_id` | `BIGINT` | 否 | 无 | FK -> `merchant_governance_record.id` | 关联同一业务协作链的上游记录 | `CATALOG_INVENTORY_EXECUTE` | `db/catalog_inventory/catalog_inventory_record.sql:3-3#parentRecordId` |';
+  const catalogReviewFieldRow = '| `review_record_id` | `BIGINT` | 否 | 无 | FK -> `merchant_governance_record.id` | 关联同一业务协作链的上游复核记录 | `CATALOG_INVENTORY_EXECUTE` | `db/catalog_inventory/catalog_inventory_record.sql:4-4#reviewRecordId` |';
+  const reverseOrderedMultiRelationshipDocument = validLevel1CapabilityDetailedDesign('merchant_operations')
+    .replace(
+      '        BIGINT parent_record_id FK',
+      '        BIGINT parent_record_id FK\n        BIGINT review_record_id FK',
+    )
+    .replace(
+      `    merchant_governance_record ||--o{ catalog_inventory_record : "${firstRelationshipSemantics}"`,
+      [
+        `    merchant_governance_record ||--o{ catalog_inventory_record : "${secondRelationshipSemantics}"`,
+        `    merchant_governance_record ||--o{ catalog_inventory_record : "${firstRelationshipSemantics}"`,
+      ].join('\n'),
+    )
+    .replace(
+      firstRelationshipEvidenceRow,
+      `${firstRelationshipEvidenceRow}\n${secondRelationshipEvidenceRow}`,
+    )
+    .replace(
+      catalogParentFieldRow,
+      `${catalogParentFieldRow}\n${catalogReviewFieldRow}`,
+    );
+  assert.match(reverseOrderedMultiRelationshipDocument, /review_record_id/);
+  assert.ok(
+    reverseOrderedMultiRelationshipDocument.indexOf(`: "${secondRelationshipSemantics}"`)
+      < reverseOrderedMultiRelationshipDocument.indexOf(`: "${firstRelationshipSemantics}"`),
+  );
+  assert.ok(
+    reverseOrderedMultiRelationshipDocument.indexOf(firstRelationshipEvidenceRow)
+      < reverseOrderedMultiRelationshipDocument.indexOf(secondRelationshipEvidenceRow),
+  );
+  await writeFile(merchantLevel1DetailedDesignPath, reverseOrderedMultiRelationshipDocument, 'utf8');
+  const { stdout: reverseOrderedMultiRelationshipStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010100Z-project-knowledge-level1-reverse-er-evidence-a0b1c306',
+  ]);
+  assert.equal(JSON.parse(reverseOrderedMultiRelationshipStdout).ok, true);
+
+  const merchantWithMismatchedParentApi = validSecondaryDetailedDesign('merchant_governance')
+    .replace(
+      '| Web 管理端用户 | `authenticated + order:create` | `MERCHANT_GOVERNANCE_EXECUTE` |',
+      '| Web 管理端用户 | `authenticated + order:create` | `MERCHANT_GOVERNANCE_ALTERNATE` |',
+    )
+    .replace(
+      '| `api_id` | `MERCHANT_GOVERNANCE_EXECUTE` |',
+      '| `api_id` | `MERCHANT_GOVERNANCE_ALTERNATE` |',
+    );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations'),
+    'utf8',
+  );
+  await writeFile(merchantSecondaryPath, merchantWithMismatchedParentApi, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-api-binding-a0b1c2eb',
+    ]),
+    /secondary capability detailed design mismatches level-1 journey trace: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_EXECUTE/,
+  );
+  const merchantWithMismatchedParentTable = validSecondaryDetailedDesign('merchant_governance')
+    .replace('table_id=merchant_governance_record', 'table_id=merchant_governance_shadow');
+  await writeFile(merchantSecondaryPath, merchantWithMismatchedParentTable, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-table-binding-a0b1c2ef',
+    ]),
+    /secondary capability detailed design mismatches level-1 journey trace: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_EXECUTE/,
+  );
+  const merchantWithMismatchedPhysicalTable = validSecondaryDetailedDesign('merchant_governance')
+    .replace(
+      '物理表 `merchant_governance_record`',
+      '物理表 `merchant_governance_shadow`',
+    );
+  assert.match(merchantWithMismatchedPhysicalTable, /table_id=merchant_governance_record/);
+  await writeFile(merchantSecondaryPath, merchantWithMismatchedPhysicalTable, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-physical-table-binding-a0b1c2fe',
+    ]),
+    /secondary capability detailed design mismatches level-1 journey trace: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_EXECUTE/,
+  );
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations')
@@ -1097,8 +1849,40 @@ try {
     /secondary capability interface design must group each interface: merchant_operations\/merchant_governance/,
   );
 
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {}, { includeQueries: true }),
+    'utf8',
+  );
   const validGroupedMerchantSecondary = validGroupedSecondaryDetailedDesign('merchant_governance');
   const validGroupedCatalogSecondary = validGroupedSecondaryDetailedDesign('catalog_inventory');
+  const merchantWithMismatchedQueryApi = validGroupedMerchantSecondary
+    .replaceAll('`ORDER_QUERY`', '`ORDER_QUERY_ALTERNATE`');
+  await writeFile(merchantSecondaryPath, merchantWithMismatchedQueryApi, 'utf8');
+  await writeFile(catalogSecondaryPath, validGroupedCatalogSecondary, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010107Z-project-knowledge-query-api-binding-f7a8b9cf',
+    ]),
+    /secondary capability detailed design mismatches level-1 journey trace: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_QUERY/,
+  );
+  const merchantWithExtraExecuteBinding = validGroupedMerchantSecondary.replace(
+    '| `level1_journey_id` | `MERCHANT_GOVERNANCE_QUERY` |',
+    '| `level1_journey_id` | `MERCHANT_GOVERNANCE_EXECUTE`, `MERCHANT_GOVERNANCE_QUERY` |',
+  );
+  await writeFile(merchantSecondaryPath, merchantWithExtraExecuteBinding, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010107Z-project-knowledge-extra-query-binding-f7a8b9ce',
+    ]),
+    /secondary capability detailed design contains interface binding absent from level-1 outward capability: merchant_operations\/merchant_governance\/MERCHANT_GOVERNANCE_EXECUTE\/ORDER_QUERY/,
+  );
   const merchantWithoutSecondRequest = validGroupedMerchantSecondary.replace(
     /#### 5\.2\.3 请求字段[\s\S]*?(?=#### 5\.2\.4 响应字段)/,
     '',
@@ -1394,7 +2178,7 @@ try {
   );
   assert.match(
     merchantWithGenericSubject,
-    /\| Web 管理端用户 \| `authenticated \+ order:create` \| `ORDER_CREATE` \|/,
+    /\| Web 管理端用户 \| `authenticated \+ order:create` \| `MERCHANT_GOVERNANCE_EXECUTE` \|/,
   );
   await writeFile(merchantSecondaryPath, merchantWithGenericSubject, 'utf8');
   await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
@@ -1418,7 +2202,7 @@ try {
   );
   assert.match(
     merchantWithGenericDataScope,
-    /\| `ORDER_CREATE` \| `POST \/api\/merchant_governance\/actions` \| 当前组织内可创建的订单 \|/,
+    /\| `MERCHANT_GOVERNANCE_EXECUTE` \| `POST \/api\/merchant_governance\/actions` \| 当前组织内可创建的订单 \|/,
   );
   await writeFile(merchantSecondaryPath, merchantWithGenericDataScope, 'utf8');
   await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
@@ -1442,7 +2226,7 @@ try {
   );
   assert.match(
     merchantWithGenericPermission,
-    /\| Web 管理端用户 \| `authenticated \+ order:create` \| `ORDER_CREATE` \|/,
+    /\| Web 管理端用户 \| `authenticated \+ order:create` \| `MERCHANT_GOVERNANCE_EXECUTE` \|/,
   );
   await writeFile(merchantSecondaryPath, merchantWithGenericPermission, 'utf8');
   await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
@@ -1673,6 +2457,28 @@ try {
 
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {}, { crossSecondary: true }),
+    'utf8',
+  );
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
+  await writeFile(
+    catalogSecondaryPath,
+    validSecondaryDetailedDesign('catalog_inventory').replace(
+      '| `level1_journey_id` | `CATALOG_INVENTORY_EXECUTE` |',
+      '| `level1_journey_id` | `MERCHANT_GOVERNANCE_EXECUTE`, `CATALOG_INVENTORY_EXECUTE` |',
+    ),
+    'utf8',
+  );
+  const { stdout: crossSecondaryStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010117Z-project-knowledge-cross-secondary-f7a8b9cd',
+  ]);
+  assert.equal(JSON.parse(crossSecondaryStdout).ok, true);
+
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations', [
       { id: 'merchant_governance', name: '入驻申请、审核与门店管理' },
     ]),
@@ -1721,6 +2527,8 @@ try {
     '    business_ids:',
     '    - customer_support_operations',
   ].join('\n'), 'utf8');
+  await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
+  await writeFile(catalogSecondaryPath, validSecondaryDetailedDesign('catalog_inventory'), 'utf8');
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {
@@ -1757,7 +2565,7 @@ try {
     upstream: 'merchant_operations',
     downstream: 'customer_support',
     journeyId: 'MERCHANT_GOVERNANCE_EXECUTE',
-    apiId: 'ORDER_CREATE',
+    apiId: 'MERCHANT_GOVERNANCE_EXECUTE',
     evidenceRef: 'src/merchant_governance/CapabilityService.java:20-40#execute',
   }]);
   await writeFile(capabilityDependencyGraphPath, twoCapabilityGraph, 'utf8');
@@ -1771,7 +2579,10 @@ try {
 
   await writeFile(
     capabilityDependencyGraphPath,
-    twoCapabilityGraph.replace('      - ORDER_CREATE', '      - FAKE_API'),
+    twoCapabilityGraph.replace(
+      '    api_ids:\n      - MERCHANT_GOVERNANCE_EXECUTE',
+      '    api_ids:\n      - FAKE_API',
+    ),
     'utf8',
   );
   await assert.rejects(

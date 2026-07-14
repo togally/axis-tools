@@ -15,7 +15,9 @@
 
 > **可追溯性约定**：已实现事实必须从业务流追溯至接口、代码对象、实体/表和测试；代码证据统一写为“`文件路径:起始行-结束行#符号`”。待开发设计写明“目标设计”，无法从仓库证实的内容写“缺失证据”，不得用类名或推测代替定位。
 
-> **一级旅程同 ID 契约**：一级用户业务操作全景中的每个 `journey_id` 必须在所属二级文档中以完全相同的 `level1_journey_id` 出现，并绑定承接该操作的 `flow_id` 和/或 `api_id`；本文件也不得增加一级没有的旅程 ID。两层旅程集合双向一致，且一级为 `complete` 时本文件必须为 `interface_coverage=complete`。一级只保留 Controller/Handler、Service/UseCase、数据结果和用户可见结果摘要；本文件负责按接口展开完整内部代码流、数据读写和测试追溯。
+> **一级旅程同 ID 契约**：一级“对外业务能力与接口实现”中一个 `journey_id` 可以参与多个二级能力。只要该一级 `3.N` 的“参与二级能力”或实现步骤包含本能力，本文件就必须以完全相同的 `level1_journey_id` 出现，并绑定本能力承接的 `flow_id` 和/或 `api_id`；本文件也不得增加一级没有或未将本能力列为参与者的旅程 ID。一级为 `complete` 时本文件必须为 `interface_coverage=complete`。一级保留跨二级逻辑、Controller/Handler、Service/UseCase、数据结果、用户可见结果和全局表/ER 设计；本文件负责按接口展开完整内部代码流、局部数据读写和测试追溯。
+
+> **表追溯契约**：每个持久化读写都必须在对应 `5.N.1` 和 `5.N.2` 中记录实际 Mapper/Repository、实体/物理表、一级表结构设计中同值的 parent `table_id`、键、数据变化和约束。每个 `5.N.1` 的“实体/表”实现追溯行固定包含 `table_id={parent_table_ids_or_not_applicable}`；只有精确证据证明该接口完全不读写持久化数据时才可使用 `not_applicable`。本文件不复制一级完整表清单、ER 和字段字典。
 
 ## 1. 能力定位与边界
 
@@ -78,12 +80,14 @@ HTTP 接口、事件/主题、定时任务和内部命令均是可追溯契约�
 | Controller/入口 | `{controller_file_line_symbol}` | {entry_responsibility} |
 | Service/用例 | `{service_file_line_symbol}` | {use_case_responsibility} |
 | Mapper/Repository | `{mapper_file_line_symbol}` | {persistence_responsibility} |
-| 实体/表 | `{entity_file_line_symbol}`；表 `{table_name}` | {entity_table_responsibility} |
+| 实体/表 | `{entity_file_line_symbol_or_not_applicable_evidence}`；`table_id={parent_table_ids_or_not_applicable}`；物理表 `{physical_table_names_or_not_applicable}` | {entity_table_responsibility_or_no_persistence_reason} |
 | 测试 | `{test_file_line_symbol}` | {test_responsibility} |
+
+“实体/表”行中的每个非 `not_applicable` parent `table_id` 必须与一级第 3 章对应步骤“读写 `table_id`”和一级第 5 章表清单同值，物理表名也必须一致。接口读写多张表时全部列出；只有精确仓库证据证明本接口完全不读写持久化数据时，定位、`table_id` 和物理表三项才都写 `not_applicable`，并在职责列写明原因。
 
 #### 5.1.2 内部处理逻辑
 
-先用一段具体处理说明概括这一项契约从入口到结果的内部逻辑，至少写清入口或触发、输入校验、Service/UseCase 编排、关键业务判断或分支、数据读写、输出/状态/结果事件以及失败与恢复中实际适用的部分。说明中的代码对象、表和状态必须与 `5.1.1` 的实现追溯一致，不能只写“调用服务处理并返回结果”。
+先用一段具体处理说明概括这一项契约从入口到结果的内部逻辑，至少写清入口或触发、输入校验、Service/UseCase 编排、关键业务判断或分支、数据读写、输出/状态/结果事件以及失败与恢复中实际适用的部分。说明中的代码对象、物理表、parent `table_id` 和状态必须与 `5.1.1` 的实现追溯、一级第 3 章对应步骤及一级第 5 章表结构设计一致，不能只写“调用服务处理并返回结果”。
 
 处理说明：{concrete_internal_processing_summary}
 
@@ -204,4 +208,4 @@ classDiagram
 - 下一个二级能力：`{next_secondary_document_path}`；
 - 相关需求、功能、API、数据库、测试和部署文档：{related_document_paths}；
 - 证据按 routes、controllers、pages、menus、services、entities、mappers、migrations、tests、config 和 docs 分类列出，并使用 `文件路径:起始行-结束行#符号` 格式；
-- 每个 `level1_journey_id`、`flow_id`、`api_id`、代码对象、实体和数据表都应能在本节找到至少一个已验证定位或明确的内部缺失证据；每个 `level1_journey_id` 都能反向定位一级全景中的同值 `journey_id`。
+- 每个 `level1_journey_id`、`flow_id`、`api_id`、代码对象、实体、数据表和父级 `table_id` 都应能在本节找到至少一个已验证定位或明确的内部缺失证据；每个 `level1_journey_id` 都能反向定位一级 `3.N` 中的同值 `journey_id`。

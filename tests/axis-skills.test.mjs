@@ -450,7 +450,7 @@ for (const requiredText of [
   'secondary_capability_detailed_design',
   'one canonical overview per level1_capability_id',
   'every secondary capability',
-  '用户业务操作全景',
+  '对外业务能力与接口实现',
   'user_journey_design_status',
   'user_journey_coverage',
   'user_journey_gap_id',
@@ -494,17 +494,16 @@ const businessCapabilityDetailedDesignTemplate = await readFile(
   'utf8',
 );
 for (const requiredText of [
-  '# {project_name} · {level1_capability_name} 用户业务操作全景',
+  '# {project_name} · {level1_capability_name} 一级能力接口详情设计',
   'level1_capability_id',
   'secondary_capabilities',
   'user_journey_design_status=detailed',
   'user_journey_coverage',
   'complete|partial',
   'user_journey_gap_id',
-  '用户业务操作全景',
+  '对外业务能力与接口实现',
   'journey_id',
   '用户/角色',
-  '所属二级能力/模块',
   '提供的业务',
   '用户目标',
   '用户怎么操作',
@@ -519,6 +518,19 @@ for (const requiredText of [
   'level1_journey_id',
   'flow_id',
   'api_id',
+  '二级能力与接口实现逻辑',
+  '```mermaid',
+  'flowchart',
+  '业务语义',
+  '专业术语',
+  '表结构设计',
+  'table_design_status',
+  'table_design_coverage',
+  'table_design_gap_id',
+  'erDiagram',
+  '字段',
+  '类型',
+  '键/约束',
   '不得遗漏任何二级能力',
   '返回业务架构',
   '上一个能力',
@@ -534,14 +546,22 @@ assert.doesNotMatch(
   businessCapabilityDetailedDesignTemplate,
   /^##\s+\d+\.?\s+用户旅程覆盖契约\s*$/m,
 );
+assert.doesNotMatch(
+  businessCapabilityDetailedDesignTemplate,
+  /^##\s+\d+\.?\s+(?:用户业务操作全景|跨二级能力用户旅程|共享业务语义与一级治理)\s*$/m,
+);
+assert.doesNotMatch(
+  businessCapabilityDetailedDesignTemplate,
+  /^\|\s*`journey_id`\s*\|\s*用户\/角色\s*\|\s*所属二级能力\/模块\s*\|/m,
+);
 for (const requiredHeading of [
   '## 2. 二级能力完整性与导航',
-  '## 3. 用户业务操作全景',
-  '## 4. 跨二级能力用户旅程',
-  '## 5. 共享业务语义与一级治理',
+  '## 3. 对外业务能力与接口实现',
+  '## 4. 业务语义',
+  '## 5. 表结构设计',
   '## 6. 缺口与覆盖说明',
   '## 7. 文档完整性校验',
-  '## 8. 文档导航、证据索引与术语表',
+  '## 8. 文档导航与证据索引',
 ]) {
   assert.match(businessCapabilityDetailedDesignTemplate, new RegExp(`^${requiredHeading}$`, 'm'));
 }
