@@ -17,25 +17,21 @@
 
 > **一级旅程同 ID 契约**：一级用户业务操作全景中的每个 `journey_id` 必须在所属二级文档中以完全相同的 `level1_journey_id` 出现，并绑定承接该操作的 `flow_id` 和/或 `api_id`；本文件也不得增加一级没有的旅程 ID。两层旅程集合双向一致，且一级为 `complete` 时本文件必须为 `interface_coverage=complete`。一级只保留 Controller/Handler、Service/UseCase、数据结果和用户可见结果摘要；本文件负责展开完整内部代码流、持久化与测试追溯。
 
-## 1. 身份、职责与 business_id 映射
+## 1. 能力定位与边界
 
-| 字段 | 内容 |
-| --- | --- |
-| `level1_capability_id` | `{level1_capability_id}` |
-| `secondary_capability_id` | `{secondary_capability_id}` |
-| 二级能力名称 | {secondary_capability_name} |
-| `business_ids` | `{business_ids}` |
-| `level1_journey_ids` | `{level1_journey_ids}` |
-| 业务职责 | {responsibility} |
-| 输入/触发 | {input_or_trigger} |
-| 输出/完成条件 | {output_or_completion} |
-| 非目标 | {non_goals} |
+本能力负责 {responsibility}，承接一级旅程 `{level1_journey_ids}`。非目标：{non_goals}。
 
-## 2. 参与者、权限与数据范围
+能力标识、所属一级能力和 `business_ids` 已在文档头统一声明，本节不再重复调用主体或接口信息。
 
-| 参与者 | 前置条件 | 允许动作 | 数据范围 | 审计要求 | 证据 |
+## 2. 调用主体、权限与接口矩阵
+
+本表是“谁凭什么权限调用哪个接口”的唯一权威清单。一行只表达一个“主体/角色 × `api_id`”关系；同一接口允许多个主体时分别列行。`api_id` 和“可调用接口/能力”必须与第 5 章完全一致，第 5 章每个接口至少在本表出现一次，本表也不得引用第 5 章不存在的接口。
+
+“所需权限/策略”填写真实权限码、`authenticated`、`public`、可信内部边界或有证据的资源归属规则，不得写“执行已授权流程”“具备相应权限”等泛化结论。“数据范围”写明租户、组织、门店、资源归属或公开数据边界，并提供授权或范围校验的精确代码证据；证据不足时明确记录 `missing_evidence` 和稳定 gap，不得推断固定角色。
+
+| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |
 | --- | --- | --- | --- | --- | --- |
-| {actor} | {precondition} | {action} | {data_scope} | {audit_rule} | {evidence_ref} |
+| {concrete_actor_or_role} | {permission_code_authentication_or_policy} | `{api_id}` | `{method_and_path_or_event_topic_job_command}` | {tenant_organization_resource_or_public_scope} | {authorization_or_scope_evidence} |
 
 ## 3. 能力级流程与跨接口关系
 

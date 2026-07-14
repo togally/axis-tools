@@ -542,6 +542,13 @@ for (const requiredText of [
   'interface_coverage',
   'persistence_design_status',
   'relationship_model_status',
+  '能力定位与边界',
+  '调用主体、权限与接口矩阵',
+  '主体/角色',
+  '所需权限/策略',
+  '可调用接口/能力',
+  '数据范围',
+  '授权证据',
   '接口清单与代码追溯',
   '5.1.2 内部处理逻辑',
   '5.2.6',
@@ -575,6 +582,10 @@ for (const requiredText of [
 ]) {
   assert.match(secondaryCapabilityDetailedDesignTemplate, new RegExp(requiredText));
 }
+assert.doesNotMatch(
+  secondaryCapabilityDetailedDesignTemplate,
+  /^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$/m,
+);
 assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 
 const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');

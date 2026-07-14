@@ -832,7 +832,10 @@ try {
   await writeFile(
     merchantSecondaryPath,
     validSecondaryDetailedDesign('merchant_governance')
-      .replace('`POST /api/merchant_governance/actions`', '现有入口集合'),
+      .replace(
+        '| 方法与完整路径或主题 | `POST /api/merchant_governance/actions` |',
+        '| 方法与完整路径或主题 | 现有入口集合 |',
+      ),
     'utf8',
   );
   await assert.rejects(
@@ -980,6 +983,318 @@ try {
 
   const merchantWithInterfaceLogic = validGroupedSecondaryDetailedDesignWithInternalLogic('merchant_governance');
   const catalogWithInterfaceLogic = validGroupedSecondaryDetailedDesignWithInternalLogic('catalog_inventory');
+  const merchantQueryAccessRow = merchantWithInterfaceLogic
+    .split('\n')
+    .find((line) => line.includes('| `ORDER_QUERY` |'));
+  assert.ok(merchantQueryAccessRow);
+  const merchantWithEmptyAccessSubject = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace('| Web 管理端用户 |', '|  |'),
+  );
+  assert.match(
+    merchantWithEmptyAccessSubject,
+    /^\|\s*\| `authenticated \+ order:read` \| `ORDER_QUERY` \|/m,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithEmptyAccessSubject, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d5',
+    ]),
+    /secondary capability access matrix has generic subject: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithEmptyAccessPermission = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace('| `authenticated + order:read` |', '|  |'),
+  );
+  assert.match(
+    merchantWithEmptyAccessPermission,
+    /^\| Web 管理端用户 \|\s*\| `ORDER_QUERY` \|/m,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithEmptyAccessPermission, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d6',
+    ]),
+    /secondary capability access matrix has generic permission: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithEmptyAccessDataScope = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace('| 当前组织内可查看的订单 |', '|  |'),
+  );
+  assert.match(
+    merchantWithEmptyAccessDataScope,
+    /\| `ORDER_QUERY` \| `GET \/api\/merchant_governance\/actions\/\{id\}` \|\s*\|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithEmptyAccessDataScope, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d7',
+    ]),
+    /secondary capability access matrix has generic data scope: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithoutCapabilityBoundary = merchantWithInterfaceLogic.replace(
+    /## 1\. 能力定位与边界[\s\S]*?(?=## 2\. 调用主体、权限与接口矩阵)/,
+    '',
+  );
+  assert.doesNotMatch(merchantWithoutCapabilityBoundary, /## 1\. 能力定位与边界/);
+  assert.match(merchantWithoutCapabilityBoundary, /## 2\. 调用主体、权限与接口矩阵/);
+  assert.match(merchantWithoutCapabilityBoundary, /## 5\. 接口详细设计/);
+  await writeFile(merchantSecondaryPath, merchantWithoutCapabilityBoundary, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d4',
+    ]),
+    /secondary capability detailed design missing capability boundary: merchant_operations\/merchant_governance/,
+  );
+
+  const legacyDuplicateAccessSections = [
+    '## 1. 身份、职责与 business_id 映射',
+    '',
+    '| 字段 | 内容 |',
+    '| --- | --- |',
+    '| `secondary_capability_id` | `merchant_governance` |',
+    '| 业务职责 | 管理业务订单 |',
+    '',
+    '## 2. 参与者、权限与数据范围',
+    '',
+    '| 参与者 | 前置条件 | 允许动作 | 数据范围 | 审计要求 | 证据 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| Web 管理端用户 | 已登录 | 查询订单 | 当前组织订单 | 记录查询主体 | `src/merchant_governance/CapabilityAuthorization.java:20-28#canRead` |',
+    '',
+  ].join('\n');
+  const merchantWithLegacyDuplicateAccessSections = merchantWithInterfaceLogic.replace(
+    '\n## 5. 接口详细设计',
+    `\n${legacyDuplicateAccessSections}\n## 5. 接口详细设计`,
+  );
+  assert.match(
+    merchantWithLegacyDuplicateAccessSections,
+    /## 2\. 调用主体、权限与接口矩阵[\s\S]*## 1\. 身份、职责与 business_id 映射[\s\S]*## 2\. 参与者、权限与数据范围/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithLegacyDuplicateAccessSections, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d3',
+    ]),
+    /secondary capability detailed design uses legacy duplicate access sections: merchant_operations\/merchant_governance/,
+  );
+
+  const merchantWithLegacyAccessHeader = merchantWithInterfaceLogic.replace(
+    '| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |',
+    '| 主体/角色 | 权限/授权规则 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |',
+  );
+  assert.match(
+    merchantWithLegacyAccessHeader,
+    /\| 主体\/角色 \| 权限\/授权规则 \| `api_id` \| 可调用接口\/能力 \| 数据范围 \| 授权证据 \|/,
+  );
+  assert.doesNotMatch(
+    merchantWithLegacyAccessHeader,
+    /\| 主体\/角色 \| 所需权限\/策略 \| `api_id` \| 可调用接口\/能力 \| 数据范围 \| 授权证据 \|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithLegacyAccessHeader, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d2',
+    ]),
+    /secondary capability access matrix missing fixed schema or rows: merchant_operations\/merchant_governance/,
+  );
+
+  const merchantWithoutExactAuthorizationEvidence = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace(
+      '`src/merchant_governance/CapabilityAuthorization.java:20-28#canRead`',
+      '`CapabilityAuthorization#canRead`',
+    ),
+  );
+  assert.match(
+    merchantWithoutExactAuthorizationEvidence,
+    /\| `ORDER_QUERY` \|[^\n]+\| `CapabilityAuthorization#canRead` \|/,
+  );
+  assert.doesNotMatch(
+    merchantWithoutExactAuthorizationEvidence,
+    /src\/merchant_governance\/CapabilityAuthorization\.java:20-28#canRead/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithoutExactAuthorizationEvidence, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d1',
+    ]),
+    /secondary capability access matrix missing authorization evidence: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithGenericSubject = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace('| Web 管理端用户 |', '| 调用方 |'),
+  );
+  assert.match(
+    merchantWithGenericSubject,
+    /\| 调用方 \| `authenticated \+ order:read` \| `ORDER_QUERY` \|/,
+  );
+  assert.match(
+    merchantWithGenericSubject,
+    /\| Web 管理端用户 \| `authenticated \+ order:create` \| `ORDER_CREATE` \|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithGenericSubject, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9d0',
+    ]),
+    /secondary capability access matrix has generic subject: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithGenericDataScope = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace('当前组织内可查看的订单', '当前租户及业务归属'),
+  );
+  assert.match(
+    merchantWithGenericDataScope,
+    /\| `ORDER_QUERY` \| `GET \/api\/merchant_governance\/actions\/\{id\}` \| 当前租户及业务归属 \|/,
+  );
+  assert.match(
+    merchantWithGenericDataScope,
+    /\| `ORDER_CREATE` \| `POST \/api\/merchant_governance\/actions` \| 当前组织内可创建的订单 \|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithGenericDataScope, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9cf',
+    ]),
+    /secondary capability access matrix has generic data scope: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithGenericPermission = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace('`authenticated + order:read`', '执行已授权流程'),
+  );
+  assert.match(
+    merchantWithGenericPermission,
+    /\| Web 管理端用户 \| 执行已授权流程 \| `ORDER_QUERY` \|/,
+  );
+  assert.match(
+    merchantWithGenericPermission,
+    /\| Web 管理端用户 \| `authenticated \+ order:create` \| `ORDER_CREATE` \|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithGenericPermission, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9ce',
+    ]),
+    /secondary capability access matrix has generic permission: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithMismatchedAccessInterface = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    merchantQueryAccessRow.replace(
+      '`GET /api/merchant_governance/actions/{id}`',
+      '`DELETE /api/merchant_governance/actions/{id}`',
+    ),
+  );
+  assert.match(
+    merchantWithMismatchedAccessInterface,
+    /\| Web 管理端用户 \|[^\n]+\| `ORDER_QUERY` \| `DELETE \/api\/merchant_governance\/actions\/\{id\}` \|/,
+  );
+  assert.match(
+    merchantWithMismatchedAccessInterface,
+    /\| 方法与完整路径或主题 \| `GET \/api\/merchant_governance\/actions\/\{id\}` \|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithMismatchedAccessInterface, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9cd',
+    ]),
+    /secondary capability access matrix mismatches interface: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
+  const merchantWithUnknownAccessApi = merchantWithInterfaceLogic.replace(
+    merchantQueryAccessRow,
+    `${merchantQueryAccessRow}\n${merchantQueryAccessRow.replace('`ORDER_QUERY`', '`ORDER_DELETE`')}`,
+  );
+  assert.match(
+    merchantWithUnknownAccessApi,
+    /\| Web 管理端用户 \|[^\n]+\| `ORDER_DELETE` \|/,
+  );
+  assert.doesNotMatch(merchantWithUnknownAccessApi, /\| `api_id` \| `ORDER_DELETE` \|/);
+  assert.match(merchantWithUnknownAccessApi, /\| `api_id` \| `ORDER_QUERY` \|/);
+  assert.match(
+    merchantWithUnknownAccessApi,
+    /\| Web 管理端用户 \|[^\n]+\| `ORDER_QUERY` \|/,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithUnknownAccessApi, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9cc',
+    ]),
+    /secondary capability access matrix references unknown api_id: merchant_operations\/merchant_governance\/ORDER_DELETE/,
+  );
+
+  const merchantWithoutQueryAccess = merchantWithInterfaceLogic.replace(`${merchantQueryAccessRow}\n`, '');
+  assert.doesNotMatch(
+    merchantWithoutQueryAccess,
+    /\| Web 管理端用户 \|[^\n]+\| `ORDER_QUERY` \|/,
+  );
+  assert.match(merchantWithoutQueryAccess, /\| `api_id` \| `ORDER_QUERY` \|/);
+  await writeFile(merchantSecondaryPath, merchantWithoutQueryAccess, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-access-matrix-f7a8b9cb',
+    ]),
+    /secondary capability access matrix omits api_id: merchant_operations\/merchant_governance\/ORDER_QUERY/,
+  );
+
   const merchantWithoutFirstLogic = merchantWithInterfaceLogic.replace(
     /#### 5\.1\.2 内部处理逻辑[\s\S]*?(?=#### 5\.1\.3 请求字段)/,
     '',

@@ -51,6 +51,10 @@ REQUIRED_TERMS = {
         "interface_coverage",
         "persistence_design_status",
         "relationship_model_status",
+        "调用主体、权限与接口矩阵",
+        "所需权限/策略",
+        "可调用接口/能力",
+        "授权证据",
         "physical_fk",
         "logical_relation",
         "Section 5 is grouped by contract",
@@ -63,6 +67,10 @@ REQUIRED_TERMS = {
 }
 
 GROUPED_INTERFACE_TEMPLATE_TERMS = [
+    "## 1. 能力定位与边界",
+    "## 2. 调用主体、权限与接口矩阵",
+    "| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |",
+    "执行已授权流程",
     "### 5.1 {interface_event_job_or_command_name}",
     "#### 5.1.1 接口清单与代码追溯",
     "| 项目 | 内容 |",
@@ -197,6 +205,12 @@ def validate(skill_dir: Path) -> int:
             interface_template,
         ):
             return fail("legacy generic actor-to-api flow placeholder found")
+        if re.search(
+            r"^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$",
+            interface_template,
+            re.MULTILINE,
+        ):
+            return fail("legacy duplicate identity or participant section found")
 
     print(f"{skill_name} quick validation passed")
     return 0

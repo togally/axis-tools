@@ -95,6 +95,17 @@ export function flatSecondaryDetailedDesign(secondaryCapabilityId) {
 function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityId) {
   const journeyId = `${secondaryCapabilityId.toUpperCase()}_EXECUTE`;
   const groupedInterfaceDesign = [
+    '## 1. 能力定位与边界',
+    '',
+    '本能力负责创建和查询当前组织内的业务订单，承接一级业务操作；不负责跨组织订单管理。',
+    '',
+    '## 2. 调用主体、权限与接口矩阵',
+    '',
+    '| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    `| Web 管理端用户 | \`authenticated + order:create\` | \`ORDER_CREATE\` | \`POST /api/${secondaryCapabilityId}/actions\` | 当前组织内可创建的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:10-18#canCreate\` |`,
+    `| Web 管理端用户 | \`authenticated + order:read\` | \`ORDER_QUERY\` | \`GET /api/${secondaryCapabilityId}/actions/{id}\` | 当前组织内可查看的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:20-28#canRead\` |`,
+    '',
     '## 5. 接口详细设计',
     '',
     '### 5.1 创建业务接口',
@@ -256,10 +267,14 @@ export function validGroupedSecondaryDetailedDesign(secondaryCapabilityId) {
 }
 
 export function validSecondaryDetailedDesign(secondaryCapabilityId) {
-  return validGroupedSecondaryDetailedDesign(secondaryCapabilityId).replace(
-    /\n### 5\.2 查询业务接口[\s\S]*?(?=\n## 7\. 实体、表与对象关系)/,
-    '',
-  );
+  return validGroupedSecondaryDetailedDesign(secondaryCapabilityId)
+    .replace(
+      /\n### 5\.2 查询业务接口[\s\S]*?(?=\n## 7\. 实体、表与对象关系)/,
+      '',
+    )
+    .split('\n')
+    .filter((line) => !line.includes('| `ORDER_QUERY` |'))
+    .join('\n');
 }
 
 export function validLevel1CapabilityDetailedDesign(

@@ -824,6 +824,80 @@ function hasInterfaceLogicDiagramOrStepTable(body) {
             && headers.some((header) => /^(?:代码对象|执行对象|执行对象\/方法|方法)$/.test(header));
     });
 }
+function assertSecondaryAccessMatrix(body, scope, journeyBindings) {
+    if (/^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$/m.test(body)) {
+        throw new Error(`project knowledge secondary capability detailed design uses legacy duplicate access sections: ${scope}`);
+    }
+    const boundarySection = projectKnowledgeSection(body, /^##\s+1\.?\s+能力定位与边界\s*$/m);
+    if (!boundarySection || normalizeMarkdownCell(boundarySection).length < 10) {
+        throw new Error(`project knowledge secondary capability detailed design missing capability boundary: ${scope}`);
+    }
+    const accessSection = projectKnowledgeSection(body, /^##\s+2\.?\s+调用主体、权限与接口矩阵\s*$/m);
+    if (!accessSection) {
+        throw new Error(`project knowledge secondary capability detailed design missing subject-permission-interface matrix: ${scope}`);
+    }
+    const expectedHeaders = [
+        '主体/角色',
+        '所需权限/策略',
+        'api_id',
+        '可调用接口/能力',
+        '数据范围',
+        '授权证据',
+    ];
+    const accessTable = markdownTables(accessSection).find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === expectedHeaders.length
+            && headers.every((header, index) => header === expectedHeaders[index]);
+    });
+    if (!accessTable || accessTable.rows.length === 0) {
+        throw new Error(`project knowledge secondary capability access matrix missing fixed schema or rows: ${scope}`);
+    }
+    const normalizedHeaders = accessTable.headers.map(normalizeMarkdownCell);
+    const apiIdColumn = normalizedHeaders.indexOf('api_id');
+    const subjectColumn = normalizedHeaders.indexOf('主体/角色');
+    const interfaceColumn = normalizedHeaders.indexOf('可调用接口/能力');
+    const permissionColumn = normalizedHeaders.indexOf('所需权限/策略');
+    const dataScopeColumn = normalizedHeaders.indexOf('数据范围');
+    const evidenceColumn = normalizedHeaders.indexOf('授权证据');
+    const interfaceBindingsByApi = new Map([...journeyBindings.values()].flat().map((binding) => [binding.apiId, binding]));
+    const coveredApiIds = new Set();
+    for (const row of accessTable.rows) {
+        const apiId = normalizeMarkdownCell(row[apiIdColumn] ?? '');
+        const subject = normalizeMarkdownCell(row[subjectColumn] ?? '');
+        const interfaceEntry = normalizeMarkdownCell(row[interfaceColumn] ?? '');
+        const permission = normalizeMarkdownCell(row[permissionColumn] ?? '');
+        const dataScope = normalizeMarkdownCell(row[dataScopeColumn] ?? '');
+        const evidence = row[evidenceColumn] ?? '';
+        if (subject.length < 2 || /^(?:actor|user|caller|参与者|调用方|用户|角色)$/i.test(subject)) {
+            throw new Error(`project knowledge secondary capability access matrix has generic subject: ${scope}/${apiId || 'unknown'}`);
+        }
+        if (permission.length < 2 || /^(?:执行已授权流程|已授权|有权限|按权限控制|具备对应权限|具备相应权限|权限校验|根据权限)$/i.test(permission)) {
+            throw new Error(`project knowledge secondary capability access matrix has generic permission: ${scope}/${apiId || 'unknown'}`);
+        }
+        if (dataScope.length < 2 || /^(?:当前租户及业务归属|当前范围|相关数据|业务数据|按权限范围|数据范围)$/i.test(dataScope)) {
+            throw new Error(`project knowledge secondary capability access matrix has generic data scope: ${scope}/${apiId || 'unknown'}`);
+        }
+        if (exactCodeAnchors(evidence).length === 0 && !/(?:missing_evidence|缺失证据)/.test(evidence)) {
+            throw new Error(`project knowledge secondary capability access matrix missing authorization evidence: ${scope}/${apiId || 'unknown'}`);
+        }
+        const binding = interfaceBindingsByApi.get(apiId);
+        if (binding && interfaceEntry !== binding.interfaceEntry) {
+            throw new Error(`project knowledge secondary capability access matrix mismatches interface: ${scope}/${apiId}`);
+        }
+        coveredApiIds.add(apiId);
+    }
+    const interfaceApiIds = new Set(interfaceBindingsByApi.keys());
+    for (const apiId of coveredApiIds) {
+        if (!interfaceApiIds.has(apiId)) {
+            throw new Error(`project knowledge secondary capability access matrix references unknown api_id: ${scope}/${apiId || 'unknown'}`);
+        }
+    }
+    for (const apiId of interfaceApiIds) {
+        if (!coveredApiIds.has(apiId)) {
+            throw new Error(`project knowledge secondary capability access matrix omits api_id: ${scope}/${apiId}`);
+        }
+    }
+}
 function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope) {
     const groupPattern = /^###(?!#)\s+(\d+)\.(\d+)\s+(.+?)\s*$/gm;
     const groupMatches = [...interfaceSection.matchAll(groupPattern)];
@@ -1252,7 +1326,8 @@ function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId
         if (/现有入口集合|对应应用服务|以\s*DTO\/BO\s*校验为准|以统一响应和领域异常为准/.test(interfaceSection)) {
             throw new Error(`project knowledge secondary capability detailed design uses generic interface placeholder: ${scope}`);
         }
-        secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope);
+        const interfaceBindings = secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope);
+        assertSecondaryAccessMatrix(body, scope, interfaceBindings);
         if (interfaceCoverage === 'partial' && !/(?:interface_gap_id\s*=|missing_evidence|缺失证据)/.test(body)) {
             throw new Error(`project knowledge secondary capability partial interface coverage requires an explicit gap: ${scope}`);
         }
