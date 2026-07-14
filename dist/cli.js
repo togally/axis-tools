@@ -824,6 +824,80 @@ function hasInterfaceLogicDiagramOrStepTable(body) {
             && headers.some((header) => /^(?:代码对象|执行对象|执行对象\/方法|方法)$/.test(header));
     });
 }
+function assertSecondaryAccessMatrix(body, scope, journeyBindings) {
+    if (/^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$/m.test(body)) {
+        throw new Error(`project knowledge secondary capability detailed design uses legacy duplicate access sections: ${scope}`);
+    }
+    const boundarySection = projectKnowledgeSection(body, /^##\s+1\.?\s+能力定位与边界\s*$/m);
+    if (!boundarySection || normalizeMarkdownCell(boundarySection).length < 10) {
+        throw new Error(`project knowledge secondary capability detailed design missing capability boundary: ${scope}`);
+    }
+    const accessSection = projectKnowledgeSection(body, /^##\s+2\.?\s+调用主体、权限与接口矩阵\s*$/m);
+    if (!accessSection) {
+        throw new Error(`project knowledge secondary capability detailed design missing subject-permission-interface matrix: ${scope}`);
+    }
+    const expectedHeaders = [
+        '主体/角色',
+        '所需权限/策略',
+        'api_id',
+        '可调用接口/能力',
+        '数据范围',
+        '授权证据',
+    ];
+    const accessTable = markdownTables(accessSection).find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === expectedHeaders.length
+            && headers.every((header, index) => header === expectedHeaders[index]);
+    });
+    if (!accessTable || accessTable.rows.length === 0) {
+        throw new Error(`project knowledge secondary capability access matrix missing fixed schema or rows: ${scope}`);
+    }
+    const normalizedHeaders = accessTable.headers.map(normalizeMarkdownCell);
+    const apiIdColumn = normalizedHeaders.indexOf('api_id');
+    const subjectColumn = normalizedHeaders.indexOf('主体/角色');
+    const interfaceColumn = normalizedHeaders.indexOf('可调用接口/能力');
+    const permissionColumn = normalizedHeaders.indexOf('所需权限/策略');
+    const dataScopeColumn = normalizedHeaders.indexOf('数据范围');
+    const evidenceColumn = normalizedHeaders.indexOf('授权证据');
+    const interfaceBindingsByApi = new Map([...journeyBindings.values()].flat().map((binding) => [binding.apiId, binding]));
+    const coveredApiIds = new Set();
+    for (const row of accessTable.rows) {
+        const apiId = normalizeMarkdownCell(row[apiIdColumn] ?? '');
+        const subject = normalizeMarkdownCell(row[subjectColumn] ?? '');
+        const interfaceEntry = normalizeMarkdownCell(row[interfaceColumn] ?? '');
+        const permission = normalizeMarkdownCell(row[permissionColumn] ?? '');
+        const dataScope = normalizeMarkdownCell(row[dataScopeColumn] ?? '');
+        const evidence = row[evidenceColumn] ?? '';
+        if (subject.length < 2 || /^(?:actor|user|caller|参与者|调用方|用户|角色)$/i.test(subject)) {
+            throw new Error(`project knowledge secondary capability access matrix has generic subject: ${scope}/${apiId || 'unknown'}`);
+        }
+        if (permission.length < 2 || /^(?:执行已授权流程|已授权|有权限|按权限控制|具备对应权限|具备相应权限|权限校验|根据权限)$/i.test(permission)) {
+            throw new Error(`project knowledge secondary capability access matrix has generic permission: ${scope}/${apiId || 'unknown'}`);
+        }
+        if (dataScope.length < 2 || /^(?:当前租户及业务归属|当前范围|相关数据|业务数据|按权限范围|数据范围)$/i.test(dataScope)) {
+            throw new Error(`project knowledge secondary capability access matrix has generic data scope: ${scope}/${apiId || 'unknown'}`);
+        }
+        if (exactCodeAnchors(evidence).length === 0 && !/(?:missing_evidence|缺失证据)/.test(evidence)) {
+            throw new Error(`project knowledge secondary capability access matrix missing authorization evidence: ${scope}/${apiId || 'unknown'}`);
+        }
+        const binding = interfaceBindingsByApi.get(apiId);
+        if (binding && interfaceEntry !== binding.interfaceEntry) {
+            throw new Error(`project knowledge secondary capability access matrix mismatches interface: ${scope}/${apiId}`);
+        }
+        coveredApiIds.add(apiId);
+    }
+    const interfaceApiIds = new Set(interfaceBindingsByApi.keys());
+    for (const apiId of coveredApiIds) {
+        if (!interfaceApiIds.has(apiId)) {
+            throw new Error(`project knowledge secondary capability access matrix references unknown api_id: ${scope}/${apiId || 'unknown'}`);
+        }
+    }
+    for (const apiId of interfaceApiIds) {
+        if (!coveredApiIds.has(apiId)) {
+            throw new Error(`project knowledge secondary capability access matrix omits api_id: ${scope}/${apiId}`);
+        }
+    }
+}
 function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope) {
     const groupPattern = /^###(?!#)\s+(\d+)\.(\d+)\s+(.+?)\s*$/gm;
     const groupMatches = [...interfaceSection.matchAll(groupPattern)];
@@ -844,7 +918,9 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
         '请求字段',
         '响应字段',
         '错误码与异常映射',
-        '认证、授权、幂等与事务',
+        '认证与授权执行',
+        '事务、并发、性能与容错',
+        '安全、测试与验收',
     ];
     const bindings = new Map();
     const apiIds = new Set();
@@ -1003,25 +1079,77 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
                 throw new Error(`project knowledge secondary capability interface group ${groupPrefix}.${subsectionNumber} has no field contract: ${scope}`);
             }
         }
-        const policyTable = markdownTables(subsectionBodies.get(6) ?? '').find((table) => {
+        const accessControlTable = markdownTables(subsectionBodies.get(6) ?? '').find((table) => {
             const headers = table.headers.map(normalizeMarkdownCell);
             return headers.length === 3 && headers[0] === '维度' && headers[1] === '设计' && headers[2] === '证据';
         });
-        const policyDimensions = new Map();
-        for (const row of policyTable?.rows ?? []) {
-            policyDimensions.set(normalizeMarkdownCell(row[0] ?? ''), row);
+        const accessControlDimensions = new Map();
+        for (const row of accessControlTable?.rows ?? []) {
+            accessControlDimensions.set(normalizeMarkdownCell(row[0] ?? ''), row);
         }
-        for (const dimension of ['认证', '授权', '幂等', '事务/一致性', '超时/重试/补偿']) {
-            const policyRow = policyDimensions.get(dimension);
-            if (!policyRow
-                || !normalizeMarkdownCell(policyRow[1] ?? '')
-                || !normalizeMarkdownCell(policyRow[2] ?? '')) {
+        for (const dimension of ['认证', '授权']) {
+            const accessControlRow = accessControlDimensions.get(dimension);
+            if (!accessControlRow
+                || !normalizeMarkdownCell(accessControlRow[1] ?? '')
+                || !normalizeMarkdownCell(accessControlRow[2] ?? '')) {
                 throw new Error(`project knowledge secondary capability interface group missing ${dimension} design: ${scope}/${groupPrefix}`);
             }
             if (status === '已实现'
-                && exactCodeAnchors(policyRow[2] ?? '').length === 0
-                && !/(?:missing_evidence|缺失证据)/.test(policyRow[2] ?? '')) {
+                && exactCodeAnchors(accessControlRow[2] ?? '').length === 0
+                && !/(?:missing_evidence|缺失证据)/.test(accessControlRow[2] ?? '')) {
                 throw new Error(`project knowledge secondary capability interface group ${dimension} design missing exact evidence: ${scope}/${groupPrefix}`);
+            }
+        }
+        const operationalTable = markdownTables(subsectionBodies.get(7) ?? '').find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 3 && headers[0] === '维度' && headers[1] === '设计' && headers[2] === '证据';
+        });
+        const operationalDimensions = new Map();
+        for (const row of operationalTable?.rows ?? []) {
+            operationalDimensions.set(normalizeMarkdownCell(row[0] ?? ''), row);
+        }
+        for (const dimension of [
+            '事务/一致性',
+            '幂等',
+            '并发',
+            '超时/重试/补偿',
+            '性能/容量',
+            '降级/可观测性',
+        ]) {
+            const operationalRow = operationalDimensions.get(dimension);
+            if (!operationalRow
+                || !normalizeMarkdownCell(operationalRow[1] ?? '')
+                || !normalizeMarkdownCell(operationalRow[2] ?? '')) {
+                throw new Error(`project knowledge secondary capability interface group missing ${dimension} design: ${scope}/${groupPrefix}`);
+            }
+            if (status === '已实现'
+                && exactCodeAnchors(operationalRow[2] ?? '').length === 0
+                && !/(?:missing_evidence|缺失证据)/.test(operationalRow[2] ?? '')) {
+                throw new Error(`project knowledge secondary capability interface group ${dimension} design missing exact evidence: ${scope}/${groupPrefix}`);
+            }
+        }
+        const securityAcceptanceTable = markdownTables(subsectionBodies.get(8) ?? '').find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 3
+                && headers[0] === '维度'
+                && headers[1] === '设计/验收标准'
+                && headers[2] === '证据/计划';
+        });
+        const securityAcceptanceDimensions = new Map();
+        for (const row of securityAcceptanceTable?.rows ?? []) {
+            securityAcceptanceDimensions.set(normalizeMarkdownCell(row[0] ?? ''), row);
+        }
+        for (const dimension of ['安全', '测试', '验收']) {
+            const securityAcceptanceRow = securityAcceptanceDimensions.get(dimension);
+            if (!securityAcceptanceRow
+                || !normalizeMarkdownCell(securityAcceptanceRow[1] ?? '')
+                || !normalizeMarkdownCell(securityAcceptanceRow[2] ?? '')) {
+                throw new Error(`project knowledge secondary capability interface group missing ${dimension} evidence: ${scope}/${groupPrefix}`);
+            }
+            if (status === '已实现'
+                && exactCodeAnchors(securityAcceptanceRow[2] ?? '').length === 0
+                && !/(?:missing_evidence|缺失证据)/.test(securityAcceptanceRow[2] ?? '')) {
+                throw new Error(`project knowledge secondary capability interface group ${dimension} evidence missing exact anchor: ${scope}/${groupPrefix}`);
             }
         }
         const journeyValue = normalizeMarkdownCell(contractFields.get('level1_journey_id') ?? '');
@@ -1229,10 +1357,21 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
 }
 function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId) {
     const scope = `${capabilityId}/${secondaryId}`;
+    const legacyTopLevelTitles = [
+        '实体、表与对象关系',
+        '表结构设计',
+        '事务、并发、性能与容错',
+        '安全、测试与验收',
+        '端到端追溯矩阵',
+    ];
+    for (const sectionTitle of legacyTopLevelTitles) {
+        const escapedTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`^##\\s+\\d+\\.?\\s+${escapedTitle}\\s*$`, 'm').test(body)) {
+            throw new Error(`project knowledge secondary capability detailed design uses legacy top-level interface-local section: ${scope}/${sectionTitle}`);
+        }
+    }
     const interfaceStatus = secondaryDesignStatus(body, 'interface_design_status', ['detailed', 'not_applicable'], capabilityId, secondaryId);
     const interfaceCoverage = secondaryDesignStatus(body, 'interface_coverage', ['complete', 'partial', 'not_applicable'], capabilityId, secondaryId);
-    const persistenceStatus = secondaryDesignStatus(body, 'persistence_design_status', ['detailed', 'not_applicable'], capabilityId, secondaryId);
-    const relationshipStatus = secondaryDesignStatus(body, 'relationship_model_status', ['relational', 'single_table', 'not_applicable'], capabilityId, secondaryId);
     if (interfaceStatus === 'not_applicable') {
         if (interfaceCoverage !== 'not_applicable'
             || !/\binterface_not_applicable_reason\s*=\s*[^`\n|·]+/.test(body)
@@ -1252,101 +1391,10 @@ function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId
         if (/现有入口集合|对应应用服务|以\s*DTO\/BO\s*校验为准|以统一响应和领域异常为准/.test(interfaceSection)) {
             throw new Error(`project knowledge secondary capability detailed design uses generic interface placeholder: ${scope}`);
         }
-        secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope);
+        const interfaceBindings = secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope);
+        assertSecondaryAccessMatrix(body, scope, interfaceBindings);
         if (interfaceCoverage === 'partial' && !/(?:interface_gap_id\s*=|missing_evidence|缺失证据)/.test(body)) {
             throw new Error(`project knowledge secondary capability partial interface coverage requires an explicit gap: ${scope}`);
-        }
-    }
-    if (persistenceStatus === 'not_applicable') {
-        if (relationshipStatus !== 'not_applicable'
-            || !/\bpersistence_not_applicable_reason\s*=\s*[^`\n|·]+/.test(body)
-            || !/\bpersistence_not_applicable_evidence\s*=\s*(?:`)?(?:[A-Za-z0-9_.@+\-]+\/)+[A-Za-z0-9_.$@+\-]+\.[A-Za-z0-9]+:\d+-\d+#[A-Za-z_$][A-Za-z0-9_$<>.\-]*/.test(body)) {
-            throw new Error(`project knowledge secondary capability persistence not_applicable requires reason and evidence: ${scope}`);
-        }
-        return;
-    }
-    if (relationshipStatus === 'not_applicable') {
-        throw new Error(`project knowledge secondary capability relationship model conflicts with persistence status: ${scope}`);
-    }
-    const relationshipSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+实体、表与对象关系\s*$/m);
-    const tableSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+表结构设计\s*$/m);
-    if (!relationshipSection || !tableSection) {
-        throw new Error(`project knowledge secondary capability detailed design missing persistence sections: ${scope}`);
-    }
-    const erBlock = /```mermaid\s*\r?\nerDiagram\s*\r?\n([\s\S]*?)```/.exec(relationshipSection)?.[1] ?? '';
-    if (!erBlock) {
-        throw new Error(`project knowledge secondary capability detailed design missing ER diagram: ${scope}`);
-    }
-    if (/\b(?:BUSINESS_FLOW|API|RESULT|TABLE|ENTITY_A|ENTITY_B|CONTROLLER|SERVICE)\b/i.test(erBlock)) {
-        throw new Error(`project knowledge secondary capability detailed design uses non-entity ER placeholder: ${scope}`);
-    }
-    const tableInventoryHeading = /^###\s+8\.1\s+数据表清单\s*$/m.exec(tableSection);
-    const tableInventoryRemainder = tableInventoryHeading
-        ? tableSection.slice((tableInventoryHeading.index ?? 0) + tableInventoryHeading[0].length)
-        : '';
-    const nextTableSubsection = /^###\s+8\./m.exec(tableInventoryRemainder);
-    const tableInventorySection = tableInventoryRemainder.slice(0, nextTableSubsection?.index ?? tableInventoryRemainder.length);
-    const tableNames = new Set([...tableInventorySection.matchAll(/^\|\s*`([^`]+)`\s*\|/gm)]
-        .map((match) => match[1].toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')));
-    if (tableNames.size === 0) {
-        throw new Error(`project knowledge secondary capability table inventory is empty: ${scope}`);
-    }
-    const relationships = [...erBlock.matchAll(/^\s*([A-Za-z][A-Za-z0-9_]*)\s+([|o}{]{2}--[|o}{]{2})\s+([A-Za-z][A-Za-z0-9_]*)\s*:\s*"([^"]+)"/gm)];
-    if (relationshipStatus === 'relational') {
-        if (relationships.length === 0) {
-            throw new Error(`project knowledge secondary capability ER diagram missing table relationship: ${scope}`);
-        }
-        for (const relationship of relationships) {
-            for (const entityName of [relationship[1], relationship[3]]) {
-                const normalized = entityName.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-                if (!tableNames.has(normalized)) {
-                    throw new Error(`project knowledge secondary capability ER relationship must reference table inventory: ${scope}/${entityName}`);
-                }
-            }
-            const relationshipLabel = relationship[4];
-            if (!/[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*\s*=\s*[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*/.test(relationshipLabel)
-                || !/\b(?:physical_fk|logical_relation|external_reference)\b/.test(relationshipLabel)) {
-                throw new Error(`project knowledge secondary capability ER relationship missing join fields or relationship type: ${scope}`);
-            }
-            const sourceName = relationship[1].toLowerCase();
-            const targetName = relationship[3].toLowerCase();
-            const relationshipRow = relationshipSection
-                .split(/\r?\n/)
-                .filter((line) => /^\s*\|/.test(line))
-                .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim().replace(/`/g, '')))
-                .find((cells) => cells.length >= 8
-                && cells[0].toLowerCase() === sourceName
-                && cells[2].toLowerCase() === targetName);
-            if (!relationshipRow
-                || !/[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*\s*=\s*[A-Za-z][A-Za-z0-9_]*\.[A-Za-z][A-Za-z0-9_]*/.test(relationshipRow[3] ?? '')
-                || !/^(?:\d+(?:\.\.(?:\d+|\*))?|[NM]):(?:\d+(?:\.\.(?:\d+|\*))?|[NM])$/i.test(relationshipRow[4] ?? '')
-                || !/^(?:physical_fk|logical_relation|external_reference)$/.test(relationshipRow[5] ?? '')
-                || (!exactCodeAnchors(relationshipRow.join(' | ')).length
-                    && !/(?:目标设计|missing_evidence|缺失证据)/.test(relationshipRow.join(' | ')))) {
-                throw new Error(`project knowledge secondary capability relationship table missing fields, cardinality, type or evidence: ${scope}`);
-            }
-        }
-    }
-    else {
-        if (tableNames.size !== 1 || relationships.length > 0) {
-            throw new Error(`project knowledge secondary capability single_table model must contain exactly one table and no relationship: ${scope}`);
-        }
-        const [tableName] = tableNames;
-        if (!new RegExp(`\\b${tableName.toUpperCase()}\\s*\\{`).test(erBlock.toUpperCase())) {
-            throw new Error(`project knowledge secondary capability single_table ER must define the inventory table: ${scope}`);
-        }
-    }
-    for (const requiredText of [
-        '关联字段/业务键',
-        '实体-表-代码映射',
-        '表定义与字段结构',
-        '索引与约束',
-        '状态与字段映射',
-        '读写路径与一致性',
-        '数据迁移、兼容与回滚',
-    ]) {
-        if (!body.includes(requiredText)) {
-            throw new Error(`project knowledge secondary capability persistence design missing ${requiredText}: ${scope}`);
         }
     }
 }

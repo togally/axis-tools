@@ -5,7 +5,7 @@ export function flatSecondaryDetailedDesign(secondaryCapabilityId) {
     `\`secondary_capability_id\`: \`${secondaryCapabilityId}\``,
     `\`level1_journey_id\`: \`${secondaryCapabilityId.toUpperCase()}_EXECUTE\``,
     '',
-    '> 设计完整性：`interface_design_status=detailed` · `interface_coverage=complete` · `persistence_design_status=detailed` · `relationship_model_status=relational`',
+    '> 设计完整性：`interface_design_status=detailed` · `interface_coverage=complete`',
     '',
     '## 5. 接口详细设计',
     '',
@@ -33,68 +33,23 @@ export function flatSecondaryDetailedDesign(secondaryCapabilityId) {
     '| --- | --- | --- | --- | --- | --- |',
     '| `ORDER_CREATE` | `400` | 参数校验失败 | 请求无效 | 不落库 | `src/OrderController.java:10-20#create` |',
     '',
-    '## 7. 实体、表与对象关系',
-    '',
-    '```mermaid',
-    'erDiagram',
-    '    ORDER ||--o{ ORDER_ITEM : "order.id = order_item.order_id; logical_relation"',
-    '```',
-    '',
-    '| 来源表 | 关系 | 目标表 | 关联字段/业务键 | 基数 | 关系实现 | 数据所有者 | 证据/状态 |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |',
-    '| `order` | 拥有 | `order_item` | `order.id = order_item.order_id` | 1:N | `logical_relation` | 订单能力 | `src/OrderItem.java:10-20#orderId` |',
-    '',
-    '## 8. 表结构设计',
-    '',
-    '### 8.1 数据表清单',
-    '',
-    '| 表名 | 业务用途 | 代码/迁移证据 |',
-    '| --- | --- | --- |',
-    '| `order` | 订单主记录 | `src/Order.java:10-30#Order` |',
-    '| `order_item` | 订单明细 | `src/OrderItem.java:10-30#OrderItem` |',
-    '',
-    '### 8.2 实体-表-代码映射',
-    '',
-    '| 业务实体 | Java 实体 | Mapper/Repository | 物理表 | 证据/状态 |',
-    '| --- | --- | --- | --- | --- |',
-    '| 订单 | `Order` | `OrderMapper` | `order` | `src/Order.java:10-30#Order` |',
-    '',
-    '### 8.3 表定义与字段结构',
-    '',
-    '#### 表：`order`',
-    '',
-    '| 字段名 | 数据类型 | 可空 | 默认值 | 键 | 业务含义 | 证据/状态 |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    '| `id` | `bigint` | 否 | 无 | PK | 订单主键 | `src/Order.java:10-12#id` |',
-    '',
-    '### 8.4 索引与约束',
-    '',
-    '| 表名 | 索引/约束 | 字段 | 类型 | 证据/状态 |',
-    '| --- | --- | --- | --- | --- |',
-    '| `order` | `PRIMARY` | `id` | PK | `src/Order.java:10-12#id` |',
-    '',
-    '### 8.5 状态与字段映射',
-    '',
-    '| 业务状态 | 表名 | 字段 | 数据库存值 | 证据/状态 |',
-    '| --- | --- | --- | --- | --- |',
-    '| 已创建 | `order` | `status` | `CREATED` | `src/Order.java:20-22#status` |',
-    '',
-    '### 8.6 读写路径与一致性',
-    '',
-    '| 场景 | 读表 | 写表 | 事务/幂等 | 证据 |',
-    '| --- | --- | --- | --- | --- |',
-    '| 创建订单 | 无 | `order`、`order_item` | 单事务、订单号唯一 | `src/OrderService.java:20-40#create` |',
-    '',
-    '### 8.7 数据迁移、兼容与回滚',
-    '',
-    '无表结构变化；当前结构由实体和迁移证据确认。',
-    '',
   ].join('\n');
 }
 
 function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityId) {
   const journeyId = `${secondaryCapabilityId.toUpperCase()}_EXECUTE`;
   const groupedInterfaceDesign = [
+    '## 1. 能力定位与边界',
+    '',
+    '本能力负责创建和查询当前组织内的业务订单，承接一级业务操作；不负责跨组织订单管理。',
+    '',
+    '## 2. 调用主体、权限与接口矩阵',
+    '',
+    '| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    `| Web 管理端用户 | \`authenticated + order:create\` | \`ORDER_CREATE\` | \`POST /api/${secondaryCapabilityId}/actions\` | 当前组织内可创建的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:10-18#canCreate\` |`,
+    `| Web 管理端用户 | \`authenticated + order:read\` | \`ORDER_QUERY\` | \`GET /api/${secondaryCapabilityId}/actions/{id}\` | 当前组织内可查看的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:20-28#canRead\` |`,
+    '',
     '## 5. 接口详细设计',
     '',
     '### 5.1 创建业务接口',
@@ -138,15 +93,31 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '| --- | --- | --- | --- | --- |',
     '| `400` | 参数校验失败 | 请求无效 | 不落库 | `src/OrderController.java:10-20#create` |',
     '',
-    '#### 5.1.5 认证、授权、幂等与事务',
+    '#### 5.1.5 认证与授权执行',
     '',
     '| 维度 | 设计 | 证据 |',
     '| --- | --- | --- |',
     '| 认证 | 登录态令牌校验 | `src/OrderController.java:10-20#create` |',
     '| 授权 | 校验用户拥有订单创建权限 | `src/OrderController.java:10-20#create` |',
+    '',
+    '#### 5.1.7 事务、并发、性能与容错',
+    '',
+    '| 维度 | 设计 | 证据 |',
+    '| --- | --- | --- |',
     '| 幂等 | 业务单号唯一约束 | `src/OrderService.java:20-40#create` |',
     '| 事务/一致性 | 创建主表和明细使用同一事务 | `src/OrderService.java:20-40#create` |',
+    '| 并发 | 业务单号唯一约束阻止并发重复创建 | `src/OrderService.java:20-40#create` |',
+    '| 性能/容量 | 单次创建仅写入订单主表与明细 | `src/OrderService.java:20-40#create` |',
     '| 超时/重试/补偿 | 客户端超时后使用同一业务单号安全重试，失败整体回滚 | `src/OrderService.java:20-40#create` |',
+    '| 降级/可观测性 | 创建失败保留错误并通过测试验证无部分写入 | `test/OrderTest.java:10-30#createOrder` |',
+    '',
+    '#### 5.1.8 安全、测试与验收',
+    '',
+    '| 维度 | 设计/验收标准 | 证据/计划 |',
+    '| --- | --- | --- |',
+    '| 安全 | 仅允许当前组织内具备创建权限的用户提交订单 | `src/OrderController.java:10-20#create` |',
+    '| 测试 | 覆盖正常创建、重复业务单号和事务回滚 | `test/OrderTest.java:10-30#createOrder` |',
+    '| 验收 | 返回新订单标识和已创建状态且不存在部分写入 | `test/OrderTest.java:10-30#createOrder` |',
     '',
     '### 5.2 查询业务接口',
     '',
@@ -189,27 +160,43 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '| --- | --- | --- | --- | --- |',
     '| `404` | 订单不存在 | 未找到订单 | 无写入 | `src/OrderService.java:42-55#detail` |',
     '',
-    '#### 5.2.5 认证、授权、幂等与事务',
+    '#### 5.2.5 认证与授权执行',
     '',
     '| 维度 | 设计 | 证据 |',
     '| --- | --- | --- |',
     '| 认证 | 登录态令牌校验 | `src/OrderController.java:22-30#detail` |',
     '| 授权 | 校验用户拥有订单查看权限 | `src/OrderService.java:42-55#detail` |',
+    '',
+    '#### 5.2.7 事务、并发、性能与容错',
+    '',
+    '| 维度 | 设计 | 证据 |',
+    '| --- | --- | --- |',
     '| 幂等 | 只读接口天然幂等 | `src/OrderService.java:42-55#detail` |',
     '| 事务/一致性 | 使用只读事务读取一致状态 | `src/OrderService.java:42-55#detail` |',
+    '| 并发 | 按主键读取当前已提交状态，不持有写锁 | `src/OrderService.java:42-55#detail` |',
+    '| 性能/容量 | 使用订单主键查询并限制为单条结果 | `src/OrderMapper.java:14-18#selectById` |',
     '| 超时/重试/补偿 | 查询超时可安全重试，不产生补偿写入 | `src/OrderService.java:42-55#detail` |',
+    '| 降级/可观测性 | 查询失败返回明确状态且测试覆盖不存在场景 | `test/OrderTest.java:32-45#queryOrder` |',
+    '',
+    '#### 5.2.8 安全、测试与验收',
+    '',
+    '| 维度 | 设计/验收标准 | 证据/计划 |',
+    '| --- | --- | --- |',
+    '| 安全 | 仅返回当前组织内且用户有权查看的订单 | `src/OrderService.java:42-55#detail` |',
+    '| 测试 | 覆盖正常查询、订单不存在和越权查询 | `test/OrderTest.java:32-45#queryOrder` |',
+    '| 验收 | 返回订单当前状态，未找到或越权时不泄露订单数据 | `test/OrderTest.java:32-45#queryOrder` |',
   ].join('\n');
   const flatDocument = flatSecondaryDetailedDesign(secondaryCapabilityId);
   return flatDocument.replace(
-    /## 5\. 接口详细设计[\s\S]*?(?=## 7\. 实体、表与对象关系)/,
-    `${groupedInterfaceDesign}\n\n`,
+    /## 5\. 接口详细设计[\s\S]*$/,
+    `${groupedInterfaceDesign}\n`,
   );
 }
 
 function addInterfaceInternalLogic(document, groupNumber, logicBody) {
   const prefix = `5.${groupNumber}`;
   return document
-    .replace(`#### ${prefix}.5 认证、授权、幂等与事务`, `#### ${prefix}.6 认证、授权、幂等与事务`)
+    .replace(`#### ${prefix}.5 认证与授权执行`, `#### ${prefix}.6 认证与授权执行`)
     .replace(`#### ${prefix}.4 错误码与异常映射`, `#### ${prefix}.5 错误码与异常映射`)
     .replace(`#### ${prefix}.3 响应字段`, `#### ${prefix}.4 响应字段`)
     .replace(
@@ -256,10 +243,14 @@ export function validGroupedSecondaryDetailedDesign(secondaryCapabilityId) {
 }
 
 export function validSecondaryDetailedDesign(secondaryCapabilityId) {
-  return validGroupedSecondaryDetailedDesign(secondaryCapabilityId).replace(
-    /\n### 5\.2 查询业务接口[\s\S]*?(?=\n## 7\. 实体、表与对象关系)/,
-    '',
-  );
+  return validGroupedSecondaryDetailedDesign(secondaryCapabilityId)
+    .replace(
+      /\n### 5\.2 查询业务接口[\s\S]*$/,
+      '',
+    )
+    .split('\n')
+    .filter((line) => !line.includes('| `ORDER_QUERY` |'))
+    .join('\n');
 }
 
 export function validLevel1CapabilityDetailedDesign(
