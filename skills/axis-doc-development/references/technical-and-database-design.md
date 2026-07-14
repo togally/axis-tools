@@ -13,6 +13,8 @@ Both should describe the approved target. Include current-versus-target comparis
 
 The retained capability hierarchy has two deliberately different design depths:
 
+All reader-facing horizontal Markdown tables have at most six columns. Use compact tables for atomic comparisons only; render records containing long paths, evidence, code contracts or several prose fields as individual `项目 / 内容` vertical tables. Dashboard horizontal scrolling remains a fallback, not a substitute for a readable source structure.
+
 | Layer | Reader question | Required depth | Must not contain |
 | --- | --- | --- | --- |
 | Level-1 `business_capability_detailed_design` | 本一级能力对外逐项提供什么业务，每项业务如何由一个或多个二级能力通过接口实现，使用了哪些表以及表间关系如何？ | One model-derived `3.N` group per external business capability, with vertical business description, secondary-node/interface-edge Mermaid and per-hop vertical trace; professional terminology; mandatory table inventory, ER and per-table physical-column dictionary | Request/response field dictionaries, full call chains, Mapper/Repository implementation, per-interface transaction/concurrency/compensation detail, and test matrices |
@@ -22,7 +24,7 @@ Every level-1 overview records the journey controls once in the header plus `tab
 
 One level-1 `journey_id` may cross several secondary capabilities. Every participating child repeats it as `level1_journey_id`, binds its own hop to a `flow_id` and/or `api_id`, and expands the full entry-to-code/data-touchpoint/test trace inside that contract's Section 5 group. Cross-secondary handoff is already expressed in the parent `3.N` graph and steps, so no independent cross-secondary chapter is generated.
 
-Section 4 uses the fixed professional-term fields 专业术语, 定义, 适用场景与边界, 易混淆术语及区别, 关联二级能力 and 权威来源/证据. Section 5 detailed mode is fixed as `5.1 表清单`, `5.2 ER 图`, `5.2.1 ER 关系证据`, then continuous physical-table-titled subsections from `5.3`. It uses `table_id | 物理表名 | 业务实体/用途 | 所属二级能力 | 读写 api_id | 证据`, an evidence-backed ER whose entities use actual physical table names, and one `table_id`-controlled field table with `字段 | 类型 | 可空 | 默认值 | 键/约束 | 业务语义 | 读写 api_id | 证据` per table. The inventory-ID set equals exactly the deduplicated union of Section 3 step table IDs. With multiple tables, the fixed `ER 关系证据` table uses `relation_id | 主表 table_id | 关系/基数 | 从表 table_id | 关联键 | 业务语义 | 证据`, covers every table and has exact relationship evidence; a single-table design explicitly states `ER 关系证据：not_applicable（单表，无需跨表关系）`. Only exact no-persistence evidence permits the retained Section 5 `not_applicable` reason/evidence branch.
+Section 4 uses the fixed professional-term fields 专业术语, 定义, 适用场景与边界, 易混淆术语及区别, 关联二级能力 and 权威来源/证据. Section 5 detailed mode is fixed as `5.1 表清单`, `5.2 ER 图`, `5.2.1 ER 关系证据`, then continuous physical-table-titled subsections from `5.3`. It uses `table_id | 物理表名 | 业务实体/用途 | 所属二级能力 | 读写 api_id | 证据`, an evidence-backed ER whose entities use actual physical table names, and one `table_id`-controlled field table with `字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 api_id | 证据` per table; the combined type cell labels and preserves type, nullability and default. The inventory-ID set equals exactly the deduplicated union of Section 3 step table IDs. With multiple tables, the fixed `ER 关系证据` table uses `relation_id | 表关系（主 -> 从） | 关系/基数 | 关联键 | 业务语义 | 证据`; the relation cell contains both stable table IDs, covers every table and has exact relationship evidence. A single-table design explicitly states `ER 关系证据：not_applicable（单表，无需跨表关系）`. Only exact no-persistence evidence permits the retained Section 5 `not_applicable` reason/evidence branch.
 
 ## Technical Design Review
 
@@ -62,8 +64,8 @@ Within Section 5, organize contracts by interface rather than by field type. Eac
 
 1. `#### 5.N.1 接口清单与代码追溯`: a compact `项目 / 内容` table for `level1_journey_id`, `api_id`, contract type, complete path/topic/entry, purpose, caller, models and status, followed by an `实现层 / 精确定位 / 职责` table for Controller/entry, Service/use case, Mapper/Repository, entity/physical table plus the same parent `table_id` value or values as the level-1 step (or exact-evidence `not_applicable`), and test;
 2. `#### 5.N.2 内部处理逻辑`: a concrete summary naming the applicable entry/trigger, validation, Service/UseCase orchestration, key decisions, data reads/writes, output/state/result event and failure/recovery behavior, followed by at least one actual Mermaid diagram or compact step table; generic nodes and retained template placeholders are invalid;
-3. `#### 5.N.3 请求字段`;
-4. `#### 5.N.4 响应字段`;
+3. `#### 5.N.3 请求字段`: use `字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态`, with labeled type/required and semantics/sensitivity values;
+4. `#### 5.N.4 响应字段`: use `HTTP/消息/执行状态 | 字段 | 类型/可空 | 业务语义/产生位置 | 证据/状态`, with labeled type/nullability and semantics/producer values;
 5. `#### 5.N.5 错误码与异常映射`;
 6. `#### 5.N.6 认证与授权执行`: concrete authentication entry, permission/policy enforcement, ownership or data-scope check and exact evidence, consistent with the authoritative Section 2 matrix;
 7. `#### 5.N.7 事务、并发、性能与容错`: transaction/consistency boundary, idempotency, concurrency/locking, capacity and latency assumptions, timeout/retry/compensation, degradation and observable signals;

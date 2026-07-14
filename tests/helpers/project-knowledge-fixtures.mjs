@@ -81,15 +81,15 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '',
     '#### 5.1.2 请求字段',
     '',
-    '| 字段 | 位置 | 类型 | 必填 | 约束 | 业务语义 | 证据 |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    '| `orderNo` | body | `String` | 是 | 非空 | 业务订单号 | `src/CreateOrderRequest.java:8-12#orderNo` |',
+    '| 字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| `orderNo` | body | `String`；必填=是 | 非空 | 业务订单号；非敏感字段 | `src/CreateOrderRequest.java:8-12#orderNo`；已实现 |',
     '',
     '#### 5.1.3 响应字段',
     '',
-    '| 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据 |',
-    '| --- | --- | --- | --- | --- | --- |',
-    '| `id` | `Long` | 否 | 订单主键 | Service 创建后返回 | `src/OrderView.java:8-12#id` |',
+    '| HTTP/消息/执行状态 | 字段 | 类型/可空 | 业务语义/产生位置 | 证据/状态 |',
+    '| --- | --- | --- | --- | --- |',
+    '| `200` | `id` | `Long`；可空=否 | 订单主键；Service 创建后返回 | `src/OrderView.java:8-12#id`；已实现 |',
     '',
     '#### 5.1.4 错误码与异常映射',
     '',
@@ -148,15 +148,15 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '',
     '#### 5.2.2 请求字段',
     '',
-    '| 字段 | 位置 | 类型 | 必填 | 约束 | 业务语义 | 证据 |',
-    '| --- | --- | --- | --- | --- | --- | --- |',
-    '| `id` | path | `Long` | 是 | 正整数 | 订单主键 | `src/OrderController.java:22-30#detail` |',
+    '| 字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| `id` | path | `Long`；必填=是 | 正整数 | 订单主键；非敏感字段 | `src/OrderController.java:22-30#detail`；已实现 |',
     '',
     '#### 5.2.3 响应字段',
     '',
-    '| 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据 |',
-    '| --- | --- | --- | --- | --- | --- |',
-    '| `status` | `String` | 否 | 当前订单状态 | Service 查询后返回 | `src/OrderView.java:14-18#status` |',
+    '| HTTP/消息/执行状态 | 字段 | 类型/可空 | 业务语义/产生位置 | 证据/状态 |',
+    '| --- | --- | --- | --- | --- |',
+    '| `200` | `status` | `String`；可空=否 | 当前订单状态；Service 查询后返回 | `src/OrderView.java:14-18#status`；已实现 |',
     '',
     '#### 5.2.4 错误码与异常映射',
     '',
@@ -432,14 +432,14 @@ export function validLevel1CapabilityDetailedDesign(
     `    ${secondaryCapabilities[0].id}_record ||--o{ ${id}_record : "${name}记录归属于同一条跨二级能力业务链"`
   ));
   const relationshipEvidenceRows = secondaryCapabilities.slice(1).map(({ id, name }) => (
-    `| \`relation_${secondaryCapabilities[0].id}_to_${id}\` | \`${secondaryCapabilities[0].id}_record\` | \`1:N\` | \`${id}_record\` | \`${secondaryCapabilities[0].id}_record.id -> ${id}_record.parent_record_id\` | ${name}记录归属于同一条跨二级能力业务链 | \`db/${id}/${id}_record.sql:3-3#parentRecordId\` |`
+    `| \`relation_${secondaryCapabilities[0].id}_to_${id}\` | \`${secondaryCapabilities[0].id}_record\` -> \`${id}_record\` | \`1:N\` | \`${secondaryCapabilities[0].id}_record.id -> ${id}_record.parent_record_id\` | ${name}记录归属于同一条跨二级能力业务链 | \`db/${id}/${id}_record.sql:3-3#parentRecordId\` |`
   ));
   const relationshipEvidenceSection = secondaryCapabilities.length > 1
     ? [
       '#### 5.2.1 ER 关系证据',
       '',
-      '| `relation_id` | 主表 `table_id` | 关系/基数 | 从表 `table_id` | 关联键 | 业务语义 | 证据 |',
-      '| --- | --- | --- | --- | --- | --- | --- |',
+      '| `relation_id` | 表关系（主 -> 从） | 关系/基数 | 关联键 | 业务语义 | 证据 |',
+      '| --- | --- | --- | --- | --- | --- |',
       ...relationshipEvidenceRows,
       '',
     ]
@@ -458,14 +458,14 @@ export function validLevel1CapabilityDetailedDesign(
       '',
       `> 表标识：\`table_id=${id}_record\``,
       '',
-      '| 字段 | 类型 | 可空 | 默认值 | 键/约束 | 业务语义 | 读写 api_id | 证据 |',
-      '| --- | --- | --- | --- | --- | --- | --- | --- |',
-      `| \`id\` | \`BIGINT\` | 否 | 自增 | 主键 | ${name}记录主键 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:2-2#id\` |`,
+      '| 字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 api_id | 证据 |',
+      '| --- | --- | --- | --- | --- | --- |',
+      `| \`id\` | \`BIGINT\`；可空=否；默认值=自增 | 主键 | ${name}记录主键 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:2-2#id\` |`,
       ...(index === 0 ? [] : [
-        `| \`parent_record_id\` | \`BIGINT\` | 否 | 无 | FK -> \`${secondaryCapabilities[0].id}_record.id\` | 关联同一业务协作链的上游记录 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:3-3#parentRecordId\` |`,
+        `| \`parent_record_id\` | \`BIGINT\`；可空=否；默认值=无 | FK -> \`${secondaryCapabilities[0].id}_record.id\` | 关联同一业务协作链的上游记录 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:3-3#parentRecordId\` |`,
       ]),
-      `| \`status\` | \`VARCHAR(32)\` | 否 | \`PENDING\` | 状态值约束 | ${name}当前业务处理状态 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:3-3#status\` |`,
-      `| \`updated_at\` | \`TIMESTAMP\` | 否 | \`CURRENT_TIMESTAMP\` | 自动更新时间 | ${name}记录最近更新时间 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:4-4#updated_at\` |`,
+      `| \`status\` | \`VARCHAR(32)\`；可空=否；默认值=\`PENDING\` | 状态值约束 | ${name}当前业务处理状态 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:3-3#status\` |`,
+      `| \`updated_at\` | \`TIMESTAMP\`；可空=否；默认值=\`CURRENT_TIMESTAMP\` | 自动更新时间 | ${name}记录最近更新时间 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:4-4#updated_at\` |`,
       '',
     ];
   });

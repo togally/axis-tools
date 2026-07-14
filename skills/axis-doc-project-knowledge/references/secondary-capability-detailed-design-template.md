@@ -39,17 +39,35 @@
 
 本章只描述二级能力内部多个接口、事件、主题、任务或命令之间的能力级编排，例如先后顺序、触发关系、跨契约状态传递和补偿关系。单个契约内部的参数校验、方法调用、业务判断、数据读写、结果生成与失败处理统一放在对应的 `5.N.2 内部处理逻辑`，不得在本章重复一张泛化的 Controller → Service → Mapper 图。
 
-为每条能力级链路分配稳定的 `{flow_id}`，并从一级全景带入同值 `{level1_journey_id}`。存在真实跨契约编排时，可以补充使用实际 `api_id`、事件、任务和状态名称的 Mermaid 图；不存在跨契约编排时，明确写“本能力无跨契约编排，接口内部逻辑见各 `5.N.2`”，不要生成占位图。
+为每条能力级链路分配稳定的 `{flow_id}`，并从一级全景带入同值 `{level1_journey_id}`。存在真实跨契约编排时，可以补充使用实际 `api_id`、事件、任务和状态名称的 Mermaid 图；不存在跨契约编排时，明确写“本能力无跨契约编排，接口内部逻辑见各 `5.N.2`”，不要生成占位图。每条链路单独使用一张纵向表。
 
-| `level1_journey_id` | `flow_id` | 上游契约/触发 | 下游契约/结果 | 跨契约规则或状态传递 | 失败与补偿 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `{level1_journey_id}` | `{flow_id}` | `{upstream_api_event_job_or_command}` | `{downstream_api_event_job_or_command_or_result}` | {cross_contract_rule_or_state_handoff} | {cross_contract_failure_compensation} | {evidence_ref} |
+### 3.{flow_index} 链路 `{flow_id}`
+
+| 项目 | 内容 |
+| --- | --- |
+| `level1_journey_id` | `{level1_journey_id}` |
+| `flow_id` | `{flow_id}` |
+| 上游契约/触发 | `{upstream_api_event_job_or_command}` |
+| 下游契约/结果 | `{downstream_api_event_job_or_command_or_result}` |
+| 跨契约规则或状态传递 | {cross_contract_rule_or_state_handoff} |
+| 失败与补偿 | {cross_contract_failure_compensation} |
+| 证据 | {evidence_ref} |
 
 ## 4. 业务对象、状态与规则
 
-| 对象/规则 | 权威来源 | 当前状态/条件 | 触发 | 下一状态/决策 | 约束 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| {object_or_rule} | {source_of_truth} | {condition} | {trigger} | {result} | {constraint} | {evidence_ref} |
+每个对象或规则单独使用一张纵向表。
+
+### 4.{object_or_rule_index} {object_or_rule}
+
+| 项目 | 内容 |
+| --- | --- |
+| 对象/规则 | {object_or_rule} |
+| 权威来源 | {source_of_truth} |
+| 当前状态/条件 | {condition} |
+| 触发 | {trigger} |
+| 下一状态/决策 | {result} |
+| 约束 | {constraint} |
+| 证据 | {evidence_ref} |
 
 ## 5. 接口详细设计
 
@@ -110,17 +128,17 @@ flowchart TD
 
 本小节只描述 5.1 这一项契约。HTTP 逐项列出 Header、Path、Query 与 Body；EVENT/TOPIC 列出消息头、键与载荷；JOB/COMMAND 列出调度上下文、参数和触发条件。确实没有字段时保留一行 `not_applicable`，同时写出原因和精确证据，不得留空。
 
-| 字段 | 位置 | 类型 | 必填 | 约束/枚举 | 业务语义 | 敏感处理 | 证据/状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{field_name}` | Header / Path / Query / Body / MessageHeader / Key / Payload / Context | `{field_type}` | 是 / 否 | {validation_or_enum} | {business_semantics} | {sensitivity_control} | {evidence_or_target} |
+| 字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态 |
+| --- | --- | --- | --- | --- | --- |
+| `{field_name}` | Header / Path / Query / Body / MessageHeader / Key / Payload / Context | `{field_type}`；必填=是 / 否 | {validation_or_enum} | {business_semantics}；敏感处理={sensitivity_control} | {evidence_or_target} |
 
 #### 5.1.4 响应字段
 
 HTTP 列出状态码与响应体；EVENT/TOPIC 列出确认、结果事件或明确的单向语义；JOB/COMMAND 列出执行结果与状态。没有直接响应时使用带原因和证据的 `not_applicable` 行。
 
-| HTTP/消息/执行状态 | 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据/状态 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `{status}` | `{field_name}` | `{field_type}` | 是 / 否 | {business_semantics} | {producer} | {evidence_or_target} |
+| HTTP/消息/执行状态 | 字段 | 类型/可空 | 业务语义/产生位置 | 证据/状态 |
+| --- | --- | --- | --- | --- |
+| `{status}` | `{field_name}` | `{field_type}`；可空=是 / 否 | {business_semantics}；产生位置={producer} | {evidence_or_target} |
 
 #### 5.1.5 错误码与异常映射
 
@@ -189,11 +207,20 @@ classDiagram
     {repository_symbol} --> {entity_symbol} : maps
 ```
 
-图中的节点必须替换为仓库中的实际符号或已批准的目标符号，不能保留 `Controller`、`ApplicationService`、`Repository`、`Entity` 等泛化节点名。
+图中的节点必须替换为仓库中的实际符号或已批准的目标符号，不能保留 `Controller`、`ApplicationService`、`Repository`、`Entity` 等泛化节点名。每个代码对象单独使用一张纵向表，避免源码定位挤压职责与关系说明。
 
-| 对象标识 | 类型 | 职责 | 输入/输出 | 依赖或被依赖关系 | 对应实体/表 | 源码定位 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{code_object}` | Controller / Service / DTO / Entity / Mapper / Event / Cache | {responsibility} | {input_output} | `{relation_type}` → `{related_object}` | {entity_table_refs} | `{file_path_line_symbol}` | 已实现 / 目标设计 / 缺失证据 |
+### 6.{code_object_index} `{code_object}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 对象标识 | `{code_object}` |
+| 类型 | Controller / Service / DTO / Entity / Mapper / Event / Cache |
+| 职责 | {responsibility} |
+| 输入/输出 | {input_output} |
+| 依赖或被依赖关系 | `{relation_type}` → `{related_object}` |
+| 对应实体/表 | {entity_table_refs} |
+| 源码定位 | `{file_path_line_symbol}` |
+| 状态 | 已实现 / 目标设计 / 缺失证据 |
 
 ## 7. 风险、假设与缺失证据
 

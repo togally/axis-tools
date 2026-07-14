@@ -721,6 +721,7 @@ function projectKnowledgeSourceRoot(repo, config) {
 }
 const projectKnowledgeTraceIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/;
 const invalidProjectKnowledgeTraceIdentifierPattern = /^(?:missing_evidence|not_applicable|none|todo|tbd)$/i;
+const maxReadableMarkdownTableColumns = 6;
 function secondaryDesignStatus(body, key, allowed, capabilityId, secondaryId) {
     const match = new RegExp(`\\b${key}\\s*=\\s*(${allowed.join('|')})\\b`).exec(body);
     if (!match) {
@@ -742,25 +743,121 @@ function projectKnowledgeSection(body, heading) {
     return body.slice(sectionStart, nextHeading ? sectionStart + nextHeading.index : body.length);
 }
 function splitMarkdownTableRow(line) {
-    const content = line.trim().slice(1, -1);
+    let content = line.trim();
+    if (content.startsWith('|'))
+        content = content.slice(1);
+    if (hasUnescapedTrailingPipe(content))
+        content = content.slice(0, -1);
     const cells = [];
     let current = '';
     for (let index = 0; index < content.length; index += 1) {
         const character = content[index];
-        if (character === '\\' && content[index + 1] === '|') {
-            current += '|';
-            index += 1;
+        if (character !== '|') {
+            current += character;
+            continue;
         }
-        else if (character === '|') {
-            cells.push(current.trim());
-            current = '';
+        let backslashCount = 0;
+        for (let previous = index - 1; previous >= 0 && content[previous] === '\\'; previous -= 1) {
+            backslashCount += 1;
+        }
+        if (backslashCount % 2 === 1) {
+            current = `${current.slice(0, -1)}|`;
         }
         else {
-            current += character;
+            cells.push(current.trim());
+            current = '';
         }
     }
     cells.push(current.trim());
     return cells;
+}
+function hasUnescapedTrailingPipe(line) {
+    if (!line.endsWith('|'))
+        return false;
+    let backslashCount = 0;
+    for (let index = line.length - 2; index >= 0 && line[index] === '\\'; index -= 1) {
+        backslashCount += 1;
+    }
+    return backslashCount % 2 === 0;
+}
+function looksLikeMarkdownTableRow(line) {
+    const trimmed = line.trim();
+    if (!trimmed)
+        return false;
+    return trimmed.startsWith('|')
+        || hasUnescapedTrailingPipe(trimmed)
+        || splitMarkdownTableRow(trimmed).length > 1;
+}
+function markdownLineContext(line) {
+    let content = line;
+    let blockquoteDepth = 0;
+    while (true) {
+        const prefix = /^ {0,3}>[ \t]?/.exec(content);
+        if (!prefix)
+            return { content, blockquoteDepth };
+        content = content.slice(prefix[0].length);
+        blockquoteDepth += 1;
+    }
+}
+function isIndentedMarkdownCode(line) {
+    return /^(?: {4}|\t)/.test(line);
+}
+function markdownFenceMatch(line) {
+    return /^ {0,3}(?:(?:[-+*]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$/.exec(line);
+}
+function inlineCodeSpanEnd(line, start) {
+    let delimiterLength = 1;
+    while (line[start + delimiterLength] === '`')
+        delimiterLength += 1;
+    const delimiter = '`'.repeat(delimiterLength);
+    let candidate = line.indexOf(delimiter, start + delimiterLength);
+    while (candidate >= 0) {
+        if (line[candidate - 1] !== '`' && line[candidate + delimiterLength] !== '`') {
+            return candidate + delimiterLength;
+        }
+        candidate = line.indexOf(delimiter, candidate + delimiterLength);
+    }
+    return null;
+}
+function stripMarkdownHtmlComments(line, initialCommentState = false) {
+    let content = '';
+    let cursor = 0;
+    let inComment = initialCommentState;
+    while (cursor < line.length) {
+        if (inComment) {
+            const commentEnd = line.indexOf('-->', cursor);
+            if (commentEnd < 0)
+                return { content, inComment: true };
+            inComment = false;
+            cursor = commentEnd + 3;
+            continue;
+        }
+        const commentStart = line.indexOf('<!--', cursor);
+        const codeSpanStart = line.indexOf('`', cursor);
+        if (codeSpanStart >= 0 && (commentStart < 0 || codeSpanStart < commentStart)) {
+            const codeSpanEnd = inlineCodeSpanEnd(line, codeSpanStart);
+            if (codeSpanEnd !== null) {
+                content += line.slice(cursor, codeSpanEnd);
+                cursor = codeSpanEnd;
+            }
+            else {
+                content += line.slice(cursor, codeSpanStart + 1);
+                cursor = codeSpanStart + 1;
+            }
+            continue;
+        }
+        if (commentStart < 0) {
+            content += line.slice(cursor);
+            break;
+        }
+        content += line.slice(cursor, commentStart);
+        inComment = true;
+        cursor = commentStart + 4;
+    }
+    return { content, inComment };
+}
+function isMarkdownBlockBoundary(line) {
+    return /^#{1,6}(?:\s|$)/.test(line.trimStart()) || markdownFenceMatch(line) !== null;
 }
 function normalizeMarkdownCell(value) {
     return value.replace(/[`*]/g, '').trim();
@@ -771,8 +868,7 @@ function markdownTables(body) {
     for (let index = 0; index < lines.length - 1; index += 1) {
         const headerLine = lines[index].trim();
         const separatorLine = lines[index + 1].trim();
-        if (!headerLine.startsWith('|') || !headerLine.endsWith('|')
-            || !separatorLine.startsWith('|') || !separatorLine.endsWith('|'))
+        if (!looksLikeMarkdownTableRow(headerLine) || !looksLikeMarkdownTableRow(separatorLine))
             continue;
         const headers = splitMarkdownTableRow(headerLine);
         const separators = splitMarkdownTableRow(separatorLine);
@@ -784,7 +880,7 @@ function markdownTables(body) {
         let rowIndex = index + 2;
         for (; rowIndex < lines.length; rowIndex += 1) {
             const rowLine = lines[rowIndex].trim();
-            if (!rowLine.startsWith('|') || !rowLine.endsWith('|'))
+            if (!looksLikeMarkdownTableRow(rowLine))
                 break;
             const cells = splitMarkdownTableRow(rowLine);
             if (cells.length !== headers.length)
@@ -795,6 +891,125 @@ function markdownTables(body) {
         index = rowIndex - 1;
     }
     return tables;
+}
+function assertReadableMarkdownTables(body, scope) {
+    const lines = body.split(/\r?\n/);
+    let fence = null;
+    let inHtmlComment = false;
+    let htmlCommentBlockquoteDepth = 0;
+    for (let index = 0; index < lines.length - 1; index += 1) {
+        const context = markdownLineContext(lines[index]);
+        if (fence !== null && context.blockquoteDepth < fence.blockquoteDepth)
+            fence = null;
+        if (inHtmlComment && context.blockquoteDepth < htmlCommentBlockquoteDepth) {
+            inHtmlComment = false;
+            htmlCommentBlockquoteDepth = 0;
+        }
+        const unstrippedFenceMatch = markdownFenceMatch(context.content);
+        if (fence !== null) {
+            if (unstrippedFenceMatch) {
+                const marker = unstrippedFenceMatch[1][0];
+                if (marker === fence.marker
+                    && context.blockquoteDepth === fence.blockquoteDepth
+                    && unstrippedFenceMatch[1].length >= fence.length
+                    && unstrippedFenceMatch[2].trim() === '') {
+                    fence = null;
+                }
+            }
+            continue;
+        }
+        if (!inHtmlComment && isIndentedMarkdownCode(context.content))
+            continue;
+        const wasInHtmlComment = inHtmlComment;
+        const strippedLine = stripMarkdownHtmlComments(context.content, inHtmlComment);
+        inHtmlComment = strippedLine.inComment;
+        if (!wasInHtmlComment && inHtmlComment)
+            htmlCommentBlockquoteDepth = context.blockquoteDepth;
+        if (!inHtmlComment)
+            htmlCommentBlockquoteDepth = 0;
+        const rawLine = strippedLine.content;
+        const fenceMatch = markdownFenceMatch(rawLine);
+        if (fenceMatch) {
+            fence = {
+                marker: fenceMatch[1][0],
+                length: fenceMatch[1].length,
+                blockquoteDepth: context.blockquoteDepth,
+            };
+            continue;
+        }
+        if (inHtmlComment)
+            continue;
+        const headerLine = rawLine.trim();
+        const separatorContext = markdownLineContext(lines[index + 1]);
+        if (separatorContext.blockquoteDepth !== context.blockquoteDepth
+            || isIndentedMarkdownCode(separatorContext.content))
+            continue;
+        const separatorLine = stripMarkdownHtmlComments(separatorContext.content).content.trim();
+        if (!looksLikeMarkdownTableRow(headerLine) || !looksLikeMarkdownTableRow(separatorLine))
+            continue;
+        const headers = splitMarkdownTableRow(headerLine);
+        const separators = splitMarkdownTableRow(separatorLine);
+        const validSeparatorCells = separators.map((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+        const separatorLike = separators.length > 0
+            && separators.every((cell) => /^:?-+:?$/.test(cell.trim()));
+        if (!separatorLike && !validSeparatorCells.some(Boolean))
+            continue;
+        const lineNumber = index + 1;
+        if (!validSeparatorCells.every(Boolean)) {
+            throw new Error(`project knowledge Markdown table has an invalid separator: ${scope}:${lineNumber + 1}`);
+        }
+        if (headers.length !== separators.length) {
+            throw new Error(`project knowledge Markdown table header/separator column mismatch: ${scope}:${lineNumber} `
+                + `(header=${headers.length}, separator=${separators.length})`);
+        }
+        const emptyHeaderIndex = headers.findIndex((header) => !normalizeMarkdownCell(header));
+        if (emptyHeaderIndex >= 0) {
+            throw new Error(`project knowledge Markdown table has an empty header cell: ${scope}:${lineNumber} `
+                + `(column ${emptyHeaderIndex + 1})`);
+        }
+        if (headers.length > maxReadableMarkdownTableColumns) {
+            throw new Error(`project knowledge Markdown table exceeds ${maxReadableMarkdownTableColumns} columns: `
+                + `${scope}:${lineNumber} (${headers.length} columns)`);
+        }
+        let rowIndex = index + 2;
+        for (; rowIndex < lines.length; rowIndex += 1) {
+            const rowContext = markdownLineContext(lines[rowIndex]);
+            if (rowContext.blockquoteDepth !== context.blockquoteDepth
+                || isIndentedMarkdownCode(rowContext.content))
+                break;
+            const rowLine = stripMarkdownHtmlComments(rowContext.content).content.trim();
+            if (!rowLine || isMarkdownBlockBoundary(rowLine))
+                break;
+            if (!looksLikeMarkdownTableRow(rowLine))
+                break;
+            const row = splitMarkdownTableRow(rowLine);
+            if (row.length !== headers.length) {
+                throw new Error(`project knowledge Markdown table data row column mismatch: ${scope}:${rowIndex + 1} `
+                    + `(header=${headers.length}, row=${row.length})`);
+            }
+        }
+        index = rowIndex - 1;
+    }
+}
+async function assertReadableProjectKnowledgeMarkdownFiles(sourceRoot) {
+    const visit = async (directory) => {
+        const entries = (await readdir(directory, { withFileTypes: true }))
+            .sort((left, right) => left.name.localeCompare(right.name));
+        for (const entry of entries) {
+            const absolutePath = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                if (entry.name === '_archive')
+                    continue;
+                await visit(absolutePath);
+                continue;
+            }
+            if (!entry.isFile() || !/^\.(?:md|markdown)$/i.test(path.extname(entry.name)))
+                continue;
+            const relativePath = path.relative(sourceRoot, absolutePath).split(path.sep).join('/');
+            assertReadableMarkdownTables(await readFile(absolutePath, 'utf8'), relativePath);
+        }
+    };
+    await visit(sourceRoot);
 }
 function numberedMarkdownSubsections(body, chapterNumber) {
     const matches = [...body.matchAll(/^###(?!#)\s+(\d+)\.(\d+)\s+(.+?)\s*$/gm)]
@@ -1484,9 +1699,7 @@ function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabili
     }
     const fieldHeaders = [
         '字段',
-        '类型',
-        '可空',
-        '默认值',
+        '类型/可空/默认值',
         '键/约束',
         '业务语义',
         '读写 api_id',
@@ -1537,12 +1750,12 @@ function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabili
                     throw new Error(`project knowledge level-1 capability table field structure is incomplete: ${capabilityId}/${tableId}/${fieldName}`);
                 }
             }
-            const apiIds = traceIdentifierList(row[6] ?? '');
+            const apiIds = traceIdentifierList(row[4] ?? '');
             const inventoryApiIds = tableApiIds.get(tableId) ?? new Set();
             if (apiIds.length === 0 || apiIds.some((apiId) => !inventoryApiIds.has(apiId))) {
                 throw new Error(`project knowledge level-1 capability table field references unknown api_id: ${capabilityId}/${tableId}/${fieldName}`);
             }
-            if (exactCodeAnchors(row[7] ?? '').length === 0) {
+            if (exactCodeAnchors(row[5] ?? '').length === 0) {
                 throw new Error(`project knowledge level-1 capability table field missing exact evidence: ${capabilityId}/${tableId}/${fieldName}`);
             }
         }
@@ -1554,9 +1767,8 @@ function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabili
     if (tableIds.size > 1) {
         const relationshipHeaders = [
             'relation_id',
-            '主表 table_id',
+            '表关系（主 -> 从）',
             '关系/基数',
-            '从表 table_id',
             '关联键',
             '业务语义',
             '证据',
@@ -1575,11 +1787,14 @@ function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabili
         const matchedErRelationshipIndexes = new Set();
         for (const row of relationshipTable.rows) {
             const relationId = normalizeMarkdownCell(row[0] ?? '');
-            const sourceTableId = normalizeMarkdownCell(row[1] ?? '');
+            const tableRelationship = normalizeMarkdownCell(row[1] ?? '');
+            const tableRelationshipMatch = /^([A-Za-z_][A-Za-z0-9_]*)\s*(?:->|→)\s*([A-Za-z_][A-Za-z0-9_]*)$/
+                .exec(tableRelationship);
+            const sourceTableId = tableRelationshipMatch?.[1] ?? '';
+            const targetTableId = tableRelationshipMatch?.[2] ?? '';
             const cardinality = normalizeMarkdownCell(row[2] ?? '');
-            const targetTableId = normalizeMarkdownCell(row[3] ?? '');
-            const relationKey = normalizeMarkdownCell(row[4] ?? '');
-            const semantics = normalizeMarkdownCell(row[5] ?? '');
+            const relationKey = normalizeMarkdownCell(row[3] ?? '');
+            const semantics = normalizeMarkdownCell(row[4] ?? '');
             if (!projectKnowledgeTraceIdentifierPattern.test(relationId)
                 || invalidProjectKnowledgeTraceIdentifierPattern.test(relationId)
                 || relationIds.has(relationId)
@@ -1589,7 +1804,7 @@ function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabili
                 || !/^(?:1:1|1:N|N:1|N:M|无直接关系)$/.test(cardinality)
                 || relationKey.length < 2
                 || semantics.length < 2
-                || exactCodeAnchors(row[6] ?? '').length === 0) {
+                || exactCodeAnchors(row[5] ?? '').length === 0) {
                 throw new Error(`project knowledge level-1 capability has invalid ER relationship evidence: ${capabilityId}/${relationId || 'missing'}`);
             }
             relationIds.add(relationId);
@@ -2395,6 +2610,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     if (!existsSync(inventoryPath)) {
         throw new Error('project knowledge document missing: business/inventory.yaml');
     }
+    await assertReadableProjectKnowledgeMarkdownFiles(sourceRoot);
     const inventory = parseSimpleYaml(await readFile(inventoryPath, 'utf8'));
     const gapReportPath = path.join(sourceRoot, 'gaps', 'doc-gap-report.md');
     const gapReportBody = existsSync(gapReportPath) ? await readFile(gapReportPath, 'utf8') : '';
