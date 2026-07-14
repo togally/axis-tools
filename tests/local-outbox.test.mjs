@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import {
+  validLevel1CapabilityDependencyGraph,
   validLevel1CapabilityDetailedDesign,
   validSecondaryDetailedDesign,
 } from './helpers/project-knowledge-fixtures.mjs';
@@ -284,7 +285,18 @@ async function writeProjectKnowledgeDocs(repo) {
   await mkdir(path.join(root, 'gaps'), { recursive: true });
   await writeFile(path.join(root, 'metadata.yaml'), 'document_language: zh-CN\nstatus: review\n', 'utf8');
   await writeFile(path.join(root, 'architecture', 'technical.md'), '# 技术架构\n\n## C4 系统上下文\n', 'utf8');
-  await writeFile(path.join(root, 'architecture', 'business.md'), '# 业务架构\n\n## 业务能力地图\n\n[商业经营](business/capabilities/commerce/detailed-design.md)\n', 'utf8');
+  await writeFile(path.join(root, 'architecture', 'business.md'), [
+    '# 业务架构',
+    '',
+    '> 依赖图派生状态：`dependency_graph_status=derived` · `dependency_graph_revision=1` · `dependency_graph_gap_id=not_applicable`',
+    '',
+    '唯一机器源：`business/level1-capability-dependency-graph.yaml`',
+    '',
+    '## 业务能力地图',
+    '',
+    '[商业经营](business/capabilities/commerce/detailed-design.md)',
+    '',
+  ].join('\n'), 'utf8');
   await writeFile(
     path.join(root, 'business', 'inventory.yaml'),
     [
@@ -302,6 +314,13 @@ async function writeProjectKnowledgeDocs(repo) {
       '          - support',
       '',
     ].join('\n'),
+    'utf8',
+  );
+  await writeFile(
+    path.join(root, 'business', 'level1-capability-dependency-graph.yaml'),
+    validLevel1CapabilityDependencyGraph([
+      { id: 'commerce', name: '商业经营' },
+    ]),
     'utf8',
   );
   await writeFile(
@@ -461,7 +480,7 @@ await withTempDir(async (repo) => {
   assert.equal(manifest.release.gate, 'not_requested');
   assert.equal(manifest.publish.status, 'local_ready');
   assert.equal(manifest.publish.base_uri, 'oss://axis-v02-private-beta-example/axis/v0.2/orgs/org_axis_tools/projects/demo-project/packages/20260703T121530Z-test-report-a1b2c3d4/');
-  assert.deepEqual(manifest.files.map((file) => file.path).sort(), ['experience.md', 'manifest.json', 'metadata.json', 'report.md']);
+  assert.deepEqual(manifest.files.map((file) => file.path).sort(), ['experience.md', 'metadata.json', 'report.md']);
   for (const file of manifest.files) {
     assert.match(file.path, /^[^/]+$/);
     assert.match(file.sha256, /^[a-f0-9]{64}$/);
@@ -872,6 +891,7 @@ await withTempDir(async (repo) => {
     'documents/business/capabilities/commerce/secondary-capabilities/sales/detailed-design.md',
     'documents/business/capabilities/commerce/secondary-capabilities/support/detailed-design.md',
     'documents/business/inventory.yaml',
+    'documents/business/level1-capability-dependency-graph.yaml',
     'documents/gaps/doc-gap-report.md',
     'documents/metadata.yaml',
     'manifest.json',
@@ -881,6 +901,7 @@ await withTempDir(async (repo) => {
   const packageDir = path.join(repo, result.package_dir);
   const metadata = await readJson(path.join(packageDir, 'metadata.json'));
   const manifest = await readJson(path.join(packageDir, 'manifest.json'));
+  assert.equal(manifest.files.some((file) => file.path === 'manifest.json'), false);
   assert.equal(metadata.artifact.type, 'project_knowledge_snapshot');
   assert.equal(metadata.document.doc_type, 'project_knowledge_snapshot');
   assert.equal(metadata.document.language, 'zh-CN');

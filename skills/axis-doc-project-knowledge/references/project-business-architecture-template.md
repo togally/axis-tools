@@ -31,6 +31,22 @@
 
 相同一级能力的所有行必须使用同一个 `level1_capability_id`。项目知识为该 ID 生成一份总览，并为每个二级能力生成独立详细设计；Dashboard 支持从本业务架构跳转能力总览，再进入二级能力设计。
 
+### 4.1 一级能力依赖图与树状视图
+
+唯一机器源为 `business/level1-capability-dependency-graph.yaml`。能力地图只定义有哪些能力；依赖图在所有一级用户旅程和二级接口设计完成后，由模型一次性读取全项目当前文档统一梳理。每份一级总览只投影该图的直接入边和直接出边，不得自行推断。
+
+> 依赖图派生状态：`dependency_graph_status={pending_level1_completion_or_derived}` · `dependency_graph_revision={not_derived_or_revision}` · `dependency_graph_gap_id={gap_id_or_not_applicable}`
+
+- pending 时不绘制具体边，只说明尚未完成的一级/二级能力及统一 gap；
+- derived 时从 canonical 图渲染 Mermaid，并保留 `edge_id`、关系类型、阶段、来源/目标和证据；下面的 Mermaid 块仅用于 derived 输出，pending 输出必须删除该块；
+- 底层是允许多上游与分阶段反向关系的有向依赖图，Dashboard 可将直接关系展开为树状视图，并用已访问节点防止循环展开；
+- 文档导航的“上一个/下一个能力”只表示清单顺序，不属于依赖图。
+
+```mermaid
+flowchart LR
+    upstream["{upstream_level1_capability_id}"] -->|"{edge_id} · {relation_type}:{stage}"| downstream["{downstream_level1_capability_id}"]
+```
+
 ## 5. 价值流
 
 | 价值流 | 触发者 | 起点 | 主要阶段 | 最终价值 | 涉及能力 |

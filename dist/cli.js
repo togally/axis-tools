@@ -9,6 +9,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import { parse as parseYaml } from 'yaml';
 const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
@@ -718,6 +719,8 @@ function projectKnowledgeSourceRoot(repo, config) {
     }
     return path.join(repo, '.axis', 'docs', 'orgs', config.organization.id, 'projects', config.project.slug);
 }
+const projectKnowledgeTraceIdentifierPattern = /^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/;
+const invalidProjectKnowledgeTraceIdentifierPattern = /^(?:missing_evidence|not_applicable|none|todo|tbd)$/i;
 function secondaryDesignStatus(body, key, allowed, capabilityId, secondaryId) {
     const match = new RegExp(`\\b${key}\\s*=\\s*(${allowed.join('|')})\\b`).exec(body);
     if (!match) {
@@ -1355,6 +1358,277 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
     }
     return journeyIdsBySecondary;
 }
+function level1DependencyProjectionIds(rawValue, capabilityId, direction) {
+    const value = normalizeMarkdownCell(rawValue);
+    if (value === 'not_derived')
+        return 'not_derived';
+    if (value === '[]')
+        return new Set();
+    const ids = value.split(/[,，、;；\s]+/).filter(Boolean);
+    if (ids.length === 0
+        || ids.some((id) => !/^[a-z][a-z0-9_]*$/.test(id))
+        || new Set(ids).size !== ids.length) {
+        throw new Error(`project knowledge level-1 capability has invalid ${direction} dependency projection: ${capabilityId}`);
+    }
+    return new Set(ids);
+}
+function level1CapabilityDependencyProjection(body, capabilityId) {
+    const control = dependencyGraphControl(body, `level-1 capability ${capabilityId}`);
+    const dependencyRows = markdownTables(body)
+        .filter((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === 3
+            && headers[0] === '字段'
+            && headers[1] === '内容'
+            && headers[2] === '来源';
+    })
+        .flatMap((table) => table.rows)
+        .filter((row) => ['上游能力', '下游能力'].includes(normalizeMarkdownCell(row[0] ?? '')));
+    const upstreamRows = dependencyRows.filter((row) => normalizeMarkdownCell(row[0] ?? '') === '上游能力');
+    const downstreamRows = dependencyRows.filter((row) => normalizeMarkdownCell(row[0] ?? '') === '下游能力');
+    if (upstreamRows.length !== 1 || downstreamRows.length !== 1) {
+        throw new Error(`project knowledge level-1 capability requires one upstream and downstream dependency projection: ${capabilityId}`);
+    }
+    const expectedSource = 'business/level1-capability-dependency-graph.yaml';
+    for (const row of [upstreamRows[0], downstreamRows[0]]) {
+        if (normalizeMarkdownCell(row[2] ?? '') !== expectedSource) {
+            throw new Error(`project knowledge level-1 capability dependency projection has wrong graph source: ${capabilityId}`);
+        }
+    }
+    return {
+        ...control,
+        upstream: level1DependencyProjectionIds(upstreamRows[0][1] ?? '', capabilityId, 'upstream'),
+        downstream: level1DependencyProjectionIds(downstreamRows[0][1] ?? '', capabilityId, 'downstream'),
+    };
+}
+function dependencyGraphControl(body, scope) {
+    const controlLines = body.split(/\r?\n/).filter((line) => (/\bdependency_graph_status\s*=/.test(line)
+        && /\bdependency_graph_revision\s*=/.test(line)
+        && /\bdependency_graph_gap_id\s*=/.test(line)));
+    if (controlLines.length !== 1) {
+        throw new Error(`project knowledge ${scope} requires one dependency graph projection control line`);
+    }
+    const controlLine = controlLines[0];
+    const status = /\bdependency_graph_status\s*=\s*(pending_level1_completion|derived)\b/
+        .exec(controlLine)?.[1];
+    const revision = /\bdependency_graph_revision\s*=\s*([A-Za-z0-9][A-Za-z0-9_.:\-]*)\b/
+        .exec(controlLine)?.[1];
+    const gapId = /\bdependency_graph_gap_id\s*=\s*([A-Za-z0-9][A-Za-z0-9_.:\-]*)\b/
+        .exec(controlLine)?.[1];
+    if (!status || !revision || !gapId) {
+        throw new Error(`project knowledge ${scope} has invalid dependency graph projection control line`);
+    }
+    return {
+        status,
+        revision,
+        gapId,
+    };
+}
+function sameIdentifierSet(left, right) {
+    return left.size === right.size && [...left].every((value) => right.has(value));
+}
+function graphArray(value, field) {
+    if (Array.isArray(value))
+        return value;
+    if (value === '[]')
+        return [];
+    throw new Error(`project knowledge level-1 capability dependency graph has invalid ${field}`);
+}
+function optionalGraphArray(value, field) {
+    if (value === undefined)
+        return [];
+    return graphArray(value, field);
+}
+function assertLevel1CapabilityDependencyGraph(graphBody, capabilities, coverageByCapability, journeysByCapability, apiIdsByCapability, allSecondaryInterfacesComplete, projectionsByCapability, businessArchitectureBody, sourceRoot, gapReportBody) {
+    let parsedGraph;
+    try {
+        parsedGraph = parseYaml(graphBody);
+    }
+    catch (error) {
+        throw new Error(`project knowledge level-1 capability dependency graph is invalid YAML: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!parsedGraph || typeof parsedGraph !== 'object' || Array.isArray(parsedGraph)) {
+        throw new Error('project knowledge level-1 capability dependency graph root must be a mapping');
+    }
+    const graph = parsedGraph;
+    if (graph.schema !== 'axis.level1_capability_dependency_graph' || graph.schema_version !== '0.2') {
+        throw new Error('project knowledge level-1 capability dependency graph has invalid schema');
+    }
+    if (graph.derivation_method !== 'model_synthesis') {
+        throw new Error('project knowledge level-1 capability dependency graph requires derivation_method=model_synthesis');
+    }
+    const status = graph.derivation_status;
+    if (status !== 'pending_level1_completion' && status !== 'derived') {
+        throw new Error('project knowledge level-1 capability dependency graph has invalid derivation_status');
+    }
+    const revision = typeof graph.derivation_revision === 'string' || typeof graph.derivation_revision === 'number'
+        ? String(graph.derivation_revision)
+        : '';
+    const gapId = typeof graph.gap_id === 'string' ? graph.gap_id : '';
+    if (!revision || !gapId) {
+        throw new Error('project knowledge level-1 capability dependency graph is missing revision or gap_id');
+    }
+    const expectedNames = new Map(capabilities.map((capability) => [
+        capability.level1_capability_id,
+        capability.level1_capability_name,
+    ]));
+    const nodes = graphArray(graph.nodes, 'nodes');
+    const nodeIds = nodes.map((node) => node.level1_capability_id ?? '');
+    if (new Set(nodeIds).size !== nodeIds.length
+        || nodeIds.length !== expectedNames.size
+        || nodeIds.some((nodeId) => !expectedNames.has(nodeId))
+        || nodes.some((node) => expectedNames.get(node.level1_capability_id ?? '') !== node.level1_capability_name)) {
+        throw new Error('project knowledge level-1 capability dependency graph nodes do not match inventory');
+    }
+    const edges = graphArray(graph.edges, 'edges');
+    const assertBusinessArchitectureState = () => {
+        const architectureControl = dependencyGraphControl(businessArchitectureBody, 'business architecture');
+        if (!businessArchitectureBody.includes('business/level1-capability-dependency-graph.yaml')) {
+            throw new Error('project knowledge business architecture omits canonical level-1 dependency graph source');
+        }
+        if (architectureControl.status !== status
+            || architectureControl.revision !== revision
+            || architectureControl.gapId !== gapId) {
+            throw new Error('project knowledge business architecture dependency graph state mismatches canonical graph');
+        }
+    };
+    const allComplete = allSecondaryInterfacesComplete
+        && [...coverageByCapability.values()].every((coverage) => coverage === 'complete');
+    if (!allComplete) {
+        if (status !== 'pending_level1_completion') {
+            throw new Error('project knowledge level-1 capability dependency graph requires all level-1 coverage complete before derivation');
+        }
+        if (revision !== 'not_derived' || gapId === 'not_applicable') {
+            throw new Error('project knowledge pending level-1 capability dependency graph requires not_derived revision and explicit gap');
+        }
+        if (edges.length !== 0) {
+            throw new Error('project knowledge pending level-1 capability dependency graph must not contain derived edges');
+        }
+        assertBusinessArchitectureState();
+        const escapedGapId = gapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`).test(gapReportBody)) {
+            throw new Error(`project knowledge pending level-1 capability dependency graph gap is not tracked: ${gapId}`);
+        }
+        for (const [capabilityId, projection] of projectionsByCapability) {
+            if (projection.status !== 'pending_level1_completion'
+                || projection.revision !== 'not_derived'
+                || projection.gapId !== gapId
+                || projection.upstream !== 'not_derived'
+                || projection.downstream !== 'not_derived') {
+                throw new Error(`project knowledge level-1 capability must keep dependency projection not_derived until global analysis: ${capabilityId}`);
+            }
+        }
+        return;
+    }
+    if (status !== 'derived') {
+        throw new Error('project knowledge complete level-1 capability set requires a derived dependency graph');
+    }
+    if (revision === 'not_derived' || gapId !== 'not_applicable') {
+        throw new Error('project knowledge derived level-1 capability dependency graph requires a revision and gap_id=not_applicable');
+    }
+    assertBusinessArchitectureState();
+    const incoming = new Map(nodeIds.map((nodeId) => [nodeId, new Set()]));
+    const outgoing = new Map(nodeIds.map((nodeId) => [nodeId, new Set()]));
+    const edgeIds = new Set();
+    const edgeKeys = new Set();
+    const journeyIdsByCapability = new Map([...journeysByCapability].map(([capabilityId, journeysBySecondary]) => [
+        capabilityId,
+        new Set([...journeysBySecondary.values()].flat().map((journey) => journey.journeyId)),
+    ]));
+    for (const edge of edges) {
+        const edgeId = edge.edge_id ?? '';
+        const from = edge.from_level1_capability_id ?? '';
+        const to = edge.to_level1_capability_id ?? '';
+        const relationType = edge.relation_type ?? '';
+        const stage = edge.stage ?? '';
+        if (!/^[a-z][a-z0-9_]*$/.test(edgeId) || edgeIds.has(edgeId)) {
+            throw new Error(`project knowledge level-1 capability dependency graph has invalid or duplicate edge_id: ${edgeId || 'missing'}`);
+        }
+        if (!expectedNames.has(from) || !expectedNames.has(to)) {
+            throw new Error(`project knowledge level-1 capability dependency graph edge references unknown node: ${edgeId}`);
+        }
+        if (from === to) {
+            throw new Error(`project knowledge level-1 capability dependency graph contains a self edge: ${edgeId}`);
+        }
+        if (!/^[a-z][a-z0-9_]*$/.test(relationType) || !/^[a-z][a-z0-9_]*$/.test(stage)) {
+            throw new Error(`project knowledge level-1 capability dependency graph edge has invalid relation type or stage: ${edgeId}`);
+        }
+        const edgeKey = `${from}\u0000${to}\u0000${relationType}\u0000${stage}`;
+        if (edgeKeys.has(edgeKey)) {
+            throw new Error(`project knowledge level-1 capability dependency graph contains a duplicate staged relation: ${edgeId}`);
+        }
+        const evidenceRefs = graphArray(edge.evidence_refs, `evidence_refs for ${edgeId}`);
+        const journeyIds = optionalGraphArray(edge.journey_ids, `journey_ids for ${edgeId}`);
+        const apiIds = optionalGraphArray(edge.api_ids, `api_ids for ${edgeId}`);
+        const endpointJourneyIds = new Set([
+            ...(journeyIdsByCapability.get(from) ?? []),
+            ...(journeyIdsByCapability.get(to) ?? []),
+        ]);
+        const endpointApiIds = new Set([
+            ...(apiIdsByCapability.get(from) ?? []),
+            ...(apiIdsByCapability.get(to) ?? []),
+        ]);
+        for (const journeyId of journeyIds) {
+            if (typeof journeyId !== 'string'
+                || !projectKnowledgeTraceIdentifierPattern.test(journeyId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(journeyId)
+                || !endpointJourneyIds.has(journeyId)) {
+                throw new Error(`project knowledge level-1 capability dependency graph edge references unknown journey_id: ${edgeId}/${String(journeyId)}`);
+            }
+        }
+        for (const apiId of apiIds) {
+            if (typeof apiId !== 'string'
+                || !projectKnowledgeTraceIdentifierPattern.test(apiId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)
+                || !endpointApiIds.has(apiId)) {
+                throw new Error(`project knowledge level-1 capability dependency graph edge references unknown api_id: ${edgeId}/${String(apiId)}`);
+            }
+        }
+        const hasTraceableEvidence = evidenceRefs.every((ref) => {
+            if (typeof ref !== 'string'
+                || !ref.trim()
+                || /\{[^}]+\}|TODO|TBD|待补|待定|missing_evidence/i.test(ref)) {
+                return false;
+            }
+            if (exactCodeAnchors(ref).length > 0)
+                return true;
+            const documentReference = /^((?:architecture|business|gaps)\/[^#\s]+)#[^#\s]+$/.exec(ref);
+            return Boolean(documentReference && existsSync(path.join(sourceRoot, documentReference[1])));
+        });
+        if (!edge.summary?.trim()
+            || evidenceRefs.length === 0
+            || !hasTraceableEvidence
+            || (journeyIds.length === 0 && apiIds.length === 0)
+            || !['high', 'medium'].includes(edge.confidence ?? '')) {
+            throw new Error(`project knowledge level-1 capability dependency graph edge lacks traceable evidence: ${edgeId}`);
+        }
+        edgeIds.add(edgeId);
+        edgeKeys.add(edgeKey);
+        outgoing.get(from)?.add(to);
+        incoming.get(to)?.add(from);
+    }
+    if (edges.length > 0) {
+        if (!/```mermaid[\s\S]*?flowchart[\s\S]*?```/.test(businessArchitectureBody)
+            || [...edgeIds].some((edgeId) => !businessArchitectureBody.includes(edgeId))) {
+            throw new Error('project knowledge business architecture dependency tree view mismatches canonical graph edges');
+        }
+    }
+    for (const [capabilityId, projection] of projectionsByCapability) {
+        if (projection.status !== 'derived'
+            || projection.revision !== revision
+            || projection.gapId !== 'not_applicable') {
+            throw new Error(`project knowledge level-1 capability dependency projection is not derived from current graph: ${capabilityId}`);
+        }
+        if (projection.upstream === 'not_derived'
+            || !sameIdentifierSet(projection.upstream, incoming.get(capabilityId) ?? new Set())) {
+            throw new Error(`project knowledge level-1 capability upstream projection mismatches canonical graph: ${capabilityId}`);
+        }
+        if (projection.downstream === 'not_derived'
+            || !sameIdentifierSet(projection.downstream, outgoing.get(capabilityId) ?? new Set())) {
+            throw new Error(`project knowledge level-1 capability downstream projection mismatches canonical graph: ${capabilityId}`);
+        }
+    }
+}
 function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId) {
     const scope = `${capabilityId}/${secondaryId}`;
     const legacyTopLevelTitles = [
@@ -1469,6 +1743,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     }));
     const level1JourneysByCapability = new Map();
     const level1JourneyCoverageByCapability = new Map();
+    const level1DependencyProjectionsByCapability = new Map();
     for (const capability of level1Capabilities) {
         const capabilityId = capability.level1_capability_id;
         const capabilityDocument = capabilityDetailedDesigns.find((document) => document.docId === `business_capability_detailed_design_${capabilityId}`);
@@ -1481,6 +1756,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             .exec(capabilityDocumentBody)?.[1];
         level1JourneyCoverageByCapability.set(capabilityId, capabilityCoverage);
         level1JourneysByCapability.set(capabilityId, assertLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody));
+        level1DependencyProjectionsByCapability.set(capabilityId, level1CapabilityDependencyProjection(capabilityDocumentBody, capabilityId));
         for (const secondary of capability.secondary_capabilities) {
             const secondaryId = secondary.secondary_capability_id;
             const escapedSecondaryId = secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1495,7 +1771,11 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             }
         }
     }
+    const capabilityDependencyGraphRelativePath = 'business/level1-capability-dependency-graph.yaml';
+    const capabilityDependencyGraphPath = path.join(sourceRoot, capabilityDependencyGraphRelativePath);
     const secondaryCapabilityDetailedDesigns = [];
+    const apiIdsByCapability = new Map(level1CapabilityIds.map((capabilityId) => [capabilityId, new Set()]));
+    let allSecondaryInterfacesComplete = true;
     for (const capability of level1Capabilities) {
         const capabilityId = capability.level1_capability_id;
         for (const secondary of capability.secondary_capabilities) {
@@ -1514,6 +1794,8 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId);
             const secondaryInterfaceCoverage = /\binterface_coverage\s*=\s*(complete|partial|not_applicable)\b/
                 .exec(body)?.[1] ?? 'missing';
+            if (secondaryInterfaceCoverage !== 'complete')
+                allSecondaryInterfacesComplete = false;
             if (level1JourneyCoverageByCapability.get(capabilityId) === 'complete'
                 && secondaryInterfaceCoverage !== 'complete') {
                 throw new Error(`project knowledge level-1 complete user journey coverage conflicts with ${secondaryInterfaceCoverage} secondary interface coverage: ${capabilityId}/${secondaryId}`);
@@ -1523,6 +1805,10 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             const interfaceHeading = /^##\s+(\d+)\.?\s+接口详细设计\s*$/m.exec(body);
             const interfaceSection = projectKnowledgeSection(body, /^##\s+\d+\.?\s+接口详细设计\s*$/m) ?? '';
             const childJourneyBindings = secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading?.[1] ?? 5), `${capabilityId}/${secondaryId}`);
+            for (const bindings of childJourneyBindings.values()) {
+                for (const binding of bindings)
+                    apiIdsByCapability.get(capabilityId)?.add(binding.apiId);
+            }
             for (const journey of expectedJourneys) {
                 const bindings = childJourneyBindings.get(journey.journeyId) ?? [];
                 if (bindings.length === 0) {
@@ -1549,6 +1835,10 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             });
         }
     }
+    if (!existsSync(capabilityDependencyGraphPath)) {
+        throw new Error(`project knowledge level-1 capability dependency graph missing: ${capabilityDependencyGraphRelativePath}`);
+    }
+    assertLevel1CapabilityDependencyGraph(await readFile(capabilityDependencyGraphPath, 'utf8'), level1Capabilities, level1JourneyCoverageByCapability, level1JourneysByCapability, apiIdsByCapability, allSecondaryInterfacesComplete, level1DependencyProjectionsByCapability, businessArchitectureBody, sourceRoot, gapReportBody);
     const requirementDetailedDesigns = [];
     for (const capabilityId of level1CapabilityIds) {
         const requirementsRoot = path.join(sourceRoot, 'business', 'capabilities', capabilityId, 'requirements');
@@ -1598,6 +1888,12 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             source: 'business/inventory.yaml',
             target: 'documents/business/inventory.yaml',
             docType: 'business_inventory',
+            mediaType: 'application/yaml',
+        },
+        {
+            source: capabilityDependencyGraphRelativePath,
+            target: `documents/${capabilityDependencyGraphRelativePath}`,
+            docType: 'level1_capability_dependency_graph',
             mediaType: 'application/yaml',
         },
         ...capabilityDetailedDesigns,
@@ -1783,13 +2079,6 @@ async function projectKnowledgeCaptureCommand() {
         files: [
             await fileEntry(packageDir, 'metadata', 'metadata.json', 'application/json'),
             ...documentEntries,
-            {
-                kind: 'manifest',
-                path: 'manifest.json',
-                media_type: 'application/json',
-                sha256: '0'.repeat(64),
-                bytes: 0,
-            },
         ],
         publish: {
             provider: 'aliyun-oss',
@@ -1810,13 +2099,11 @@ async function projectKnowledgeCaptureCommand() {
     };
     const manifestPath = path.join(packageDir, 'manifest.json');
     await writeJsonFile(manifestPath, manifest);
-    manifest.files[manifest.files.length - 1] = await fileEntry(packageDir, 'manifest', 'manifest.json', 'application/json');
-    await writeJsonFile(manifestPath, manifest);
     console.log(JSON.stringify({
         ok: true,
         asset_type: 'project_knowledge_snapshot',
         package_dir: relativeToRepo(repo, packageDir),
-        files: manifest.files.map((file) => file.path),
+        files: [...manifest.files.map((file) => file.path), 'manifest.json'],
     }, null, 2));
 }
 async function gitValue(repo, args, fallback) {
@@ -2082,13 +2369,6 @@ async function writePackageCommand(assetType) {
             await fileEntry(packageDir, 'metadata', 'metadata.json', 'application/json'),
             reportEntry,
             experienceEntry,
-            {
-                kind: 'manifest',
-                path: 'manifest.json',
-                media_type: 'application/json',
-                sha256: '0'.repeat(64),
-                bytes: 0,
-            },
         ],
         publish: {
             provider: 'aliyun-oss',
@@ -2133,13 +2413,11 @@ async function writePackageCommand(assetType) {
     };
     const manifestPath = path.join(packageDir, 'manifest.json');
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
-    manifest.files[3] = await fileEntry(packageDir, 'manifest', 'manifest.json', 'application/json');
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
     console.log(JSON.stringify({
         ok: true,
         asset_type: assetType,
         package_dir: relativeToRepo(repo, packageDir),
-        files: manifest.files.map((file) => file.path),
+        files: [...manifest.files.map((file) => file.path), 'manifest.json'],
     }, null, 2));
 }
 async function readJsonFile(filePath) {
@@ -2333,12 +2611,7 @@ async function refreshManifestFileEntries(packageDir, manifest) {
         return;
     const refreshed = [];
     for (const entry of manifest.files) {
-        if (entry.path === 'manifest.json') {
-            refreshed.push(entry);
-        }
-        else {
-            refreshed.push(await fileEntryFromRelative(packageDir, entry));
-        }
+        refreshed.push(await fileEntryFromRelative(packageDir, entry));
     }
     manifest.files = refreshed;
 }
@@ -2441,6 +2714,9 @@ async function validatePackageManifest(repo, packageDir, runId, config, localFil
     if (!Array.isArray(manifest.files) || manifest.files.length === 0)
         throw new Error('manifest.files is required');
     const manifestPaths = manifest.files.map((file) => file.path);
+    if (manifestPaths.includes('manifest.json')) {
+        throw new Error('manifest.files must not include manifest.json');
+    }
     for (const filePath of manifestPaths) {
         const unsafe = unsafePathReason(filePath);
         if (unsafe)
@@ -2449,13 +2725,12 @@ async function validatePackageManifest(repo, packageDir, runId, config, localFil
             throw new Error(`manifest file path must be relative: ${filePath}`);
         }
     }
-    assertSameStringSet(localFiles, manifestPaths, 'manifest.files must match package directory files');
+    const localContentFiles = localFiles.filter((filePath) => filePath !== 'manifest.json');
+    assertSameStringSet(localContentFiles, manifestPaths, 'manifest.files must match package content files');
     for (const entry of manifest.files) {
         const absolutePath = path.join(packageDir, entry.path);
         if (!existsSync(absolutePath))
             throw new Error(`manifest file missing: ${entry.path}`);
-        if (entry.path === 'manifest.json')
-            continue;
         const actual = await fileEntryFromRelative(packageDir, entry);
         if (actual.sha256 !== entry.sha256)
             throw new Error(`manifest checksum mismatch: ${entry.path}`);
@@ -2630,6 +2905,19 @@ async function buildPublishFiles(packageDir, manifest, config, runId, assetType)
             target_uri: ossUri(bucket, objectKey),
         });
     }
+    const manifestPath = path.join(packageDir, 'manifest.json');
+    const manifestContent = await readFile(manifestPath);
+    const manifestStats = await stat(manifestPath);
+    const manifestObjectKey = objectKeyForPublish(config, runId, 'manifest.json', assetType);
+    files.push({
+        path: 'manifest.json',
+        absolutePath: manifestPath,
+        media_type: 'application/json',
+        sha256: createHash('sha256').update(manifestContent).digest('hex'),
+        bytes: manifestStats.size,
+        object_key: manifestObjectKey,
+        target_uri: ossUri(bucket, manifestObjectKey),
+    });
     return files.sort((left, right) => {
         if (left.path === 'manifest.json')
             return 1;

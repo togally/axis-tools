@@ -26,6 +26,7 @@ Required project knowledge:
 - `project_technical_architecture`;
 - `project_business_architecture`;
 - `business_inventory`;
+- one project-level `level1_capability_dependency_graph` at `business/level1-capability-dependency-graph.yaml`;
 - one `business_capability_detailed_design` for every unique `level1_capability_id`;
 - one `secondary_capability_detailed_design` for every declared `secondary_capability_id`;
 - `doc_gap_report`;
@@ -39,6 +40,7 @@ Invariants:
 - level-1 overviews never copy field dictionaries, full call chains, Mapper/Repository detail, transaction/concurrency detail or test matrices; secondary documents own the interface-local code, data, governance and verification detail inside each `5.N` contract group;
 - `business_id` is a mapping from a secondary capability to implementation/business evidence, not a document boundary;
 - repeated rows or evidence with the same level-1 capability are merged into one document rather than producing parallel detailed designs;
+- upstream/downstream is a project-wide derived relationship, never a per-overview guess: the dependency graph is the unique machine source, and every level-1 overview contains only its direct incoming and outgoing projection;
 - no global business detailed-design duplicate;
 - global documents explain shared structure and boundaries, level-1 overviews explain the user business-operation panorama, navigation and cross-secondary handoff summaries, and secondary documents contain complete local business plus interface-owned code, data, quality and verification design;
 - unsupported claims remain assumptions, `missing_evidence`, `low_confidence` or `conflict`;
@@ -76,6 +78,14 @@ Before rendering each level-1 overview, resolve and record these machine-checkab
 - `user_journey_coverage=complete|partial`;
 - `user_journey_gap_id=<stable_gap_id>|not_applicable`.
 
+Also record exactly one dependency projection control line with `dependency_graph_status=pending_level1_completion|derived`, `dependency_graph_revision=<not_derived_or_revision>` and `dependency_graph_gap_id=<stable_gap_id>|not_applicable`. Read [level1-capability-dependency-graph-template.yaml](references/level1-capability-dependency-graph-template.yaml). The project-level graph gate is mandatory:
+
+1. Build and reconcile every level-1 overview and every owning secondary design first. If any overview has `user_journey_coverage=partial` or any child has `interface_coverage=partial`, keep the graph at `pending_level1_completion`, set `derivation_revision=not_derived`, use one stable graph gap, keep `edges: []`, and write `not_derived` for both upstream and downstream in every overview.
+2. Only after all level-1 and secondary documents are complete, perform one 项目级统一模型梳理 over the complete inventory and all current overviews/child traces. Write the canonical `business/level1-capability-dependency-graph.yaml` before updating any overview projection.
+3. Each derived edge has a stable `edge_id`, `from_level1_capability_id`, `to_level1_capability_id`, `relation_type`, `stage`, summary, source/target `journey_ids` and/or `api_ids`, exact code or canonical-document evidence refs and confidence. The graph may contain multiple direct incoming edges, multiple direct outgoing edges and evidence-backed staged reverse relationships; reject self edges, unknown nodes, duplicate edge IDs and duplicate `(from,to,relation_type,stage)` relations. Preserve every `edge_id` in the business-architecture Mermaid/tree rendering so it can be checked against the canonical graph.
+4. For each overview, upstream is exactly the source set of its 直接入边 and downstream is exactly the target set of its 直接出边. Use `[]` only after derivation proves no direct neighbor; `not_derived` means the global analysis has not run. Do not confuse document navigation with dependency direction.
+5. A level-1 capability, boundary or relationship-evidence change invalidates local projections. Return the graph and all overview projections to pending, then rerun the project-wide model synthesis and batch update them; never patch one overview independently.
+
 `detailed` requires the fixed user-journey table fields: `journey_id`, 用户/角色, 所属二级能力/模块, 提供的业务, 用户目标, 用户怎么操作, 接口/入口, Controller/Handler exact `path:begin-end#symbol`, Service/UseCase exact anchor, 读取数据, 写入/产生数据, 用户可见结果, 二级能力详情 and 证据. Scan all declared secondary capabilities and connected pages, menus, routes, APIs, events, jobs and commands; every declared secondary capability must have at least one fully anchored journey row, while one representative interface per module does not satisfy complete coverage. Every listed journey requires concrete Controller/Handler and Service/UseCase `path:begin-end#symbol` anchors. `complete` means every evidence-backed user business operation in that scope is represented and uses `user_journey_gap_id=not_applicable`. `partial` means additional journeys remain unlisted and requires a non-empty stable `user_journey_gap_id` in the overview and gap report, with the uncovered operation/evidence, searched scope, impact and remediation; it never permits an empty secondary capability or `missing_evidence` / `not_applicable` in place of either anchor on a listed row. Do not invent a page, button or user gesture when only backend evidence exists.
 
 The level-1 table summarizes only the exact Controller/Handler and Service/UseCase anchors plus read/write or produced-data and the user-visible result. Field-level contracts, the complete implementation chain, applicable Mapper/Repository and entity/table anchors, transactions, concurrency, compensation, security, tests and observable acceptance remain in the owning secondary document's `5.N` contract group.
@@ -98,10 +108,12 @@ When an interface reads or writes persisted data, record the actual mapper/repos
 2. Write `architecture/technical.md` using [project-technical-architecture-template.md](references/project-technical-architecture-template.md).
 3. Write `architecture/business.md` using [project-business-architecture-template.md](references/project-business-architecture-template.md).
 4. Build `business/inventory.yaml` with stable, unique `level1_capability_id` values; each item contains `level1_capability_name` and a complete `secondary_capabilities` array, and each secondary item contains its `business_ids` mapping.
-5. Write one `business/capabilities/{level1_capability_id}/detailed-design.md` user business-operation panorama per unique level-1 capability using [business-capability-detailed-design-template.md](references/business-capability-detailed-design-template.md). It must list and link every secondary capability, populate the fixed journey fields for every covered operation, resolve `user_journey_design_status`, `user_journey_coverage` and any required `user_journey_gap_id`, and ensure each `journey_id` has a same-ID expansion in its owning secondary document.
-6. Write one `business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md` using [secondary-capability-detailed-design-template.md](references/secondary-capability-detailed-design-template.md) for every inventory secondary capability.
-7. Write `gaps/doc-gap-report.md` and project metadata.
-8. Validate role separation, counts, links, evidence and lifecycle state.
+5. Create `business/level1-capability-dependency-graph.yaml` in pending state from [level1-capability-dependency-graph-template.yaml](references/level1-capability-dependency-graph-template.yaml), with the complete node set, no edges and one graph gap.
+6. Write one `business/capabilities/{level1_capability_id}/detailed-design.md` user business-operation panorama per unique level-1 capability using [business-capability-detailed-design-template.md](references/business-capability-detailed-design-template.md). It must list and link every secondary capability, populate the fixed journey fields for every covered operation, resolve `user_journey_design_status`, `user_journey_coverage` and any required `user_journey_gap_id`, and ensure each `journey_id` has a same-ID expansion in its owning secondary document. Until the graph gate passes, its dependency projection stays `not_derived`.
+7. Write one `business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md` using [secondary-capability-detailed-design-template.md](references/secondary-capability-detailed-design-template.md) for every inventory secondary capability.
+8. When all parent and child coverage is complete, run one model synthesis, derive the project graph and batch-project direct incoming/outgoing neighbors into every level-1 overview. Otherwise retain the pending graph and explicit gap.
+9. Write `gaps/doc-gap-report.md` and project metadata.
+10. Validate role separation, counts, links, graph/projection equality, evidence and lifecycle state.
 
 Do not generate feature documents, task records or version records in this pass.
 
@@ -111,8 +123,9 @@ Do not generate feature documents, task records or version records in this pass.
 2. Resolve every usable design to exactly one `level1_capability_id`; then map its features and evidence to one or more `secondary_capability_id` values and their `business_ids`. Stop on `zero_matches` or `multiple_matches` instead of guessing.
 3. Archive affected canonical documents before changing them.
 4. Reconcile the single level-1 user business-operation panorama and each affected secondary document. The overview retains the complete summary/link matrix, every user/role operation, exact Controller/Handler and Service/UseCase anchors, data-result summaries and cross-secondary journey; each child owns its complete internal flows, objects, rules, interfaces, call chains, actual data effects and constraints, implementation mapping, transactions, quality controls and tests.
-5. Create reviewed global revisions only when capability changes alter shared boundaries, value streams, system structure or cross-cutting principles.
-6. Preserve superseded documents and record disposition, revision links, metadata, inventory refs and gaps.
+5. If any graph input or capability relationship changed, archive the current graph and every overview whose projection will change, return them to pending, then run one global model synthesis only after the complete parent/child gate passes. Update the graph first and all overview projections as one batch.
+6. Create reviewed global revisions only when capability changes alter shared boundaries, value streams, system structure or cross-cutting principles.
+7. Preserve superseded documents and record disposition, revision links, metadata, inventory refs and gaps.
 
 ## requirement_design
 
@@ -136,6 +149,7 @@ Do not generate feature documents, task records or version records in this pass.
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/architecture/technical.md
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/architecture/business.md
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/inventory.yaml
+.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/level1-capability-dependency-graph.yaml
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/detailed-design.md
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md
 .axis/docs/orgs/{organization_id}/projects/{project_slug}/gaps/doc-gap-report.md
@@ -148,6 +162,7 @@ Archive history stays under `.axis/docs/_archive/` and must not appear as a seco
 - Local feature/API/data detail: update the owning feature/requirement and its `secondary_capability_detailed_design`.
 - Secondary-capability actor, permission, state ownership or internal flow: update the owning secondary document, any affected level-1 journey row or coverage gap, its summary/link in the overview, and inventory when identity or mapping changes.
 - Level-1 boundary, value stream, shared business object or governance rule: create a reviewed `project_business_architecture` revision.
+- Level-1 upstream/downstream relation: never edit one overview directly; invalidate the canonical graph, rerun project-level model synthesis after all completeness gates pass, and batch-update every affected direct projection.
 - System boundary, shared technical capability, deployment topology, cross-cutting consistency, security or performance principle: create a reviewed `project_technical_architecture` revision.
 
 Do not copy capability-detail paragraphs into global documents. Reference `level1_capability_id` and `secondary_capability_id` values and add only shared conclusions, mappings and rationale.
@@ -166,6 +181,8 @@ Allowed lifecycle states include `draft`, `review`, `approved`, `completed`, `su
 Verify:
 
 - unique first-level capability count equals overview document count;
+- `business/level1-capability-dependency-graph.yaml` exists, its node set exactly equals inventory, pending state has no edges and one tracked gap, and derived state is allowed only after every level-1 and secondary design is complete;
+- every level-1 overview has one dependency control line and one upstream/downstream projection sourced from the graph; pending uses `not_derived`, while derived upstream/downstream exactly equal the graph's direct incoming/outgoing sets and use `[]` only for a confirmed empty direct set;
 - inventory secondary-capability count equals `secondary_capability_detailed_design` document count;
 - every level-1 overview records `user_journey_design_status=detailed`, `user_journey_coverage=complete|partial`, and `user_journey_gap_id=not_applicable` for complete coverage or a stable non-empty gap ID for partial coverage;
 - every level-1 overview uses the fixed user business-operation panorama fields and gives every declared secondary capability at least one fully anchored journey row; complete coverage includes every evidence-backed user/role operation, while a representative endpoint per module can support partial coverage only when all additional journeys have a stable gap;
