@@ -464,7 +464,7 @@ for (const requiredText of [
   'Section 5 is grouped by contract',
   '接口清单与代码追溯',
   '内部处理逻辑',
-  '5.2.6',
+  '5.2.8',
   'gaps/doc-gap-report.md',
   'axis-doc-development',
   '_archive',
@@ -540,8 +540,6 @@ for (const requiredText of [
   '下一个二级能力',
   'interface_design_status',
   'interface_coverage',
-  'persistence_design_status',
-  'relationship_model_status',
   '能力定位与边界',
   '调用主体、权限与接口矩阵',
   '主体/角色',
@@ -551,33 +549,24 @@ for (const requiredText of [
   '授权证据',
   '接口清单与代码追溯',
   '5.1.2 内部处理逻辑',
-  '5.2.6',
-  '表结构设计',
-  '数据表清单',
-  '字段结构',
-  '索引与约束',
-  '表关系与数据所有权',
-  '状态与字段映射',
-  '数据迁移、兼容与回滚',
+  '5.1.6 认证与授权执行',
+  '5.1.7 事务、并发、性能与容错',
+  '5.1.8 安全、测试与验收',
+  '5.2.6 认证与授权执行',
+  '5.2.7 事务、并发、性能与容错',
+  '5.2.8 安全、测试与验收',
   '能力级流程与跨接口关系',
   '接口详细设计',
   '接口清单与代码追溯',
   '请求字段',
   '响应字段',
   '错误码与异常映射',
-  '认证、授权、幂等与事务',
   '项目 | 内容',
   '实现层 | 精确定位 | 职责',
   'HTTP / EVENT / TOPIC / JOB / COMMAND',
   'interface_not_applicable_reason',
   'interface_not_applicable_evidence',
-  '禁止使用 `BUSINESS_FLOW`',
-  'physical_fk',
-  'logical_relation',
   '代码对象与关系',
-  '实体、表与对象关系',
-  '实体-表-代码映射',
-  '端到端追溯矩阵',
   '文件路径:起始行-结束行#符号',
 ]) {
   assert.match(secondaryCapabilityDetailedDesignTemplate, new RegExp(requiredText));
@@ -586,6 +575,18 @@ assert.doesNotMatch(
   secondaryCapabilityDetailedDesignTemplate,
   /^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$/m,
 );
+for (const legacyTopLevelTitle of [
+  '实体、表与对象关系',
+  '表结构设计',
+  '事务、并发、性能与容错',
+  '安全、测试与验收',
+  '端到端追溯矩阵',
+]) {
+  assert.doesNotMatch(
+    secondaryCapabilityDetailedDesignTemplate,
+    new RegExp(`^##\\s+\\d+\\.?\\s+${legacyTopLevelTitle}\\s*$`, 'm'),
+  );
+}
 assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 
 const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');

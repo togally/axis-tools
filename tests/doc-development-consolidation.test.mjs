@@ -81,17 +81,16 @@ const technicalAndDatabaseDesign = await readFile(
   'utf8',
 );
 for (const requiredText of [
-  'Interface and Persistence Applicability Gate',
+  'Interface Applicability Gate',
   'interface_design_status',
   'interface_coverage',
-  'persistence_design_status',
-  'relationship_model_status',
   '请求字段',
   '响应字段',
   '错误码与异常映射',
-  'physical_fk',
-  'logical_relation',
-  '禁止使用 `BUSINESS_FLOW`',
+  '认证与授权执行',
+  '事务、并发、性能与容错',
+  '安全、测试与验收',
+  'explicitly requests',
 ]) {
   assert.match(technicalAndDatabaseDesign, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
@@ -170,30 +169,33 @@ for (const requiredText of [
   '下一个二级能力',
   'interface_design_status',
   'interface_coverage',
-  'persistence_design_status',
-  'relationship_model_status',
-  '表结构设计',
-  '数据表清单',
-  '字段结构',
-  '索引与约束',
-  '表关系与数据所有权',
-  '状态与字段映射',
-  '数据迁移、兼容与回滚',
   '能力级流程与跨接口关系',
   '接口详细设计',
+  '5.1.6 认证与授权执行',
+  '5.1.7 事务、并发、性能与容错',
+  '5.1.8 安全、测试与验收',
+  '5.2.6 认证与授权执行',
+  '5.2.7 事务、并发、性能与容错',
+  '5.2.8 安全、测试与验收',
   '请求字段',
   '响应字段',
   '错误码与异常映射',
-  '禁止使用 `BUSINESS_FLOW`',
-  'physical_fk',
-  'logical_relation',
   '代码对象与关系',
-  '实体、表与对象关系',
-  '实体-表-代码映射',
-  '端到端追溯矩阵',
   '文件路径:起始行-结束行#符号',
 ]) {
   assert.match(secondaryCapabilityTemplate, new RegExp(requiredText));
+}
+for (const legacyTopLevelTitle of [
+  '实体、表与对象关系',
+  '表结构设计',
+  '事务、并发、性能与容错',
+  '安全、测试与验收',
+  '端到端追溯矩阵',
+]) {
+  assert.doesNotMatch(
+    secondaryCapabilityTemplate,
+    new RegExp(`^##\\s+\\d+\\.?\\s+${legacyTopLevelTitle}\\s*$`, 'm'),
+  );
 }
 assert.doesNotMatch(capabilityTemplate, /一级能力详细设计说明书/);
 
@@ -866,41 +868,6 @@ try {
     /secondary capability interface design missing exact code anchors: merchant_operations\/merchant_governance/,
   );
   await writeFile(merchantSecondaryPath, validSecondaryDetailedDesign('merchant_governance'), 'utf8');
-  await writeFile(
-    catalogSecondaryPath,
-    validSecondaryDetailedDesign('catalog_inventory').replace(
-      'ORDER ||--o{ ORDER_ITEM : "order.id = order_item.order_id; logical_relation"',
-      'BUSINESS_FLOW ||--o{ ORDER : "writes"',
-    ),
-    'utf8',
-  );
-  await assert.rejects(
-    execFileAsync(process.execPath, [
-      path.join(repoRoot, 'dist', 'cli.js'),
-      'project-knowledge-capture',
-      '--repo', capabilityRepo,
-      '--run-id', '20260713T010106Z-project-knowledge-pseudo-er-f6a7b8c9',
-    ]),
-    /secondary capability detailed design uses non-entity ER placeholder: merchant_operations\/catalog_inventory/,
-  );
-  await writeFile(
-    catalogSecondaryPath,
-    validSecondaryDetailedDesign('catalog_inventory').replace(
-      'order.id = order_item.order_id; logical_relation',
-      'order_id',
-    ),
-    'utf8',
-  );
-  await assert.rejects(
-    execFileAsync(process.execPath, [
-      path.join(repoRoot, 'dist', 'cli.js'),
-      'project-knowledge-capture',
-      '--repo', capabilityRepo,
-      '--run-id', '20260713T010106Z-project-knowledge-er-contract-f6a7b8ca',
-    ]),
-    /secondary capability ER relationship missing join fields or relationship type: merchant_operations\/catalog_inventory/,
-  );
-  await writeFile(catalogSecondaryPath, validSecondaryDetailedDesign('catalog_inventory'), 'utf8');
   await rm(catalogSecondaryPath);
   await assert.rejects(
     execFileAsync(process.execPath, [
@@ -983,6 +950,77 @@ try {
 
   const merchantWithInterfaceLogic = validGroupedSecondaryDetailedDesignWithInternalLogic('merchant_governance');
   const catalogWithInterfaceLogic = validGroupedSecondaryDetailedDesignWithInternalLogic('catalog_inventory');
+  const legacyTopLevelInterfaceSections = [
+    ['7', '实体、表与对象关系'],
+    ['8', '表结构设计'],
+    ['9', '事务、并发、性能与容错'],
+    ['10', '安全、测试与验收'],
+    ['11', '端到端追溯矩阵'],
+  ];
+  for (let index = 0; index < legacyTopLevelInterfaceSections.length; index += 1) {
+    const [sectionNumber, sectionTitle] = legacyTopLevelInterfaceSections[index];
+    const merchantWithLegacyTopLevelSection = [
+      merchantWithInterfaceLogic,
+      '',
+      `## ${sectionNumber}. ${sectionTitle}`,
+      '',
+      '旧版全局接口设计内容。',
+      '',
+    ].join('\n');
+    const escapedSectionTitle = sectionTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await writeFile(merchantSecondaryPath, merchantWithLegacyTopLevelSection, 'utf8');
+    await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+    await assert.rejects(
+      execFileAsync(process.execPath, [
+        path.join(repoRoot, 'dist', 'cli.js'),
+        'project-knowledge-capture',
+        '--repo', capabilityRepo,
+        '--run-id', `20260713T010110Z-project-knowledge-legacy-top-${index}-f7a8b9d8`,
+      ]),
+      new RegExp(
+        `secondary capability detailed design uses legacy top-level interface-local section: merchant_operations/merchant_governance/${escapedSectionTitle}`,
+      ),
+    );
+  }
+
+  const merchantWithoutSecondOperationalDesign = merchantWithInterfaceLogic.replace(
+    /#### 5\.2\.7 事务、并发、性能与容错[\s\S]*?(?=#### 5\.2\.8 安全、测试与验收)/,
+    '',
+  );
+  assert.doesNotMatch(merchantWithoutSecondOperationalDesign, /#### 5\.2\.7 事务、并发、性能与容错/);
+  assert.match(merchantWithoutSecondOperationalDesign, /#### 5\.1\.7 事务、并发、性能与容错/);
+  assert.match(merchantWithoutSecondOperationalDesign, /#### 5\.2\.8 安全、测试与验收/);
+  await writeFile(merchantSecondaryPath, merchantWithoutSecondOperationalDesign, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-interface-missing-operations-f7a8b9dd',
+    ]),
+    /secondary capability interface group missing 5\.2\.7 事务、并发、性能与容错: merchant_operations\/merchant_governance/,
+  );
+
+  const merchantWithoutSecondSecurityAcceptance = merchantWithInterfaceLogic.replace(
+    /#### 5\.2\.8 安全、测试与验收[\s\S]*$/,
+    '',
+  );
+  assert.doesNotMatch(merchantWithoutSecondSecurityAcceptance, /#### 5\.2\.8 安全、测试与验收/);
+  assert.match(merchantWithoutSecondSecurityAcceptance, /#### 5\.1\.8 安全、测试与验收/);
+  assert.match(merchantWithoutSecondSecurityAcceptance, /#### 5\.2\.7 事务、并发、性能与容错/);
+  await writeFile(merchantSecondaryPath, merchantWithoutSecondSecurityAcceptance, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010110Z-project-knowledge-interface-missing-security-f7a8b9de',
+    ]),
+    /secondary capability interface group missing 5\.2\.8 安全、测试与验收: merchant_operations\/merchant_governance/,
+  );
+
   const merchantQueryAccessRow = merchantWithInterfaceLogic
     .split('\n')
     .find((line) => line.includes('| `ORDER_QUERY` |'));
@@ -1425,7 +1463,9 @@ try {
     assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.3 请求字段`));
     assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.4 响应字段`));
     assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.5 错误码与异常映射`));
-    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.6 认证、授权、幂等与事务`));
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.6 认证与授权执行`));
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.7 事务、并发、性能与容错`));
+    assert.match(merchantWithInterfaceLogic, new RegExp(`#### ${prefix.replace('.', '\\.')}\\.8 安全、测试与验收`));
   }
   await writeFile(merchantSecondaryPath, merchantWithInterfaceLogic, 'utf8');
   await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');

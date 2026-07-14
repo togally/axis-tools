@@ -49,18 +49,17 @@ REQUIRED_TERMS = {
         "api_id",
         "interface_design_status",
         "interface_coverage",
-        "persistence_design_status",
-        "relationship_model_status",
         "调用主体、权限与接口矩阵",
         "所需权限/策略",
         "可调用接口/能力",
         "授权证据",
-        "physical_fk",
-        "logical_relation",
         "Section 5 is grouped by contract",
         "接口清单与代码追溯",
         "内部处理逻辑",
-        "5.2.6",
+        "认证与授权执行",
+        "事务、并发、性能与容错",
+        "安全、测试与验收",
+        "5.2.8",
         "not_applicable",
         "After Use Deposition",
     ],
@@ -82,14 +81,18 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "#### 5.1.3 请求字段",
     "#### 5.1.4 响应字段",
     "#### 5.1.5 错误码与异常映射",
-    "#### 5.1.6 认证、授权、幂等与事务",
+    "#### 5.1.6 认证与授权执行",
+    "#### 5.1.7 事务、并发、性能与容错",
+    "#### 5.1.8 安全、测试与验收",
     "### 5.2 {next_interface_event_job_or_command_name}",
     "#### 5.2.1 接口清单与代码追溯",
     "#### 5.2.2 内部处理逻辑",
     "#### 5.2.3 请求字段",
     "#### 5.2.4 响应字段",
     "#### 5.2.5 错误码与异常映射",
-    "#### 5.2.6 认证、授权、幂等与事务",
+    "#### 5.2.6 认证与授权执行",
+    "#### 5.2.7 事务、并发、性能与容错",
+    "#### 5.2.8 安全、测试与验收",
     "## 3. 能力级流程与跨接口关系",
     "本章只描述二级能力内部多个接口",
     "接口内部逻辑见各 `5.N.2`",
@@ -97,6 +100,14 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "interface_not_applicable_reason",
     "interface_not_applicable_evidence",
 ]
+
+LEGACY_TOP_LEVEL_SEMANTIC_TITLES = {
+    "实体、表与对象关系",
+    "表结构设计",
+    "事务、并发、性能与容错",
+    "安全、测试与验收",
+    "端到端追溯矩阵",
+}
 
 SENSITIVE_PATTERN = re.compile(
     r"(password|secret|api[_-]?key|access[_-]?key)\s*[:=]|"
@@ -211,6 +222,18 @@ def validate(skill_dir: Path) -> int:
             re.MULTILINE,
         ):
             return fail("legacy duplicate identity or participant section found")
+        for line in interface_template.splitlines():
+            heading_match = re.fullmatch(
+                r"##\s+(?:\d+(?:\.\d+)*[.、]?\s*)?(.+?)\s*", line
+            )
+            if (
+                heading_match
+                and heading_match.group(1) in LEGACY_TOP_LEVEL_SEMANTIC_TITLES
+            ):
+                return fail(
+                    "legacy top-level semantic section found: "
+                    + heading_match.group(1)
+                )
 
     print(f"{skill_name} quick validation passed")
     return 0
