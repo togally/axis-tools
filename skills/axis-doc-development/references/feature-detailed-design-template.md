@@ -158,9 +158,20 @@ feature_resolution:
 
 ## 8. 接口详细设计
 
-| 接口/事件/命令 | 方向 | 调用方 | 输入 | 输出 | 错误 | 幂等键 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{interface}` | `{direction}` | `{caller}` | `{input}` | `{output}` | `{errors}` | `{idempotency_key}` | `{evidence_id}` |
+每个接口、事件或命令独立成节并使用纵向表，避免输入、输出、错误和证据在窄列中逐字换行。
+
+### 8.{interface_index} `{interface}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 接口/事件/命令 | `{interface}` |
+| 方向 | `{direction}` |
+| 调用方 | `{caller}` |
+| 输入 | `{input}` |
+| 输出 | `{output}` |
+| 错误 | `{errors}` |
+| 幂等键 | `{idempotency_key}` |
+| 证据 | `{evidence_id}` |
 
 逐项说明字段语义、必填性、格式、枚举、边界、兼容策略和错误映射。不得根据命名推测未出现的字段。
 
@@ -168,9 +179,19 @@ feature_resolution:
 
 ### 9.1 状态模型
 
-| 当前状态 | 触发条件 | 守卫条件 | 下一状态 | 副作用 | 失败处理 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{from_state}` | `{trigger}` | `{guard}` | `{to_state}` | `{side_effect}` | `{failure}` | `{evidence_id}` |
+每个状态转换单独使用一张纵向表。
+
+#### 状态转换 `{from_state}` → `{to_state}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 当前状态 | `{from_state}` |
+| 触发条件 | `{trigger}` |
+| 守卫条件 | `{guard}` |
+| 下一状态 | `{to_state}` |
+| 副作用 | `{side_effect}` |
+| 失败处理 | `{failure}` |
+| 证据 | `{evidence_id}` |
 
 ### 9.2 数据模型
 
@@ -182,9 +203,19 @@ feature_resolution:
 
 ## 10. 核心算法与校验规则
 
-| 规则编号 | 输入 | 条件/算法 | 输出 | 错误 | 边界案例 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| R-01 | `{input}` | `{rule}` | `{output}` | `{error}` | `{edge_case}` | `{evidence_id}` |
+每条规则单独使用一张纵向表。
+
+### 10.{rule_index} R-{number}
+
+| 项目 | 内容 |
+| --- | --- |
+| 规则编号 | R-{number} |
+| 输入 | `{input}` |
+| 条件/算法 | `{rule}` |
+| 输出 | `{output}` |
+| 错误 | `{error}` |
+| 边界案例 | `{edge_case}` |
+| 证据 | `{evidence_id}` |
 
 ## 11. 事务、幂等与并发
 
@@ -192,9 +223,20 @@ feature_resolution:
 
 ## 12. 外部依赖与容错
 
-| 依赖 | 用途 | 协议 | 超时 | 重试 | 熔断/降级 | 失败影响 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{dependency}` | `{purpose}` | `{protocol}` | `{timeout}` | `{retry}` | `{fallback}` | `{impact}` | `{evidence_id}` |
+每个依赖单独使用一张纵向表。
+
+### 12.{dependency_index} `{dependency}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 依赖 | `{dependency}` |
+| 用途 | `{purpose}` |
+| 协议 | `{protocol}` |
+| 超时 | `{timeout}` |
+| 重试 | `{retry}` |
+| 熔断/降级 | `{fallback}` |
+| 失败影响 | `{impact}` |
+| 证据 | `{evidence_id}` |
 
 ## 13. 安全、隐私与审计
 
@@ -202,9 +244,19 @@ feature_resolution:
 
 ## 14. 可观测性与运维
 
-| 信号 | 名称 | 触发点 | 标签 | 告警/阈值 | 排障用途 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `{signal_type}` | `{signal_name}` | `{emission_point}` | `{labels}` | `{threshold}` | `{diagnostic_use}` | `{evidence_id}` |
+每个信号单独使用一张纵向表。
+
+### 14.{signal_index} `{signal_name}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 信号 | `{signal_type}` |
+| 名称 | `{signal_name}` |
+| 触发点 | `{emission_point}` |
+| 标签 | `{labels}` |
+| 告警/阈值 | `{threshold}` |
+| 排障用途 | `{diagnostic_use}` |
+| 证据 | `{evidence_id}` |
 
 说明日志、指标、追踪、审计、健康检查、运行手册和数据修复入口。
 
@@ -244,11 +296,21 @@ feature_resolution:
 | --- | --- | --- | --- | --- |
 | `{missing_evidence}` | `{searched_scope}` | `{design_impact}` | `{confirmation_needed}` | `{blocking_level}` |
 
-## 18. 需求—设计—测试追踪矩阵
+## 18. 需求—设计—测试追踪
 
-| 需求/规则 | 流程 | 接口 | 状态/数据 | 实现证据 | 测试/验收 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `{requirement_id}` | `{flow_ref}` | `{interface_ref}` | `{state_or_data_ref}` | `{implementation_evidence}` | `{test_or_acceptance_ref}` | `{trace_status}` |
+每条需求或规则单独使用一张纵向追踪表。
+
+### 18.{trace_index} `{requirement_id}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 需求/规则 | `{requirement_id}` |
+| 流程 | `{flow_ref}` |
+| 接口 | `{interface_ref}` |
+| 状态/数据 | `{state_or_data_ref}` |
+| 实现证据 | `{implementation_evidence}` |
+| 测试/验收 | `{test_or_acceptance_ref}` |
+| 状态 | `{trace_status}` |
 
 ## 19. 评审与批准
 

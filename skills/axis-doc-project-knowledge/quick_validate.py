@@ -97,7 +97,9 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "| 步骤 | 内部处理 | 代码对象 | 数据读写/状态变化 | 失败处理 |",
     "实际输出必须替换所有花括号内容",
     "#### 5.1.3 请求字段",
+    "| 字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态 |",
     "#### 5.1.4 响应字段",
+    "| HTTP/消息/执行状态 | 字段 | 类型/可空 | 业务语义/产生位置 | 证据/状态 |",
     "#### 5.1.5 错误码与异常映射",
     "#### 5.1.6 认证与授权执行",
     "#### 5.1.7 事务、并发、性能与容错",
@@ -134,6 +136,8 @@ SENSITIVE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+MAX_READABLE_MARKDOWN_TABLE_COLUMNS = 6
+
 
 def fail(message: str) -> int:
     print(f"ERROR: {message}", file=sys.stderr)
@@ -158,6 +162,268 @@ def parse_frontmatter(skill_md: str) -> dict[str, str]:
         key, value = line.split(":", 1)
         frontmatter[key.strip()] = value.strip().strip('"')
     return frontmatter
+
+
+def split_markdown_table_row(line: str) -> list[str]:
+    content = line.strip()
+    if content.startswith("|"):
+        content = content[1:]
+    if has_unescaped_trailing_pipe(content):
+        content = content[:-1]
+    cells: list[str] = []
+    current: list[str] = []
+    index = 0
+    while index < len(content):
+        character = content[index]
+        if character != "|":
+            current.append(character)
+            index += 1
+            continue
+        backslash_count = 0
+        previous = index - 1
+        while previous >= 0 and content[previous] == "\\":
+            backslash_count += 1
+            previous -= 1
+        if backslash_count % 2 == 1:
+            current = current[:-1]
+            current.append("|")
+        else:
+            cells.append("".join(current).strip())
+            current = []
+        index += 1
+    cells.append("".join(current).strip())
+    return cells
+
+
+def has_unescaped_trailing_pipe(line: str) -> bool:
+    if not line.endswith("|"):
+        return False
+    backslash_count = 0
+    index = len(line) - 2
+    while index >= 0 and line[index] == "\\":
+        backslash_count += 1
+        index -= 1
+    return backslash_count % 2 == 0
+
+
+def looks_like_markdown_table_row(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    return (
+        stripped.startswith("|")
+        or has_unescaped_trailing_pipe(stripped)
+        or len(split_markdown_table_row(stripped)) > 1
+    )
+
+
+def markdown_line_context(line: str) -> tuple[str, int]:
+    content = line
+    blockquote_depth = 0
+    while True:
+        prefix = re.match(r"^ {0,3}>[ \t]?", content)
+        if prefix is None:
+            return content, blockquote_depth
+        content = content[prefix.end():]
+        blockquote_depth += 1
+
+
+def is_indented_markdown_code(line: str) -> bool:
+    return line.startswith("    ") or line.startswith("\t")
+
+
+def markdown_fence_match(line: str) -> re.Match[str] | None:
+    return re.match(
+        r"^ {0,3}(?:(?:[-+*]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$",
+        line,
+    )
+
+
+def inline_code_span_end(line: str, start: int) -> int | None:
+    delimiter_length = 1
+    while start + delimiter_length < len(line) and line[start + delimiter_length] == "`":
+        delimiter_length += 1
+    delimiter = "`" * delimiter_length
+    candidate = line.find(delimiter, start + delimiter_length)
+    while candidate >= 0:
+        preceding = line[candidate - 1] if candidate > 0 else ""
+        following_index = candidate + delimiter_length
+        following = line[following_index] if following_index < len(line) else ""
+        if preceding != "`" and following != "`":
+            return following_index
+        candidate = line.find(delimiter, following_index)
+    return None
+
+
+def strip_markdown_html_comments(
+    line: str, initial_comment_state: bool = False
+) -> tuple[str, bool]:
+    content: list[str] = []
+    cursor = 0
+    in_comment = initial_comment_state
+    while cursor < len(line):
+        if in_comment:
+            comment_end = line.find("-->", cursor)
+            if comment_end < 0:
+                return "".join(content), True
+            in_comment = False
+            cursor = comment_end + 3
+            continue
+        comment_start = line.find("<!--", cursor)
+        code_span_start = line.find("`", cursor)
+        if code_span_start >= 0 and (
+            comment_start < 0 or code_span_start < comment_start
+        ):
+            code_span_end = inline_code_span_end(line, code_span_start)
+            if code_span_end is not None:
+                content.append(line[cursor:code_span_end])
+                cursor = code_span_end
+            else:
+                content.append(line[cursor:code_span_start + 1])
+                cursor = code_span_start + 1
+            continue
+        if comment_start < 0:
+            content.append(line[cursor:])
+            break
+        content.append(line[cursor:comment_start])
+        in_comment = True
+        cursor = comment_start + 4
+    return "".join(content), in_comment
+
+
+def is_markdown_block_boundary(line: str) -> bool:
+    return (
+        re.match(r"^#{1,6}(?:\s|$)", line.lstrip()) is not None
+        or markdown_fence_match(line) is not None
+    )
+
+
+def markdown_table_readability_error(markdown: str, source: str) -> str | None:
+    lines = markdown.splitlines()
+    fence_marker: str | None = None
+    fence_length = 0
+    fence_blockquote_depth = 0
+    in_html_comment = False
+    html_comment_blockquote_depth = 0
+    index = 0
+    while index < len(lines) - 1:
+        context_content, blockquote_depth = markdown_line_context(lines[index])
+        if fence_marker is not None and blockquote_depth < fence_blockquote_depth:
+            fence_marker = None
+            fence_length = 0
+            fence_blockquote_depth = 0
+        if in_html_comment and blockquote_depth < html_comment_blockquote_depth:
+            in_html_comment = False
+            html_comment_blockquote_depth = 0
+        unstripped_fence_match = markdown_fence_match(context_content)
+        if fence_marker is not None:
+            if unstripped_fence_match:
+                marker = unstripped_fence_match.group(1)[0]
+                if (
+                    marker == fence_marker
+                    and blockquote_depth == fence_blockquote_depth
+                    and len(unstripped_fence_match.group(1)) >= fence_length
+                    and not unstripped_fence_match.group(2).strip()
+                ):
+                    fence_marker = None
+                    fence_length = 0
+                    fence_blockquote_depth = 0
+            index += 1
+            continue
+        if not in_html_comment and is_indented_markdown_code(context_content):
+            index += 1
+            continue
+        was_in_html_comment = in_html_comment
+        raw_line, in_html_comment = strip_markdown_html_comments(
+            context_content, in_html_comment
+        )
+        if not was_in_html_comment and in_html_comment:
+            html_comment_blockquote_depth = blockquote_depth
+        if not in_html_comment:
+            html_comment_blockquote_depth = 0
+        fence_match = markdown_fence_match(raw_line)
+        if fence_match:
+            fence_marker = fence_match.group(1)[0]
+            fence_length = len(fence_match.group(1))
+            fence_blockquote_depth = blockquote_depth
+            index += 1
+            continue
+        if in_html_comment:
+            index += 1
+            continue
+
+        header_line = raw_line.strip()
+        raw_separator_line, separator_blockquote_depth = markdown_line_context(
+            lines[index + 1]
+        )
+        if (
+            separator_blockquote_depth != blockquote_depth
+            or is_indented_markdown_code(raw_separator_line)
+        ):
+            index += 1
+            continue
+        separator_line = strip_markdown_html_comments(raw_separator_line)[0].strip()
+        if not (
+            looks_like_markdown_table_row(header_line)
+            and looks_like_markdown_table_row(separator_line)
+        ):
+            index += 1
+            continue
+        headers = split_markdown_table_row(header_line)
+        separators = split_markdown_table_row(separator_line)
+        valid_separator_cells = [
+            re.fullmatch(r":?-{3,}:?", cell.strip()) is not None
+            for cell in separators
+        ]
+        separator_like = bool(separators) and all(
+            re.fullmatch(r":?-+:?", cell.strip()) is not None
+            for cell in separators
+        )
+        if not separator_like and not any(valid_separator_cells):
+            index += 1
+            continue
+        line_number = index + 1
+        if not all(valid_separator_cells):
+            return f"Markdown table has an invalid separator: {source}:{line_number + 1}"
+        if len(headers) != len(separators):
+            return (
+                "Markdown table header/separator column mismatch: "
+                f"{source}:{line_number} "
+                f"(header={len(headers)}, separator={len(separators)})"
+            )
+        for header_index, header in enumerate(headers):
+            if not re.sub(r"[`*]", "", header).strip():
+                return (
+                    f"Markdown table has an empty header cell: {source}:{line_number} "
+                    f"(column {header_index + 1})"
+                )
+        if len(headers) > MAX_READABLE_MARKDOWN_TABLE_COLUMNS:
+            return (
+                f"Markdown table exceeds {MAX_READABLE_MARKDOWN_TABLE_COLUMNS} columns: "
+                f"{source}:{line_number} ({len(headers)} columns)"
+            )
+        row_index = index + 2
+        while row_index < len(lines):
+            raw_row_line, row_blockquote_depth = markdown_line_context(lines[row_index])
+            if (
+                row_blockquote_depth != blockquote_depth
+                or is_indented_markdown_code(raw_row_line)
+            ):
+                break
+            row_line = strip_markdown_html_comments(raw_row_line)[0].strip()
+            if not row_line or is_markdown_block_boundary(row_line):
+                break
+            if not looks_like_markdown_table_row(row_line):
+                break
+            row = split_markdown_table_row(row_line)
+            if len(row) != len(headers):
+                return (
+                    f"Markdown table data row column mismatch: {source}:{row_index + 1} "
+                    f"(header={len(headers)}, row={len(row)})"
+                )
+            row_index += 1
+        index = row_index
+    return None
 
 
 def validate(skill_dir: Path) -> int:
@@ -206,6 +472,21 @@ def validate(skill_dir: Path) -> int:
     if SENSITIVE_PATTERN.search(combined):
         return fail("credential-like value or private network URL found")
 
+    markdown_paths = sorted(
+        path
+        for path in skill_dir.rglob("*")
+        if path.is_file()
+        and path.suffix.lower() in {".md", ".markdown"}
+        and "_archive" not in path.relative_to(skill_dir).parts
+    )
+    for markdown_path in markdown_paths:
+        readability_error = markdown_table_readability_error(
+            markdown_path.read_text(encoding="utf-8"),
+            markdown_path.relative_to(skill_dir).as_posix(),
+        )
+        if readability_error:
+            return fail(readability_error)
+
     if skill_name == "axis-doc-project-knowledge":
         level1_overview_template_path = (
             skill_dir / "references" / "business-capability-detailed-design-template.md"
@@ -251,13 +532,13 @@ def validate(skill_dir: Path) -> int:
             "### 5.2 ER 图",
             "#### 5.2.1 ER 关系证据",
             "### 5.3 `{physical_table_name}`",
-            "| `relation_id` | 主表 `table_id` | 关系/基数 | 从表 `table_id` | 关联键 | 业务语义 | 证据 |",
+            "| `relation_id` | 表关系（主 -> 从） | 关系/基数 | 关联键 | 业务语义 | 证据 |",
             "ER 关系证据：not_applicable（单表，无需跨表关系）",
             "字段小节固定从 `5.3` 开始并按表清单顺序连续编号",
             "小节标题只写表清单中的实际物理表名",
             "表清单 `table_id` 集合必须与第 3 章全部步骤“读写 `table_id`”的非 `not_applicable` 值去重并集严格相等",
             "table_id={table_id}",
-            "| 字段 | 类型 | 可空 | 默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |",
+            "| 字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |",
             "| 原因 | {no_persistence_reason} |",
             "| 证据 | {exact_repository_evidence} |",
         ]:

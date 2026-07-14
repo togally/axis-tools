@@ -25,9 +25,19 @@
 
 提供分层业务能力地图，区分核心能力、支撑能力和治理能力。能力是稳定的“能做什么”，不要用页面、接口或技术模块名称代替业务能力。
 
-| level1_capability_id | 一级能力 | secondary_capability_id | 二级能力 | 类型 | 说明 | 对应 business_id | 能力总览 | 证据/置信度 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `{level1_capability_id}` | {level1_capability_name} | `{secondary_capability_id}` | {secondary_capability_name} | 核心 | {description} | `{business_id}` | [打开](business/capabilities/{level1_capability_id}/detailed-design.md) | {evidence_ref} |
+先用紧凑索引展示能力层级和导航；说明、业务映射和证据按二级能力逐项展开，避免把长文本和路径压入同一张宽表。
+
+| level1_capability_id | 一级能力 | secondary_capability_id | 二级能力 | 类型 | 能力总览 |
+| --- | --- | --- | --- | --- | --- |
+| `{level1_capability_id}` | {level1_capability_name} | `{secondary_capability_id}` | {secondary_capability_name} | 核心 | [打开](business/capabilities/{level1_capability_id}/detailed-design.md) |
+
+### 4.{secondary_index} 二级能力 `{secondary_capability_id}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 说明 | {description} |
+| 对应 `business_id` | `{business_id}` |
+| 证据/置信度 | {evidence_ref} |
 
 相同一级能力的所有行必须使用同一个 `level1_capability_id`。项目知识为该 ID 生成一份总览，并为每个二级能力生成独立详细设计；Dashboard 支持从本业务架构跳转能力总览，再进入二级能力设计。
 
@@ -71,9 +81,19 @@ flowchart LR
 
 ## 9. 一级/二级能力与系统支撑关系
 
-| 一级能力 | 二级能力 | business_id | 支撑系统/容器 | 主要接口 | 数据对象 | 文档状态 |
-| --- | --- | --- | --- | --- | --- |
-| {level1_capability_name} | {secondary_capability_name} | `{business_id}` | {system_or_container} | {interface} | {business_object} | review |
+每项映射单独成节；不要用包含接口、数据对象和长说明的一行宽表表达多个支撑关系。
+
+### 9.{mapping_index} `{business_id}`
+
+| 项目 | 内容 |
+| --- | --- |
+| 一级能力 | {level1_capability_name} |
+| 二级能力 | {secondary_capability_name} |
+| `business_id` | `{business_id}` |
+| 支撑系统/容器 | {system_or_container} |
+| 主要接口 | {interface} |
+| 数据对象 | {business_object} |
+| 文档状态 | review |
 
 ## 10. 外部参与方与业务协作
 

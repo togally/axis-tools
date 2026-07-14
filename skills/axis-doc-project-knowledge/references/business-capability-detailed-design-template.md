@@ -41,11 +41,18 @@
 
 ## 2. 二级能力完整性与导航
 
-先从 inventory 读取完整 `secondary_capabilities`，再生成本表。不得遗漏任何二级能力。
+先从 inventory 读取完整 `secondary_capabilities`，再生成紧凑导航表。不得遗漏任何二级能力。长业务摘要和证据按二级能力放在导航表后的纵向补充说明中，不得继续扩展导航表列数。
 
-| 顺序 | `secondary_capability_id` | 二级能力名称 | 对应 `business_id` | 提供的业务摘要 | 二级能力文档 | 文档状态 | 证据/置信度 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | `{secondary_capability_id}` | {secondary_capability_name} | `{business_ids}` | {business_summary} | [打开详细设计](business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md) | review | {evidence_ref} |
+| 顺序 | `secondary_capability_id` | 二级能力名称 | 对应 `business_id` | 二级能力文档 | 文档状态 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `{secondary_capability_id}` | {secondary_capability_name} | `{business_ids}` | [打开详细设计](business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md) | review |
+
+#### 二级能力 `{secondary_capability_id}` 补充说明
+
+| 项目 | 内容 |
+| --- | --- |
+| 提供的业务摘要 | {business_summary} |
+| 证据/置信度 | {evidence_ref} |
 
 完整性规则：
 
@@ -157,11 +164,11 @@ erDiagram
 
 #### 5.2.1 ER 关系证据
 
-当表清单包含两张或更多表时，必须保留本表；每个 `table_id` 至少在“主表 `table_id`”或“从表 `table_id`”中出现一次，且每行证据都是支持关系、基数和关联键的精确仓库相对 `path:begin-end#symbol` 锚点。ER 图中的关系标签与本表“业务语义”必须逐条同值；图中不得出现表清单外的实体或本表未记录的关系。
+当表清单包含两张或更多表时，必须保留本表；每个 `table_id` 至少在“表关系（主 -> 从）”中出现一次，且每行证据都是支持关系、基数和关联键的精确仓库相对 `path:begin-end#symbol` 锚点。ER 图中的关系标签与本表“业务语义”必须逐条同值；图中不得出现表清单外的实体或本表未记录的关系。
 
-| `relation_id` | 主表 `table_id` | 关系/基数 | 从表 `table_id` | 关联键 | 业务语义 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `{relation_id}` | `{primary_table_id}` | `1:1` / `1:N` / `N:1` / `N:M` / 无直接关系 | `{secondary_table_id}` | `{primary_table_id}.{primary_key} -> {secondary_table_id}.{foreign_or_join_key}` / `not_applicable` | {relationship_business_semantics} | `{ddl_migration_orm_mapper_or_query_path_begin_end_symbol}` |
+| `relation_id` | 表关系（主 -> 从） | 关系/基数 | 关联键 | 业务语义 | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| `{relation_id}` | `{primary_table_id}` -> `{secondary_table_id}` | `1:1` / `1:N` / `N:1` / `N:M` / 无直接关系 | `{primary_table_id}.{primary_key} -> {secondary_table_id}.{foreign_or_join_key}` / `not_applicable` | {relationship_business_semantics} | `{ddl_migration_orm_mapper_or_query_path_begin_end_symbol}` |
 
 当表清单只有一张表时，删除上述关系证据表，并明确写：`ER 关系证据：not_applicable（单表，无需跨表关系）`。不得为满足模板虚构自关联或跨表关系。
 
@@ -169,9 +176,9 @@ erDiagram
 
 > 表标识：`table_id={table_id}`
 
-| 字段 | 类型 | 可空 | 默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{column_name}` | `{column_type}` | 是 / 否 | `{default_value_or_none}` | {primary_unique_foreign_check_or_other_constraint} | {business_semantics} | `{read_write_api_ids}` | `{ddl_migration_orm_mapper_or_query_path_begin_end_symbol}` |
+| 字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |
+| --- | --- | --- | --- | --- | --- |
+| `{column_name}` | `{column_type}`；可空=是 / 否；默认值=`{default_value_or_none}` | {primary_unique_foreign_check_or_other_constraint} | {business_semantics} | `{read_write_api_ids}` | `{ddl_migration_orm_mapper_or_query_path_begin_end_symbol}` |
 
 字段小节固定从 `5.3` 开始并按表清单顺序连续编号；每个 `table_id` 恰好对应一个字段小节，小节标题只写表清单中的实际物理表名（允许使用反引号），不得追加“字段设计”等通用后缀。表清单、以实际物理表名为实体的 ER 图、`5.2.1 ER 关系证据`、字段表与二级接口中的局部读写追溯必须一致。表清单 `table_id` 集合必须与第 3 章全部步骤“读写 `table_id`”的非 `not_applicable` 值去重并集严格相等。多表时 ER 关系证据覆盖每张表；单表时在 `5.2.1` 明确“无需跨表关系”。表清单、关系证据与每个字段行的“证据”都至少包含一个 DDL、迁移、ORM、Mapper 或查询的仓库相对 `path:begin-end#symbol` 精确锚点。
 
@@ -187,15 +194,30 @@ erDiagram
 
 ### 6.1 对外业务能力覆盖缺口
 
-| `user_journey_gap_id` | 未覆盖对外业务能力/证据 | 涉及二级能力 | 已检查范围 | 影响 | 所需证据/确认 | 责任角色 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `{gap_id_or_not_applicable}` | {missing_business_capability_or_evidence} | `{secondary_capability_ids}` | {searched_scope} | {coverage_impact} | {required_evidence_or_decision} | {owner_role} | {gap_status} |
+每个缺口使用一张纵向表；复制下表而不是增加横向列。
+
+| 项目 | 内容 |
+| --- | --- |
+| `user_journey_gap_id` | `{gap_id_or_not_applicable}` |
+| 未覆盖对外业务能力/证据 | {missing_business_capability_or_evidence} |
+| 涉及二级能力 | `{secondary_capability_ids}` |
+| 已检查范围 | {searched_scope} |
+| 影响 | {coverage_impact} |
+| 所需证据/确认 | {required_evidence_or_decision} |
+| 责任角色 | {owner_role} |
+| 状态 | {gap_status} |
 
 ### 6.2 表结构设计缺口
 
-| `table_design_gap_id` | 未覆盖表/字段/关系证据 | 已检查范围 | 影响 | 所需证据/确认 | 责任角色 | 状态 |
-| --- | --- | --- | --- | --- | --- | --- |
-| `{gap_id_or_not_applicable}` | {missing_table_field_relationship_or_evidence} | {searched_scope} | {coverage_impact} | {required_evidence_or_decision} | {owner_role} | {gap_status} |
+| 项目 | 内容 |
+| --- | --- |
+| `table_design_gap_id` | `{gap_id_or_not_applicable}` |
+| 未覆盖表/字段/关系证据 | {missing_table_field_relationship_or_evidence} |
+| 已检查范围 | {searched_scope} |
+| 影响 | {coverage_impact} |
+| 所需证据/确认 | {required_evidence_or_decision} |
+| 责任角色 | {owner_role} |
+| 状态 | {gap_status} |
 
 `user_journey_coverage=complete` 时，`user_journey_gap_id=not_applicable`；`table_design_coverage=complete` 时，`table_design_gap_id=not_applicable`。两者都不得用 `complete` 隐藏未扫描模块、未解释入口或未核验持久化证据。
 

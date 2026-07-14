@@ -83,9 +83,18 @@
 
 ## 12. 架构决策
 
-| ADR | 决策 | 状态 | 理由 | 备选方案 | 影响 | 证据 |
-| --- | --- | --- | --- | --- | --- | --- |
-| ADR-{number} | {decision} | proposed | {rationale} | {alternatives} | {consequence} | {evidence_ref} |
+每项 ADR 独立成节，避免决策、理由、备选方案和证据在窄列中逐字换行。
+
+### 12.{adr_index} ADR-{number}
+
+| 项目 | 内容 |
+| --- | --- |
+| 决策 | {decision} |
+| 状态 | proposed |
+| 理由 | {rationale} |
+| 备选方案 | {alternatives} |
+| 影响 | {consequence} |
+| 证据 | {evidence_ref} |
 
 ## 13. 风险、技术债与待确认项
 

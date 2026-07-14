@@ -622,6 +622,377 @@ try {
   );
   await writeFile(capabilityDependencyGraphPath, validLevel1CapabilityDependencyGraph(), 'utf8');
   await writeFile(path.join(projectRoot, 'gaps', 'doc-gap-report.md'), '# 文档缺口\n', 'utf8');
+  const readabilityFeatureDirectory = path.join(
+    projectRoot,
+    'business',
+    'capabilities',
+    'merchant_operations',
+    'features',
+    'table-readability',
+  );
+  const readabilityFeaturePath = path.join(readabilityFeatureDirectory, 'detailed-design.md');
+  const technicalArchitecturePath = path.join(projectRoot, 'architecture', 'technical.md');
+  const captureReadabilityFixture = (runId) => execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', runId,
+  ]);
+  const quickValidatorPath = path.join(
+    repoRoot,
+    'skills',
+    'axis-doc-project-knowledge',
+    'quick_validate.py',
+  );
+  const pythonReadabilityError = async (markdown) => {
+    const pythonProgram = [
+      'import runpy, sys',
+      'module = runpy.run_path(sys.argv[1])',
+      'error = module["markdown_table_readability_error"](sys.argv[2], "fixture.md")',
+      'print(error or "OK")',
+    ].join('\n');
+    const { stdout } = await execFileAsync('python3', [
+      '-B',
+      '-c',
+      pythonProgram,
+      quickValidatorPath,
+      markdown,
+    ]);
+    return stdout.trim();
+  };
+  await mkdir(readabilityFeatureDirectory, { recursive: true });
+  const screenshotStyleWideTable = [
+    '# 技术架构',
+    '',
+    '| `journey_id` | 用户/角色 | 所属二级能力/模块 | 提供的业务 | 用户目标 | 用户怎么操作 | 接口/入口 | Controller/Handler | Service/UseCase | 读取数据 | 写入/产生数据 | 用户可见结果 | 二级能力详情 | 证据 |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| `TRADE_SUBMIT` | 已登录买家 | `order_fulfillment_after_sale` | 提交订单 | 创建交易 | 提交确认页 | `POST /mall/app/trade/submit` | Controller | Service | 预订单 | 交易单 | 支付凭证 | 详细设计 | 代码证据 |',
+    '',
+  ].join('\n');
+  await writeFile(technicalArchitecturePath, screenshotStyleWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020100Z-project-knowledge-screenshot-table-a0b1c400'),
+    /Markdown table exceeds 6 columns: architecture\/technical\.md:3 \(14 columns\)/,
+  );
+  await writeFile(technicalArchitecturePath, '# 技术架构\n', 'utf8');
+
+  await writeFile(readabilityFeaturePath, [
+    '# 宽表格可读性验证',
+    '',
+    '| A | B | C | D | E | F | G |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
+    '| 1 | 2 | 3 | 4 | 5 | 6 | 7 |',
+    '',
+  ].join('\n'), 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020101Z-project-knowledge-wide-table-a0b1c401'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+  );
+
+  const borderlessWideTable = [
+    '# 无外框宽表格可读性验证',
+    '',
+    'A | B | C | D | E | F | G',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, borderlessWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020102Z-project-knowledge-borderless-wide-table-a0b1c402'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(borderlessWideTable), /exceeds 6 columns: fixture\.md:3 \(7 columns\)/);
+
+  for (const [frameTable, runId] of [
+    [
+      '# 仅左外框宽表格\n\n| A | B | C | D | E | F | G\n| --- | --- | --- | --- | --- | --- | ---\n| 1 | 2 | 3 | 4 | 5 | 6 | 7\n',
+      '20260714T020103Z-project-knowledge-left-frame-wide-table-a0b1c403',
+    ],
+    [
+      '# 仅右外框宽表格\n\nA | B | C | D | E | F | G |\n--- | --- | --- | --- | --- | --- | --- |\n1 | 2 | 3 | 4 | 5 | 6 | 7 |\n',
+      '20260714T020104Z-project-knowledge-right-frame-wide-table-a0b1c404',
+    ],
+  ]) {
+    await writeFile(readabilityFeaturePath, frameTable, 'utf8');
+    await assert.rejects(
+      captureReadabilityFixture(runId),
+      /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+    );
+    assert.match(await pythonReadabilityError(frameTable), /exceeds 6 columns: fixture\.md:3 \(7 columns\)/);
+  }
+
+  const ordinaryPipeText = [
+    '# 普通竖线文本验证',
+    '',
+    'A | B 只是普通说明。',
+    '下一行 | 不是 Markdown 表格分隔行。',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, ordinaryPipeText, 'utf8');
+  const { stdout: ordinaryPipeTextStdout } = await captureReadabilityFixture(
+    '20260714T020105Z-project-knowledge-ordinary-pipe-text-a0b1c405',
+  );
+  assert.equal(JSON.parse(ordinaryPipeTextStdout).ok, true);
+  assert.equal(await pythonReadabilityError(ordinaryPipeText), 'OK');
+
+  const blockquoteWideTable = [
+    '# 引用块宽表格验证',
+    '',
+    '> A | B | C | D | E | F | G',
+    '> --- | --- | --- | --- | --- | --- | ---',
+    '> 1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, blockquoteWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020106Z-project-knowledge-blockquote-wide-table-a0b1c406'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(blockquoteWideTable), /exceeds 6 columns: fixture\.md:3 \(7 columns\)/);
+
+  const evenBackslashWideTable = [
+    '# 双反斜杠列边界验证',
+    '',
+    String.raw`A \\| B | C | D | E | F | G`,
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, evenBackslashWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020107Z-project-knowledge-even-backslash-wide-table-a0b1c407'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(evenBackslashWideTable), /exceeds 6 columns: fixture\.md:3 \(7 columns\)/);
+
+  const nonRenderedWideTableExamples = [
+    '# 非渲染宽表示例验证',
+    '',
+    '    A | B | C | D | E | F | G',
+    '    --- | --- | --- | --- | --- | --- | ---',
+    '    1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+    '<!--',
+    'A | B | C | D | E | F | G',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '-->',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, nonRenderedWideTableExamples, 'utf8');
+  const { stdout: nonRenderedWideTableStdout } = await captureReadabilityFixture(
+    '20260714T020108Z-project-knowledge-non-rendered-wide-table-a0b1c408',
+  );
+  assert.equal(JSON.parse(nonRenderedWideTableStdout).ok, true);
+  assert.equal(await pythonReadabilityError(nonRenderedWideTableExamples), 'OK');
+
+  const inlineCommentWideTable = [
+    '# 行内注释宽表格验证',
+    '',
+    'A | B | C | D | E | F | G <!-- note -->',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, inlineCommentWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020117Z-project-knowledge-inline-comment-wide-table-a0b1c417'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(inlineCommentWideTable), /exceeds 6 columns: fixture\.md:3 \(7 columns\)/);
+
+  const inlineCodeCommentWideTable = [
+    '# 行内代码注释标记宽表验证',
+    '',
+    'A | B | C | D | E | F | `<!--`',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, inlineCodeCommentWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020122Z-project-knowledge-inline-code-comment-wide-table-a0b1c422'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(inlineCodeCommentWideTable), /exceeds 6 columns: fixture\.md:3 \(7 columns\)/);
+
+  const fencedCommentThenWideTable = [
+    '# 围栏注释状态隔离验证',
+    '',
+    '```markdown',
+    '<!--',
+    '```',
+    '',
+    'A | B | C | D | E | F | G',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, fencedCommentThenWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020118Z-project-knowledge-fenced-comment-wide-table-a0b1c418'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:7 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(fencedCommentThenWideTable), /exceeds 6 columns: fixture\.md:7 \(7 columns\)/);
+
+  const blockquoteCommentThenWideTable = [
+    '# 引用注释状态隔离验证',
+    '',
+    '> <!--',
+    'A | B | C | D | E | F | G',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, blockquoteCommentThenWideTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020121Z-project-knowledge-blockquote-comment-wide-table-a0b1c421'),
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:4 \(7 columns\)/,
+  );
+  assert.match(await pythonReadabilityError(blockquoteCommentThenWideTable), /exceeds 6 columns: fixture\.md:4 \(7 columns\)/);
+
+  for (const [nonTableBody, runId] of [
+    [
+      '# 引用层级不拼表\n\nA | B\n> --- | ---\n> 1 | 2\n',
+      '20260714T020119Z-project-knowledge-quote-depth-a0b1c419',
+    ],
+    [
+      '# 表后标题边界\n\nA | B\n--- | ---\n1 | 2\n# 后续标题 | 不是数据行\n',
+      '20260714T020120Z-project-knowledge-heading-boundary-a0b1c420',
+    ],
+    [
+      '# 表后围栏边界\n\nA | B\n--- | ---\n1 | 2\n```text | option | extra\ncode\n```\n',
+      '20260714T020123Z-project-knowledge-fence-boundary-a0b1c423',
+    ],
+    [
+      '# 列表围栏宽表示例\n\n- ```markdown\n  A | B | C | D | E | F | G\n  --- | --- | --- | --- | --- | --- | ---\n  1 | 2 | 3 | 4 | 5 | 6 | 7\n  ```\n',
+      '20260714T020124Z-project-knowledge-list-fence-a0b1c424',
+    ],
+  ]) {
+    await writeFile(readabilityFeaturePath, nonTableBody, 'utf8');
+    const { stdout } = await captureReadabilityFixture(runId);
+    assert.equal(JSON.parse(stdout).ok, true);
+    assert.equal(await pythonReadabilityError(nonTableBody), 'OK');
+  }
+
+  await writeFile(readabilityFeaturePath, [
+    '# 六列表格可读性验证',
+    '',
+    '| A | B | C | D | E | F |',
+    '| --- | --- | --- | --- | --- | --- |',
+    '| 1 | 2 | 3 | 4 | 5 | 6 |',
+    '',
+  ].join('\n'), 'utf8');
+  const { stdout: sixColumnTableStdout } = await captureReadabilityFixture(
+    '20260714T020109Z-project-knowledge-six-column-table-a0b1c409',
+  );
+  assert.equal(JSON.parse(sixColumnTableStdout).ok, true);
+
+  await writeFile(readabilityFeaturePath, [
+    '# 空表头验证',
+    '',
+    '| A | | C |',
+    '| --- | --- | --- |',
+    '| 1 | 2 | 3 |',
+    '',
+  ].join('\n'), 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020110Z-project-knowledge-empty-header-a0b1c410'),
+    /Markdown table has an empty header cell: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(column 2\)/,
+  );
+
+  await writeFile(readabilityFeaturePath, [
+    '# 表头与分隔行错列验证',
+    '',
+    '| A | B | C |',
+    '| --- | --- |',
+    '| 1 | 2 | 3 |',
+    '',
+  ].join('\n'), 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020111Z-project-knowledge-separator-columns-a0b1c411'),
+    /Markdown table header\/separator column mismatch: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:3 \(header=3, separator=2\)/,
+  );
+
+  const shortSeparatorTable = [
+    '# 过短分隔线验证',
+    '',
+    '| A | B |',
+    '| -- | -- |',
+    '| 1 | 2 |',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, shortSeparatorTable, 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020112Z-project-knowledge-short-separator-a0b1c412'),
+    /Markdown table has an invalid separator: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:4/,
+  );
+  assert.match(await pythonReadabilityError(shortSeparatorTable), /invalid separator: fixture\.md:4/);
+
+  await writeFile(readabilityFeaturePath, [
+    '# 数据行错列验证',
+    '',
+    '| A | B | C |',
+    '| --- | --- | --- |',
+    '| 1 | 2 |',
+    '',
+  ].join('\n'), 'utf8');
+  await assert.rejects(
+    captureReadabilityFixture('20260714T020113Z-project-knowledge-data-columns-a0b1c413'),
+    /Markdown table data row column mismatch: business\/capabilities\/merchant_operations\/features\/table-readability\/detailed-design\.md:5 \(header=3, row=2\)/,
+  );
+
+  const fencedWideTable = [
+    '# 代码围栏宽表格验证',
+    '',
+    '```markdown',
+    '| A | B | C | D | E | F | G |',
+    '| --- | --- | --- | --- | --- | --- | --- |',
+    '| 1 | 2 | 3 | 4 | 5 | 6 | 7 |',
+    '```',
+    '',
+  ].join('\n');
+  await writeFile(readabilityFeaturePath, fencedWideTable, 'utf8');
+  const { stdout: fencedWideTableStdout } = await captureReadabilityFixture(
+    '20260714T020114Z-project-knowledge-fenced-wide-table-a0b1c414',
+  );
+  assert.equal(JSON.parse(fencedWideTableStdout).ok, true);
+  assert.equal(await pythonReadabilityError(fencedWideTable), 'OK');
+
+  await writeFile(path.join(archiveRoot, 'document.md'), [
+    '# 归档宽表格保留',
+    '',
+    '| A | B | C | D | E | F | G | H |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |',
+    '',
+  ].join('\n'), 'utf8');
+  const { stdout: archivedWideTableStdout } = await captureReadabilityFixture(
+    '20260714T020115Z-project-knowledge-archive-wide-table-a0b1c415',
+  );
+  assert.equal(JSON.parse(archivedWideTableStdout).ok, true);
+  const nestedArchiveDirectory = path.join(
+    projectRoot,
+    'business',
+    'capabilities',
+    'merchant_operations',
+    '_archive',
+  );
+  await mkdir(nestedArchiveDirectory, { recursive: true });
+  await writeFile(path.join(nestedArchiveDirectory, 'wide-history.md'), [
+    '# 嵌套归档宽表格保留',
+    '',
+    'A | B | C | D | E | F | G',
+    '--- | --- | --- | --- | --- | --- | ---',
+    '1 | 2 | 3 | 4 | 5 | 6 | 7',
+    '',
+  ].join('\n'), 'utf8');
+  const { stdout: nestedArchiveWideTableStdout } = await captureReadabilityFixture(
+    '20260714T020116Z-project-knowledge-nested-archive-wide-table-a0b1c416',
+  );
+  assert.equal(JSON.parse(nestedArchiveWideTableStdout).ok, true);
+  await rm(readabilityFeatureDirectory, { recursive: true, force: true });
   const validLevel1WithOutwardCapabilities = validLevel1CapabilityDetailedDesign('merchant_operations');
   const merchantJourneyRow = validLevel1WithOutwardCapabilities
     .split('\n')
@@ -642,7 +1013,7 @@ try {
       '--repo', capabilityRepo,
       '--run-id', '20260713T010100Z-project-knowledge-missing-level1-summary-a0b1c2dc',
     ]),
-    /vertical table does not match fixed schema: merchant_operations\/3\.1\.1/,
+    /Markdown table data row column mismatch: business\/capabilities\/merchant_operations\/detailed-design\.md:\d+ \(header=2, row=1\)/,
   );
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
@@ -1618,10 +1989,10 @@ try {
 
   const firstRelationshipSemantics = '分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链';
   const secondRelationshipSemantics = '分类库存记录通过复核字段关联同一条上游审核记录';
-  const firstRelationshipEvidenceRow = '| `relation_merchant_governance_to_catalog_inventory` | `merchant_governance_record` | `1:N` | `catalog_inventory_record` | `merchant_governance_record.id -> catalog_inventory_record.parent_record_id` | 分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链 | `db/catalog_inventory/catalog_inventory_record.sql:3-3#parentRecordId` |';
-  const secondRelationshipEvidenceRow = '| `relation_merchant_governance_to_catalog_review` | `merchant_governance_record` | `1:N` | `catalog_inventory_record` | `merchant_governance_record.id -> catalog_inventory_record.review_record_id` | 分类库存记录通过复核字段关联同一条上游审核记录 | `db/catalog_inventory/catalog_inventory_record.sql:4-4#reviewRecordId` |';
-  const catalogParentFieldRow = '| `parent_record_id` | `BIGINT` | 否 | 无 | FK -> `merchant_governance_record.id` | 关联同一业务协作链的上游记录 | `CATALOG_INVENTORY_EXECUTE` | `db/catalog_inventory/catalog_inventory_record.sql:3-3#parentRecordId` |';
-  const catalogReviewFieldRow = '| `review_record_id` | `BIGINT` | 否 | 无 | FK -> `merchant_governance_record.id` | 关联同一业务协作链的上游复核记录 | `CATALOG_INVENTORY_EXECUTE` | `db/catalog_inventory/catalog_inventory_record.sql:4-4#reviewRecordId` |';
+  const firstRelationshipEvidenceRow = '| `relation_merchant_governance_to_catalog_inventory` | `merchant_governance_record` -> `catalog_inventory_record` | `1:N` | `merchant_governance_record.id -> catalog_inventory_record.parent_record_id` | 分类、品牌、商品、SKU与库存记录归属于同一条跨二级能力业务链 | `db/catalog_inventory/catalog_inventory_record.sql:3-3#parentRecordId` |';
+  const secondRelationshipEvidenceRow = '| `relation_merchant_governance_to_catalog_review` | `merchant_governance_record` -> `catalog_inventory_record` | `1:N` | `merchant_governance_record.id -> catalog_inventory_record.review_record_id` | 分类库存记录通过复核字段关联同一条上游审核记录 | `db/catalog_inventory/catalog_inventory_record.sql:4-4#reviewRecordId` |';
+  const catalogParentFieldRow = '| `parent_record_id` | `BIGINT`；可空=否；默认值=无 | FK -> `merchant_governance_record.id` | 关联同一业务协作链的上游记录 | `CATALOG_INVENTORY_EXECUTE` | `db/catalog_inventory/catalog_inventory_record.sql:3-3#parentRecordId` |';
+  const catalogReviewFieldRow = '| `review_record_id` | `BIGINT`；可空=否；默认值=无 | FK -> `merchant_governance_record.id` | 关联同一业务协作链的上游复核记录 | `CATALOG_INVENTORY_EXECUTE` | `db/catalog_inventory/catalog_inventory_record.sql:4-4#reviewRecordId` |';
   const reverseOrderedMultiRelationshipDocument = validLevel1CapabilityDetailedDesign('merchant_operations')
     .replace(
       '        BIGINT parent_record_id FK',
@@ -1846,7 +2217,7 @@ try {
       '--repo', capabilityRepo,
       '--run-id', '20260713T010107Z-project-knowledge-interface-flat-f7a8b9c0',
     ]),
-    /secondary capability interface design must group each interface: merchant_operations\/merchant_governance/,
+    /Markdown table exceeds 6 columns: business\/capabilities\/merchant_operations\/secondary-capabilities\/catalog_inventory\/detailed-design\.md:\d+ \(13 columns\)/,
   );
 
   await writeFile(
