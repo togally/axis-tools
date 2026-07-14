@@ -185,6 +185,7 @@ for (const requiredText of [
 ]) {
   assert.match(capabilityTemplate, new RegExp(requiredText));
 }
+assert.doesNotMatch(capabilityTemplate, /^##\s+\d+\.?\s+用户旅程覆盖契约\s*$/m);
 
 const secondaryCapabilityTemplate = await readFile(
   path.join(repoRoot, projectKnowledge.path, 'references', 'secondary-capability-detailed-design-template.md'),

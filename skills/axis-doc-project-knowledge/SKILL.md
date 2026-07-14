@@ -37,6 +37,7 @@ Invariants:
 - one canonical overview per level1_capability_id;
 - each level-1 overview contains every secondary capability as a summary and link; each secondary capability owns one independent detailed-design document;
 - each level-1 overview is a complete user business-operation panorama (`用户业务操作全景`), not an implementation detailed design: it covers every evidence-backed user/role operation and stops at Controller/Handler, Service/UseCase, read/write or produced-data summary, user-visible result, and the canonical secondary-document link;
+- `user_journey_design_status`, `user_journey_coverage` and `user_journey_gap_id` are authoring and capture controls kept in the overview header and gap evidence; do not render a reader-facing `用户旅程覆盖契约` chapter;
 - level-1 overviews never copy field dictionaries, full call chains, Mapper/Repository detail, transaction/concurrency detail or test matrices; secondary documents own the interface-local code, data, governance and verification detail inside each `5.N` contract group;
 - `business_id` is a mapping from a secondary capability to implementation/business evidence, not a document boundary;
 - repeated rows or evidence with the same level-1 capability are merged into one document rather than producing parallel detailed designs;
