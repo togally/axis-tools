@@ -163,7 +163,7 @@ for (const requiredText of [
   'one overview per `level1_capability_id`',
   'secondary_capabilities',
   'every secondary capability',
-  '用户业务操作全景',
+  '对外业务能力与接口实现',
   'user_journey_design_status=detailed',
   'user_journey_coverage=complete|partial',
   'user_journey_gap_id',

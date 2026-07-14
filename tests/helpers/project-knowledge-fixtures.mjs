@@ -1,4 +1,5 @@
 export function flatSecondaryDetailedDesign(secondaryCapabilityId) {
+  const apiId = `${secondaryCapabilityId.toUpperCase()}_EXECUTE`;
   return [
     '# 二级能力详细设计',
     '',
@@ -13,31 +14,34 @@ export function flatSecondaryDetailedDesign(secondaryCapabilityId) {
     '',
     '| `api_id` | `level1_journey_id` | 方法与路径/主题 | 认证/授权 | 请求模型 | 响应模型 | 错误语义 | 幂等/事务 | Controller/入口 | Service/用例 | Mapper/Repository | 实体/表 | 测试 |',
     '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    `| \`ORDER_CREATE\` | \`${secondaryCapabilityId.toUpperCase()}_EXECUTE\` | \`POST /api/${secondaryCapabilityId}/actions\` | 登录用户与订单归属校验 | \`CreateOrderRequest\` | \`OrderView\` | 参数错误、重复订单 | 业务单号唯一约束与事务 | \`src/${secondaryCapabilityId}/CapabilityController.java:10-20#execute\` | \`src/${secondaryCapabilityId}/CapabilityService.java:20-40#execute\` | \`src/OrderMapper.java:8-12#insert\` | \`order\` | \`test/OrderTest.java:10-30#createOrder\` |`,
+    `| \`${apiId}\` | \`${secondaryCapabilityId.toUpperCase()}_EXECUTE\` | \`POST /api/${secondaryCapabilityId}/actions\` | 登录用户与订单归属校验 | \`CreateOrderRequest\` | \`OrderView\` | 参数错误、重复订单 | 业务单号唯一约束与事务 | \`src/${secondaryCapabilityId}/CapabilityController.java:10-20#execute\` | \`src/${secondaryCapabilityId}/CapabilityService.java:20-40#execute\` | \`src/OrderMapper.java:8-12#insert\` | \`order\` | \`test/OrderTest.java:10-30#createOrder\` |`,
     '',
     '### 5.2 请求字段',
     '',
     '| `api_id` | 字段 | 位置 | 类型 | 必填 | 约束 | 业务语义 | 证据 |',
     '| --- | --- | --- | --- | --- | --- | --- | --- |',
-    '| `ORDER_CREATE` | `orderNo` | body | `String` | 是 | 非空 | 业务订单号 | `src/CreateOrderRequest.java:8-12#orderNo` |',
+    `| \`${apiId}\` | \`orderNo\` | body | \`String\` | 是 | 非空 | 业务订单号 | \`src/CreateOrderRequest.java:8-12#orderNo\` |`,
     '',
     '### 5.3 响应字段',
     '',
     '| `api_id` | 字段 | 类型 | 可空 | 业务语义 | 产生位置 | 证据 |',
     '| --- | --- | --- | --- | --- | --- | --- |',
-    '| `ORDER_CREATE` | `id` | `Long` | 否 | 订单主键 | Service 创建后返回 | `src/OrderView.java:8-12#id` |',
+    `| \`${apiId}\` | \`id\` | \`Long\` | 否 | 订单主键 | Service 创建后返回 | \`src/OrderView.java:8-12#id\` |`,
     '',
     '### 5.4 错误码与异常映射',
     '',
     '| `api_id` | HTTP/错误码 | 触发条件 | 用户可见语义 | 回滚/补偿 | 代码证据 |',
     '| --- | --- | --- | --- | --- | --- |',
-    '| `ORDER_CREATE` | `400` | 参数校验失败 | 请求无效 | 不落库 | `src/OrderController.java:10-20#create` |',
+    `| \`${apiId}\` | \`400\` | 参数校验失败 | 请求无效 | 不落库 | \`src/OrderController.java:10-20#create\` |`,
     '',
   ].join('\n');
 }
 
 function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityId) {
   const journeyId = `${secondaryCapabilityId.toUpperCase()}_EXECUTE`;
+  const queryJourneyId = `${secondaryCapabilityId.toUpperCase()}_QUERY`;
+  const createApiId = journeyId;
+  const tableId = `${secondaryCapabilityId}_record`;
   const groupedInterfaceDesign = [
     '## 1. 能力定位与边界',
     '',
@@ -47,7 +51,7 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '',
     '| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |',
     '| --- | --- | --- | --- | --- | --- |',
-    `| Web 管理端用户 | \`authenticated + order:create\` | \`ORDER_CREATE\` | \`POST /api/${secondaryCapabilityId}/actions\` | 当前组织内可创建的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:10-18#canCreate\` |`,
+    `| Web 管理端用户 | \`authenticated + order:create\` | \`${createApiId}\` | \`POST /api/${secondaryCapabilityId}/actions\` | 当前组织内可创建的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:10-18#canCreate\` |`,
     `| Web 管理端用户 | \`authenticated + order:read\` | \`ORDER_QUERY\` | \`GET /api/${secondaryCapabilityId}/actions/{id}\` | 当前组织内可查看的订单 | \`src/${secondaryCapabilityId}/CapabilityAuthorization.java:20-28#canRead\` |`,
     '',
     '## 5. 接口详细设计',
@@ -59,7 +63,7 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '| 项目 | 内容 |',
     '| --- | --- |',
     `| \`level1_journey_id\` | \`${journeyId}\` |`,
-    '| `api_id` | `ORDER_CREATE` |',
+    `| \`api_id\` | \`${createApiId}\` |`,
     `| 方法与完整路径或主题 | \`POST /api/${secondaryCapabilityId}/actions\` |`,
     '| 业务目的 | 创建业务订单并返回当前处理状态 |',
     '| 调用方 | Web 管理端 |',
@@ -72,7 +76,7 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     `| Controller/入口 | \`src/${secondaryCapabilityId}/CapabilityController.java:10-20#execute\` | 接收并校验创建请求 |`,
     `| Service/用例 | \`src/${secondaryCapabilityId}/CapabilityService.java:20-40#execute\` | 编排创建流程和事务 |`,
     '| Mapper/Repository | `src/OrderMapper.java:8-12#insert` | 写入订单记录 |',
-    '| 实体/表 | `src/Order.java:10-30#Order`；表 `order` | 承载订单状态和业务单号 |',
+    `| 实体/表 | \`src/${secondaryCapabilityId}/CapabilityRecord.java:10-30#CapabilityRecord\`；\`table_id=${tableId}\`；物理表 \`${tableId}\` | 承载业务状态和业务单号 |`,
     '| 测试 | `test/OrderTest.java:10-30#createOrder` | 验证创建主路径 |',
     '',
     '#### 5.1.2 请求字段',
@@ -125,7 +129,7 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     '',
     '| 项目 | 内容 |',
     '| --- | --- |',
-    `| \`level1_journey_id\` | \`${journeyId}\` |`,
+    `| \`level1_journey_id\` | \`${queryJourneyId}\` |`,
     '| `api_id` | `ORDER_QUERY` |',
     `| 方法与完整路径或主题 | \`GET /api/${secondaryCapabilityId}/actions/{id}\` |`,
     '| 业务目的 | 查询业务订单及当前处理状态 |',
@@ -139,7 +143,7 @@ function groupedSecondaryDetailedDesignWithoutInternalLogic(secondaryCapabilityI
     `| Controller/入口 | \`src/${secondaryCapabilityId}/CapabilityController.java:22-30#detail\` | 接收订单详情查询 |`,
     `| Service/用例 | \`src/${secondaryCapabilityId}/CapabilityService.java:42-55#detail\` | 校验归属并查询订单 |`,
     '| Mapper/Repository | `src/OrderMapper.java:14-18#selectById` | 按主键读取订单 |',
-    '| 实体/表 | `src/Order.java:10-30#Order`；表 `order` | 提供订单详情数据 |',
+    `| 实体/表 | \`src/${secondaryCapabilityId}/CapabilityRecord.java:10-30#CapabilityRecord\`；\`table_id=${tableId}\`；物理表 \`${tableId}\` | 提供业务详情数据 |`,
     '| 测试 | `test/OrderTest.java:32-45#queryOrder` | 验证详情查询主路径 |',
     '',
     '#### 5.2.2 请求字段',
@@ -206,26 +210,27 @@ function addInterfaceInternalLogic(document, groupNumber, logicBody) {
 }
 
 export function validGroupedSecondaryDetailedDesignWithInternalLogic(secondaryCapabilityId) {
+  const tableId = `${secondaryCapabilityId}_record`;
   const createLogic = [
-    '该接口由 `CapabilityController.execute` 校验业务单号和登录上下文，随后调用 `CapabilityService.execute` 检查业务单号是否重复；校验通过后在同一事务中由 `OrderMapper.insert` 写入 `order`，并返回新订单的 `id` 与 `status`。重复业务单号或持久化失败时整体回滚，不产生部分订单数据。',
+    `该接口由 \`CapabilityController.execute\` 校验业务单号和登录上下文，随后调用 \`CapabilityService.execute\` 检查业务单号是否重复；校验通过后在同一事务中由 \`OrderMapper.insert\` 写入 \`${tableId}\`，并返回新记录的 \`id\` 与 \`status\`。重复业务单号或持久化失败时整体回滚，不产生部分业务数据。`,
     '',
     '```mermaid',
     'flowchart LR',
     '    A["Web 管理端提交订单"] --> B["CapabilityController.execute 校验请求"]',
     '    B --> C["CapabilityService.execute 检查业务单号"]',
-    '    C --> D["OrderMapper.insert 写入 order"]',
+    `    C --> D["OrderMapper.insert 写入 ${tableId}"]`,
     '    D --> E["返回 OrderView 的 id 与 status"]',
     '    C -->|"业务单号重复"| F["返回 400 且不落库"]',
     '```',
   ].join('\n');
   const queryLogic = [
-    '该接口由 `CapabilityController.detail` 取得路径参数和登录用户，`CapabilityService.detail` 先校验订单归属，再由 `OrderMapper.selectById` 读取 `order`。记录存在时映射为 `OrderView` 返回；记录不存在或用户无权查看时终止后续处理且不产生数据写入。',
+    `该接口由 \`CapabilityController.detail\` 取得路径参数和登录用户，\`CapabilityService.detail\` 先校验业务归属，再由 \`OrderMapper.selectById\` 读取 \`${tableId}\`。记录存在时映射为 \`OrderView\` 返回；记录不存在或用户无权查看时终止后续处理且不产生数据写入。`,
     '',
     '| 步骤 | 内部处理 | 代码对象 | 数据读写 | 失败处理 |',
     '| --- | --- | --- | --- | --- |',
     '| 1 | 解析并校验订单主键 | `CapabilityController.detail` | 无 | 非法主键返回 400 |',
     '| 2 | 校验当前用户对订单的查看权限 | `CapabilityService.detail` | 读取用户上下文 | 无权查看时拒绝请求 |',
-    '| 3 | 按主键查询订单并映射响应 | `OrderMapper.selectById` | 读取 `order` | 无记录时返回 404 |',
+    `| 3 | 按主键查询业务记录并映射响应 | \`OrderMapper.selectById\` | 读取 \`${tableId}\` | 无记录时返回 404 |`,
   ].join('\n');
   return addInterfaceInternalLogic(
     addInterfaceInternalLogic(
@@ -260,7 +265,10 @@ export function validLevel1CapabilityDetailedDesign(
     { id: 'catalog_inventory', name: '分类、品牌、商品、SKU与库存' },
   ],
   dependencyProjection = {},
+  options = {},
 ) {
+  const includeQueries = options.includeQueries ?? false;
+  const crossSecondary = options.crossSecondary ?? false;
   const dependencyStatus = dependencyProjection.status ?? 'derived';
   const dependencyRevision = dependencyStatus === 'derived' ? '1' : 'not_derived';
   const dependencyGapId = dependencyStatus === 'derived'
@@ -275,9 +283,191 @@ export function validLevel1CapabilityDetailedDesign(
   const moduleRows = secondaryCapabilities.map(({ id, name }) => (
     `| \`${id}\` | ${name} | 商户、平台运营人员 | [查看实现细节](secondary-capabilities/${id}/detailed-design.md) |`
   ));
-  const journeyRows = secondaryCapabilities.map(({ id, name }) => {
+  const executeStep = ({ id, name }, stepId = `${id}_execute_step`) => ({
+    stepId,
+    secondaryId: id,
+    secondaryName: name,
+    apiId: `${id.toUpperCase()}_EXECUTE`,
+    interfaceEntry: `POST /api/${id}/actions`,
+    controller: `src/${id}/CapabilityController.java:10-20#execute`,
+    service: `src/${id}/CapabilityService.java:20-40#execute`,
+    readData: `读取当前用户与 \`${id}_record\` 状态`,
+    writtenData: `写入 \`${id}_record\` 并记录处理状态`,
+    tableId: `${id}_record`,
+    evidence: `test/${id}/CapabilityFlowTest.java:10-30#executeJourney`,
+  });
+  const queryStep = ({ id, name }) => ({
+    stepId: `${id}_query_step`,
+    secondaryId: id,
+    secondaryName: name,
+    apiId: 'ORDER_QUERY',
+    interfaceEntry: `GET /api/${id}/actions/{id}`,
+    controller: `src/${id}/CapabilityController.java:22-30#detail`,
+    service: `src/${id}/CapabilityService.java:42-55#detail`,
+    readData: `读取 \`${id}_record\` 详情与处理状态`,
+    writtenData: '无需写入持久化数据：只读返回当前业务记录',
+    tableId: `${id}_record`,
+    evidence: `test/${id}/CapabilityFlowTest.java:32-45#queryJourney`,
+  });
+  const outwardCapabilities = secondaryCapabilities.flatMap((secondary) => {
+    const executeApiId = `${secondary.id.toUpperCase()}_EXECUTE`;
+    const capabilities = [{
+      title: secondary.name,
+      journeyId: executeApiId,
+      actor: '商户或平台运营人员',
+      providedBusiness: secondary.name,
+      userGoal: `完成${secondary.name}`,
+      userOperation: `在业务页面提交${secondary.name}操作`,
+      visibleResult: '返回业务编号和当前状态',
+      evidence: `test/${secondary.id}/CapabilityFlowTest.java:10-30#executeJourney`,
+      steps: [executeStep(secondary)],
+    }];
+    if (includeQueries) {
+      capabilities.push({
+        title: `查询${secondary.name}结果`,
+        journeyId: `${secondary.id.toUpperCase()}_QUERY`,
+        actor: '商户或平台运营人员',
+        providedBusiness: `查询${secondary.name}详情与处理结果`,
+        userGoal: `掌握${secondary.name}当前状态`,
+        userOperation: `在业务页面打开${secondary.name}详情`,
+        visibleResult: '展示业务详情和当前处理状态',
+        evidence: `test/${secondary.id}/CapabilityFlowTest.java:32-45#queryJourney`,
+        steps: [queryStep(secondary)],
+      });
+    }
+    return capabilities;
+  });
+  if (crossSecondary && secondaryCapabilities.length > 1) {
+    const [firstSecondary, secondSecondary] = secondaryCapabilities;
+    const firstExecute = outwardCapabilities.find((capability) => (
+      capability.journeyId === `${firstSecondary.id.toUpperCase()}_EXECUTE`
+    ));
+    if (firstExecute) {
+      firstExecute.title = `${firstSecondary.name}并衔接${secondSecondary.name}`;
+      firstExecute.providedBusiness = `${firstSecondary.name}并衔接${secondSecondary.name}`;
+      firstExecute.userGoal = `连续完成${firstSecondary.name}和${secondSecondary.name}`;
+      firstExecute.userOperation = `先提交${firstSecondary.name}，再继续完成${secondSecondary.name}`;
+      firstExecute.visibleResult = '返回跨二级能力业务链的编号和最终状态';
+      firstExecute.steps.push(executeStep(
+        secondSecondary,
+        `${firstSecondary.id}_to_${secondSecondary.id}_execute_step`,
+      ));
+    }
+  }
+  const outwardCapabilitySections = outwardCapabilities.flatMap((capability, index) => {
+    const sectionNumber = index + 1;
+    const participatingSecondaryIds = [...new Set(capability.steps.map((step) => step.secondaryId))];
+    const graphLines = [];
+    capability.steps.forEach((step, stepIndex) => {
+      const fromNode = stepIndex === 0 ? 'U' : `S${stepIndex}`;
+      const toNode = `S${stepIndex + 1}`;
+      graphLines.push(
+        `    ${fromNode}${stepIndex === 0 ? `["${capability.actor}：${capability.userOperation}"]` : ''} -->|"api_id: ${step.apiId} · ${step.interfaceEntry}"| ${toNode}["secondary_capability_id: ${step.secondaryId}"]`,
+      );
+    });
+    graphLines.push(`    S${capability.steps.length} --> R["${capability.visibleResult}"]`);
+    const stepTables = capability.steps.flatMap((step, stepIndex) => [
+      `##### 步骤 ${stepIndex + 1} · ${step.secondaryName}`,
+      '',
+      '| 项目 | 内容 |',
+      '| --- | --- |',
+      `| \`step_id\` | \`${step.stepId}\` |`,
+      `| \`secondary_capability_id\` | \`${step.secondaryId}\` |`,
+      `| \`api_id\` | \`${step.apiId}\` |`,
+      `| 接口/入口 | \`${step.interfaceEntry}\` |`,
+      `| Controller/Handler | \`${step.controller}\` |`,
+      `| Service/UseCase | \`${step.service}\` |`,
+      `| 读取数据 | ${step.readData} |`,
+      `| 写入/产生数据 | ${step.writtenData} |`,
+      `| 读写 \`table_id\` | \`${step.tableId}\` |`,
+      `| 二级能力详情 | [查看代码与数据设计](secondary-capabilities/${step.secondaryId}/detailed-design.md) |`,
+      `| 证据 | \`${step.evidence}\` |`,
+      '',
+    ]);
+    return [
+      `### 3.${sectionNumber} ${capability.title}`,
+      '',
+      `#### 3.${sectionNumber}.1 业务说明`,
+      '',
+      '| 项目 | 内容 |',
+      '| --- | --- |',
+      `| \`journey_id\` | \`${capability.journeyId}\` |`,
+      `| 用户/角色 | ${capability.actor} |`,
+      `| 提供的业务 | ${capability.providedBusiness} |`,
+      `| 用户目标 | ${capability.userGoal} |`,
+      `| 用户怎么操作 | ${capability.userOperation} |`,
+      `| 用户可见结果 | ${capability.visibleResult} |`,
+      `| 参与二级能力 | ${participatingSecondaryIds.map((id) => `\`${id}\``).join(', ')} |`,
+      `| 证据 | \`${capability.evidence}\` |`,
+      '',
+      `#### 3.${sectionNumber}.2 二级能力与接口实现逻辑`,
+      '',
+      '```mermaid',
+      'flowchart LR',
+      ...graphLines,
+      '```',
+      '',
+      `#### 3.${sectionNumber}.3 实现步骤`,
+      '',
+      ...stepTables,
+    ];
+  });
+  const terminologyRows = secondaryCapabilities.map(({ id, name }) => (
+    `| ${name}处理状态 | 表示${name}从提交到完成的业务阶段 | 用于用户提交操作、后台处理和结果查询 | 不等同于接口 HTTP 状态；前者描述业务进展，后者描述传输结果 | \`${id}\` | \`src/${id}/CapabilityService.java:20-40#execute\` |`
+  ));
+  const tableInventoryRows = secondaryCapabilities.map(({ id, name }) => {
     const apiId = `${id.toUpperCase()}_EXECUTE`;
-    return `| \`${apiId}\` | 商户或平台运营人员 | \`${id}\` | ${name} | 完成${name} | 在业务页面提交${name}操作 | \`POST /api/${id}/actions\` | \`src/${id}/CapabilityController.java:10-20#execute\` | \`src/${id}/CapabilityService.java:20-40#execute\` | 读取当前用户与 \`${id}_record\` 状态 | 写入 \`${id}_record\` 并记录处理状态 | 返回业务编号和当前状态 | [查看代码与数据设计](secondary-capabilities/${id}/detailed-design.md) | \`test/${id}/CapabilityFlowTest.java:10-30#executeJourney\` |`;
+    const relatedApiIds = includeQueries ? `\`${apiId}\`, \`ORDER_QUERY\`` : `\`${apiId}\``;
+    return `| \`${id}_record\` | \`${id}_record\` | 保存${name}的业务记录与处理状态 | \`${id}\` | ${relatedApiIds} | \`db/${id}/${id}_record.sql:1-30#createTable\` |`;
+  });
+  const erEntityRows = secondaryCapabilities.flatMap(({ id }, index) => [
+    `    ${id}_record {`,
+    '        BIGINT id PK',
+    ...(index === 0 ? [] : ['        BIGINT parent_record_id FK']),
+    '        VARCHAR status',
+    '        TIMESTAMP updated_at',
+    '    }',
+  ]);
+  const erRelationshipRows = secondaryCapabilities.slice(1).map(({ id, name }) => (
+    `    ${secondaryCapabilities[0].id}_record ||--o{ ${id}_record : "${name}记录归属于同一条跨二级能力业务链"`
+  ));
+  const relationshipEvidenceRows = secondaryCapabilities.slice(1).map(({ id, name }) => (
+    `| \`relation_${secondaryCapabilities[0].id}_to_${id}\` | \`${secondaryCapabilities[0].id}_record\` | \`1:N\` | \`${id}_record\` | \`${secondaryCapabilities[0].id}_record.id -> ${id}_record.parent_record_id\` | ${name}记录归属于同一条跨二级能力业务链 | \`db/${id}/${id}_record.sql:3-3#parentRecordId\` |`
+  ));
+  const relationshipEvidenceSection = secondaryCapabilities.length > 1
+    ? [
+      '#### 5.2.1 ER 关系证据',
+      '',
+      '| `relation_id` | 主表 `table_id` | 关系/基数 | 从表 `table_id` | 关联键 | 业务语义 | 证据 |',
+      '| --- | --- | --- | --- | --- | --- | --- |',
+      ...relationshipEvidenceRows,
+      '',
+    ]
+    : [
+      '#### 5.2.1 ER 关系证据',
+      '',
+      'ER 关系证据：not_applicable（单表，无需跨表关系）',
+      '',
+    ];
+  const tableFieldSections = secondaryCapabilities.flatMap(({ id, name }, index) => {
+    const apiId = `${id.toUpperCase()}_EXECUTE`;
+    const relatedApiIds = includeQueries ? `\`${apiId}\`, \`ORDER_QUERY\`` : `\`${apiId}\``;
+    const sectionNumber = index + 3;
+    return [
+      `### 5.${sectionNumber} \`${id}_record\``,
+      '',
+      `> 表标识：\`table_id=${id}_record\``,
+      '',
+      '| 字段 | 类型 | 可空 | 默认值 | 键/约束 | 业务语义 | 读写 api_id | 证据 |',
+      '| --- | --- | --- | --- | --- | --- | --- | --- |',
+      `| \`id\` | \`BIGINT\` | 否 | 自增 | 主键 | ${name}记录主键 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:2-2#id\` |`,
+      ...(index === 0 ? [] : [
+        `| \`parent_record_id\` | \`BIGINT\` | 否 | 无 | FK -> \`${secondaryCapabilities[0].id}_record.id\` | 关联同一业务协作链的上游记录 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:3-3#parentRecordId\` |`,
+      ]),
+      `| \`status\` | \`VARCHAR(32)\` | 否 | \`PENDING\` | 状态值约束 | ${name}当前业务处理状态 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:3-3#status\` |`,
+      `| \`updated_at\` | \`TIMESTAMP\` | 否 | \`CURRENT_TIMESTAMP\` | 自动更新时间 | ${name}记录最近更新时间 | ${relatedApiIds} | \`db/${id}/${id}_record.sql:4-4#updated_at\` |`,
+      '',
+    ];
   });
   const navigationRows = secondaryCapabilities.map(({ id, name }) => (
     `| \`${id}\` | ${name} | [进入二级能力](secondary-capabilities/${id}/detailed-design.md) |`
@@ -290,7 +480,7 @@ export function validLevel1CapabilityDetailedDesign(
     '> 用户旅程完整性：`user_journey_design_status=detailed` · `user_journey_coverage=complete` · `user_journey_gap_id=not_applicable`',
     `> 一级能力依赖投影：\`dependency_graph_status=${dependencyStatus}\` · \`dependency_graph_revision=${dependencyRevision}\` · \`dependency_graph_gap_id=${dependencyGapId}\``,
     '',
-    '## 1. 能力面向的用户与业务',
+    '## 1. 设计结论与能力边界',
     '',
     '本能力面向商户和平台运营人员，说明用户能完成什么业务、如何操作以及系统产生什么结果。',
     '',
@@ -301,42 +491,57 @@ export function validLevel1CapabilityDetailedDesign(
     `| 上游能力 | ${upstreamCapabilityIds} | \`business/level1-capability-dependency-graph.yaml\` |`,
     `| 下游能力 | ${downstreamCapabilityIds} | \`business/level1-capability-dependency-graph.yaml\` |`,
     '',
-    '## 2. 模块与业务服务',
+    '## 2. 二级能力完整性与导航',
     '',
     '| 二级能力/模块 | 提供的业务 | 主要用户 | 实现细节 |',
     '| --- | --- | --- | --- |',
     ...moduleRows,
     '',
-    '## 3. 用户业务操作全景',
+    '## 3. 对外业务能力与接口实现',
     '',
-    '| `journey_id` | 用户/角色 | 所属二级能力/模块 | 提供的业务 | 用户目标 | 用户怎么操作 | 接口/入口 | Controller/Handler | Service/UseCase | 读取数据 | 写入/产生数据 | 用户可见结果 | 二级能力详情 | 证据 |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
-    ...journeyRows,
+    ...outwardCapabilitySections,
+    '## 4. 业务语义',
     '',
-    '## 4. 用户操作与系统响应流程',
+    '| 专业术语 | 定义 | 适用场景与边界 | 易混淆术语及区别 | 关联二级能力 | 权威来源/证据 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...terminologyRows,
+    '',
+    '## 5. 表结构设计',
+    '',
+    '> 表结构设计完整性：`table_design_status=detailed` · `table_design_coverage=complete` · `table_design_gap_id=not_applicable`',
+    '',
+    '### 5.1 表清单',
+    '',
+    '| `table_id` | 物理表名 | 业务实体/用途 | 所属二级能力 | 读写 `api_id` | 证据 |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...tableInventoryRows,
+    '',
+    '### 5.2 ER 图',
     '',
     '```mermaid',
-    'flowchart LR',
-    '    U["用户操作"] --> API["接口接收"] --> S["业务方法处理"] --> D["读取或写入数据"] --> R["返回用户结果"]',
+    'erDiagram',
+    ...erEntityRows,
+    ...erRelationshipRows,
     '```',
     '',
-    '## 5. 业务规则、异常与用户反馈',
+    ...relationshipEvidenceSection,
+    ...tableFieldSections,
+    '## 6. 缺口与覆盖说明',
     '',
-    '| 场景 | 用户看到的规则或反馈 | 系统处理边界 |',
+    '当前用户业务操作、二级能力接口实现、业务术语和表结构均已覆盖；无未覆盖缺口。',
+    '',
+    '## 7. 文档完整性校验',
+    '',
+    '| 校验项 | 结果 | 证据 |',
     '| --- | --- | --- |',
-    '| 正常提交 | 返回业务编号和当前状态 | 具体校验、事务和异常映射在二级能力文档中展开 |',
+    '| 对外业务能力与接口实现 | 通过 | 每项业务均包含业务说明、实现逻辑图和接口实现步骤 |',
+    '| 表结构与 ER 关系 | 通过 | 表清单、字段设计与 ER 图一致 |',
     '',
-    '## 6. 跨模块协作',
-    '',
-    '跨模块协作只说明业务交接和用户结果，不复制二级能力内部调用细节。',
-    '',
-    '## 7. 二级能力导航',
+    '## 8. 文档导航与证据索引',
     '',
     '| 二级能力 | 业务职责 | 详细设计 |',
     '| --- | --- | --- |',
     ...navigationRows,
-    '',
-    '## 8. 验收、证据与缺口',
     '',
     '每个模块均可从用户操作追溯到接口、Controller、Service、数据影响和二级能力详细设计。',
     '',
@@ -408,7 +613,7 @@ export function validPartialLevel1CapabilityDetailedDesign(
     .replace('user_journey_coverage=complete', 'user_journey_coverage=partial')
     .replace('user_journey_gap_id=not_applicable', `user_journey_gap_id=${journeyGapId}`)
     .replace(
-      '每个模块均可从用户操作追溯到接口、Controller、Service、数据影响和二级能力详细设计。',
+      '当前用户业务操作、二级能力接口实现、业务术语和表结构均已覆盖；无未覆盖缺口。',
       `${journeyGapId}：仍有未覆盖用户业务操作；已检查当前模块，需补齐入口与代码证据。`,
     );
 }

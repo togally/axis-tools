@@ -796,6 +796,50 @@ function markdownTables(body) {
     }
     return tables;
 }
+function numberedMarkdownSubsections(body, chapterNumber) {
+    const matches = [...body.matchAll(/^###(?!#)\s+(\d+)\.(\d+)\s+(.+?)\s*$/gm)]
+        .filter((match) => Number(match[1]) === chapterNumber);
+    return matches.map((match, index) => {
+        const start = (match.index ?? 0) + match[0].length;
+        const end = index + 1 < matches.length ? (matches[index + 1].index ?? body.length) : body.length;
+        return {
+            index: Number(match[2]),
+            title: match[3].trim(),
+            body: body.slice(start, end),
+        };
+    });
+}
+function numberedMarkdownSubsubsections(body, chapterNumber, sectionNumber) {
+    const matches = [...body.matchAll(/^####(?!#)\s+(\d+)\.(\d+)\.(\d+)\s+(.+?)\s*$/gm)]
+        .filter((match) => Number(match[1]) === chapterNumber && Number(match[2]) === sectionNumber);
+    return matches.map((match, index) => {
+        const start = (match.index ?? 0) + match[0].length;
+        const end = index + 1 < matches.length ? (matches[index + 1].index ?? body.length) : body.length;
+        return {
+            index: Number(match[3]),
+            title: match[4].trim(),
+            body: body.slice(start, end),
+        };
+    });
+}
+function verticalMarkdownTableFields(table) {
+    const headers = table.headers.map(normalizeMarkdownCell);
+    if (headers.length !== 2 || headers[0] !== '项目' || headers[1] !== '内容')
+        return null;
+    return new Map(table.rows.map((row) => [normalizeMarkdownCell(row[0] ?? ''), row[1] ?? '']));
+}
+function exactVerticalMarkdownTableFields(table, expectedFields, scope) {
+    const fields = verticalMarkdownTableFields(table);
+    if (!fields)
+        throw new Error(`project knowledge vertical table has invalid header: ${scope}`);
+    const actualFields = table.rows.map((row) => normalizeMarkdownCell(row[0] ?? ''));
+    if (actualFields.length !== expectedFields.length
+        || new Set(actualFields).size !== actualFields.length
+        || actualFields.some((field, index) => field !== expectedFields[index])) {
+        throw new Error(`project knowledge vertical table does not match fixed schema: ${scope}`);
+    }
+    return fields;
+}
 function hasGenericInterfaceLogicPlaceholder(body) {
     return /\{(?:actor|api(?:_id)?|application_service|business_rule|entity_or_table|outcome_or_state)\}/i.test(body)
         || /\b(?:actor|application_service|business_rule|entity_or_table|outcome_or_state)\b/i.test(body)
@@ -1067,6 +1111,37 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
             && [controllerAnchors, serviceAnchors, mapperAnchors, testAnchors].some((anchors) => anchors.length === 0)) {
             throw new Error(`project knowledge secondary capability interface design missing exact code anchors: ${scope}`);
         }
+        const entityTableTrace = normalizeMarkdownCell(implementationRows.get('实体/表')?.[1] ?? '');
+        if (exactCodeAnchors(implementationRows.get('实体/表')?.[1] ?? '').length === 0) {
+            throw new Error(`project knowledge secondary capability interface group entity/table trace missing exact evidence: ${scope}/${groupPrefix}`);
+        }
+        const rawTableIds = [...entityTableTrace.matchAll(/\btable_id\s*=\s*([A-Za-z_][A-Za-z0-9_]*|not_applicable)\b/g)]
+            .map((match) => match[1]);
+        if (rawTableIds.length === 0
+            || new Set(rawTableIds).size !== rawTableIds.length
+            || (rawTableIds.includes('not_applicable') && rawTableIds.length > 1)) {
+            throw new Error(`project knowledge secondary capability interface group has invalid parent table_id trace: ${scope}/${groupPrefix}`);
+        }
+        const tableIds = rawTableIds.filter((tableId) => tableId !== 'not_applicable');
+        const physicalTableMatch = /(?:^|[;；])\s*物理表\s+([^;；]+)\s*$/.exec(entityTableTrace);
+        const physicalTableTokens = physicalTableMatch
+            ? traceIdentifierList(physicalTableMatch[1])
+            : [];
+        const physicalTableNames = new Map();
+        if (tableIds.length === 0) {
+            if (physicalTableTokens.length !== 1 || physicalTableTokens[0] !== 'not_applicable') {
+                throw new Error(`project knowledge secondary capability interface group has invalid no-persistence physical table trace: ${scope}/${groupPrefix}`);
+            }
+        }
+        else {
+            if (physicalTableTokens.length !== tableIds.length
+                || physicalTableTokens.some((physicalTableName) => !/^[A-Za-z_][A-Za-z0-9_.]*$/.test(physicalTableName))) {
+                throw new Error(`project knowledge secondary capability interface group has invalid physical table trace: ${scope}/${groupPrefix}`);
+            }
+            tableIds.forEach((tableId, tableIndex) => {
+                physicalTableNames.set(tableId, physicalTableTokens[tableIndex]);
+            });
+        }
         const internalLogic = subsectionBodies.get(2) ?? '';
         if (hasGenericInterfaceLogicPlaceholder(internalLogic)) {
             throw new Error(`project knowledge secondary capability interface internal logic uses generic placeholder: ${scope}/${groupPrefix}`);
@@ -1169,16 +1244,446 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
                     interfaceEntry,
                     controllerAnchors,
                     serviceAnchors,
+                    tableIds,
+                    physicalTableNames,
                 },
             ]);
         }
     }
     return bindings;
 }
+function traceIdentifierList(value) {
+    return normalizeMarkdownCell(value).split(/[,，、;；\s]+/).filter(Boolean);
+}
+function assertLevel1BusinessSemantics(body, capabilityId, secondaryCapabilities) {
+    const semanticsSection = projectKnowledgeSection(body, /^##\s+4\.?\s+业务语义\s*$/m);
+    if (!semanticsSection) {
+        throw new Error(`project knowledge level-1 capability detailed design missing business semantics: ${capabilityId}`);
+    }
+    const expectedHeaders = [
+        '专业术语',
+        '定义',
+        '适用场景与边界',
+        '易混淆术语及区别',
+        '关联二级能力',
+        '权威来源/证据',
+    ];
+    const semanticsTables = markdownTables(semanticsSection);
+    const terminologyTable = semanticsTables.find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === expectedHeaders.length
+            && headers.every((header, index) => header === expectedHeaders[index]);
+    });
+    if (semanticsTables.length !== 1 || !terminologyTable || terminologyTable.rows.length === 0) {
+        throw new Error(`project knowledge level-1 capability business semantics missing terminology rows: ${capabilityId}`);
+    }
+    if (/^#{3,6}\s+/m.test(semanticsSection)) {
+        throw new Error(`project knowledge level-1 capability business semantics contains a governance subsection: ${capabilityId}`);
+    }
+    const knownSecondaryIds = new Set(secondaryCapabilities.map((secondary) => secondary.secondary_capability_id));
+    const terms = new Set();
+    for (const row of terminologyTable.rows) {
+        const term = normalizeMarkdownCell(row[0] ?? '');
+        if (term.length < 2 || terms.has(term) || /^(?:术语|专业术语|term|TODO|TBD)$/i.test(term)) {
+            throw new Error(`project knowledge level-1 capability business semantics has generic term: ${capabilityId}`);
+        }
+        terms.add(term);
+        for (const value of row.slice(1, 4)) {
+            const normalized = normalizeMarkdownCell(value ?? '');
+            if (normalized.length < 2 || /\{[^}]+\}|TODO|TBD|待补|待定/i.test(normalized)) {
+                throw new Error(`project knowledge level-1 capability business semantics is incomplete: ${capabilityId}/${term}`);
+            }
+        }
+        const relatedSecondaryIds = traceIdentifierList(row[4] ?? '');
+        if (relatedSecondaryIds.length === 0
+            || relatedSecondaryIds.some((secondaryId) => !knownSecondaryIds.has(secondaryId))) {
+            throw new Error(`project knowledge level-1 capability business semantics references unknown secondary capability: ${capabilityId}/${term}`);
+        }
+        const evidence = normalizeMarkdownCell(row[5] ?? '');
+        if (evidence.length < 3 || /\{[^}]+\}|TODO|TBD|待补|待定/i.test(evidence)) {
+            throw new Error(`project knowledge level-1 capability business semantics missing evidence: ${capabilityId}/${term}`);
+        }
+    }
+}
+function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabilities, knownApiIds, stepTableIds, apiSecondaryIds, stepTableApiIds, stepTableSecondaryIds, gapReportBody) {
+    const tableDesignSection = projectKnowledgeSection(body, /^##\s+5\.?\s+表结构设计\s*$/m);
+    if (!tableDesignSection) {
+        throw new Error(`project knowledge level-1 capability detailed design missing table design: ${capabilityId}`);
+    }
+    const controlLines = tableDesignSection.split(/\r?\n/).filter((line) => (/\btable_design_status\s*=/.test(line)
+        && /\btable_design_coverage\s*=/.test(line)
+        && /\btable_design_gap_id\s*=/.test(line)));
+    if (controlLines.length !== 1) {
+        throw new Error(`project knowledge level-1 capability table design requires one control line: ${capabilityId}`);
+    }
+    const controlLine = controlLines[0];
+    const status = /\btable_design_status\s*=\s*(detailed|not_applicable)\b/.exec(controlLine)?.[1];
+    const coverage = /\btable_design_coverage\s*=\s*(complete|partial|not_applicable)\b/.exec(controlLine)?.[1];
+    const gapId = /\btable_design_gap_id\s*=\s*([A-Za-z0-9][A-Za-z0-9_.:\-]*)\b/.exec(controlLine)?.[1];
+    if (!status || !coverage || !gapId) {
+        throw new Error(`project knowledge level-1 capability table design has invalid control values: ${capabilityId}`);
+    }
+    if (status === 'not_applicable') {
+        if (coverage !== 'not_applicable' || gapId !== 'not_applicable') {
+            throw new Error(`project knowledge level-1 capability table design not_applicable state is inconsistent: ${capabilityId}`);
+        }
+        const reasonTables = markdownTables(tableDesignSection);
+        const reasonFields = reasonTables.length === 1
+            ? exactVerticalMarkdownTableFields(reasonTables[0], ['table_design_status', '原因', '证据'], `${capabilityId}/table-design-not-applicable`)
+            : null;
+        if (!reasonFields
+            || normalizeMarkdownCell(reasonFields.get('table_design_status') ?? '') !== 'not_applicable'
+            || normalizeMarkdownCell(reasonFields.get('原因') ?? '').length < 4
+            || exactCodeAnchors(reasonFields.get('证据') ?? '').length === 0) {
+            throw new Error(`project knowledge level-1 capability table design not_applicable lacks reason or evidence: ${capabilityId}`);
+        }
+        if (stepTableIds.size > 0
+            || /^\|\s*`?table_id`?\s*\|\s*物理表名\s*\|/m.test(tableDesignSection)
+            || /\berDiagram\b/.test(tableDesignSection)
+            || /\btable_id\s*=\s*[A-Za-z_][A-Za-z0-9_]*\b/.test(tableDesignSection)) {
+            throw new Error(`project knowledge level-1 capability table design not_applicable conflicts with persisted table trace: ${capabilityId}`);
+        }
+        return new Map();
+    }
+    if (coverage === 'not_applicable') {
+        throw new Error(`project knowledge level-1 capability detailed table design cannot use not_applicable coverage: ${capabilityId}`);
+    }
+    if (coverage === 'complete' && gapId !== 'not_applicable') {
+        throw new Error(`project knowledge level-1 capability complete table design requires table_design_gap_id=not_applicable: ${capabilityId}`);
+    }
+    if (coverage === 'partial') {
+        if (gapId === 'not_applicable') {
+            throw new Error(`project knowledge level-1 capability partial table design requires an explicit gap: ${capabilityId}`);
+        }
+        const escapedGapId = gapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`).test(gapReportBody)) {
+            throw new Error(`project knowledge level-1 capability table design gap is not tracked: ${capabilityId}/${gapId}`);
+        }
+    }
+    const tableDesignSubsections = numberedMarkdownSubsections(tableDesignSection, 5);
+    const allTableDesignSubsectionHeadings = [...tableDesignSection.matchAll(/^###(?!#)\s+/gm)];
+    if (tableDesignSubsections.length < 3
+        || allTableDesignSubsectionHeadings.length !== tableDesignSubsections.length
+        || tableDesignSubsections.some((subsection, index) => subsection.index !== index + 1)
+        || tableDesignSubsections[0].title !== '表清单'
+        || tableDesignSubsections[1].title !== 'ER 图') {
+        throw new Error(`project knowledge level-1 capability table design has invalid fixed subsection structure: ${capabilityId}`);
+    }
+    const inventorySubsection = tableDesignSubsections[0];
+    const erSubsection = tableDesignSubsections[1];
+    const fieldSubsections = tableDesignSubsections.slice(2);
+    const erRelationshipSubsections = numberedMarkdownSubsubsections(erSubsection.body, 5, 2);
+    const allErSubsubsectionHeadings = [...erSubsection.body.matchAll(/^####(?!#)\s+/gm)];
+    if (erRelationshipSubsections.length !== 1
+        || allErSubsubsectionHeadings.length !== erRelationshipSubsections.length
+        || erRelationshipSubsections[0].index !== 1
+        || erRelationshipSubsections[0].title !== 'ER 关系证据') {
+        throw new Error(`project knowledge level-1 capability table design requires fixed 5.2.1 ER relationship evidence: ${capabilityId}`);
+    }
+    const erRelationshipSubsection = erRelationshipSubsections[0];
+    const inventoryHeaders = [
+        'table_id',
+        '物理表名',
+        '业务实体/用途',
+        '所属二级能力',
+        '读写 api_id',
+        '证据',
+    ];
+    const inventoryTables = markdownTables(inventorySubsection.body);
+    const inventoryTable = inventoryTables.find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === inventoryHeaders.length
+            && headers.every((header, index) => header === inventoryHeaders[index]);
+    });
+    if (inventoryTables.length !== 1 || !inventoryTable || inventoryTable.rows.length === 0) {
+        throw new Error(`project knowledge level-1 capability table design missing table inventory: ${capabilityId}`);
+    }
+    const knownSecondaryIds = new Set(secondaryCapabilities.map((secondary) => secondary.secondary_capability_id));
+    const tableIds = new Set();
+    const physicalTableNames = new Map();
+    const tableApiIds = new Map();
+    for (const row of inventoryTable.rows) {
+        const tableId = normalizeMarkdownCell(row[0] ?? '');
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(tableId) || tableIds.has(tableId)) {
+            throw new Error(`project knowledge level-1 capability table inventory has invalid or duplicate table_id: ${capabilityId}/${tableId || 'missing'}`);
+        }
+        tableIds.add(tableId);
+        const physicalTableName = normalizeMarkdownCell(row[1] ?? '');
+        if (!/^[A-Za-z_][A-Za-z0-9_.]*$/.test(physicalTableName)
+            || [...physicalTableNames.values()].includes(physicalTableName)
+            || normalizeMarkdownCell(row[2] ?? '').length < 2) {
+            throw new Error(`project knowledge level-1 capability table inventory is incomplete: ${capabilityId}/${tableId}`);
+        }
+        physicalTableNames.set(tableId, physicalTableName);
+        const secondaryIds = traceIdentifierList(row[3] ?? '');
+        if (secondaryIds.length === 0 || secondaryIds.some((secondaryId) => !knownSecondaryIds.has(secondaryId))) {
+            throw new Error(`project knowledge level-1 capability table inventory references unknown secondary capability: ${capabilityId}/${tableId}`);
+        }
+        const apiIds = traceIdentifierList(row[4] ?? '');
+        if (apiIds.length === 0 || apiIds.some((apiId) => !knownApiIds.has(apiId))) {
+            throw new Error(`project knowledge level-1 capability table inventory references unknown api_id: ${capabilityId}/${tableId}`);
+        }
+        const secondaryIdSet = new Set(secondaryIds);
+        if (!sameIdentifierSet(secondaryIdSet, stepTableSecondaryIds.get(tableId) ?? new Set())
+            || !sameIdentifierSet(new Set(apiIds), stepTableApiIds.get(tableId) ?? new Set())) {
+            throw new Error(`project knowledge level-1 capability table inventory mismatches implementation steps: ${capabilityId}/${tableId}`);
+        }
+        if (apiIds.some((apiId) => {
+            const owners = apiSecondaryIds.get(apiId) ?? new Set();
+            return ![...owners].some((owner) => secondaryIdSet.has(owner));
+        }) || secondaryIds.some((secondaryId) => !apiIds.some((apiId) => apiSecondaryIds.get(apiId)?.has(secondaryId)))) {
+            throw new Error(`project knowledge level-1 capability table inventory mismatches api and secondary ownership: ${capabilityId}/${tableId}`);
+        }
+        tableApiIds.set(tableId, new Set(apiIds));
+        if (exactCodeAnchors(row[5] ?? '').length === 0) {
+            throw new Error(`project knowledge level-1 capability table inventory missing exact evidence: ${capabilityId}/${tableId}`);
+        }
+    }
+    if (!sameIdentifierSet(tableIds, stepTableIds)) {
+        throw new Error(`project knowledge level-1 capability step table_id set and table inventory differ: ${capabilityId}`);
+    }
+    const erBlocks = [...erSubsection.body.matchAll(/```mermaid\s*([\s\S]*?)```/gi)]
+        .map((match) => match[1])
+        .filter((diagram) => /\berDiagram\b/.test(diagram));
+    if (erBlocks.length !== 1) {
+        throw new Error(`project knowledge level-1 capability table design requires one ER diagram: ${capabilityId}`);
+    }
+    const erLines = erBlocks[0].split(/\r?\n/);
+    const erEntityNames = new Set();
+    const erRelationships = [];
+    for (const rawLine of erLines) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('%%') || /^erDiagram\b/.test(line))
+            continue;
+        const relationshipMatch = /^(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_.]*))\s+([|o}{]+(?:--|\.\.)[|o}{]+)\s+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_.]*))\s*:\s*(?:"([^"]+)"|(.+?))\s*$/.exec(line);
+        if (relationshipMatch) {
+            const source = relationshipMatch[1] ?? relationshipMatch[2];
+            const target = relationshipMatch[4] ?? relationshipMatch[5];
+            erEntityNames.add(source);
+            erEntityNames.add(target);
+            erRelationships.push({
+                source,
+                target,
+                operator: relationshipMatch[3],
+                label: normalizeMarkdownCell(relationshipMatch[6] ?? relationshipMatch[7] ?? ''),
+            });
+            continue;
+        }
+        const entityMatch = /^(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_.]*))\s*\{\s*$/.exec(line);
+        if (entityMatch)
+            erEntityNames.add(entityMatch[1] ?? entityMatch[2]);
+    }
+    for (const tableId of tableIds) {
+        const physicalTableName = physicalTableNames.get(tableId);
+        if (!erEntityNames.has(physicalTableName)) {
+            throw new Error(`project knowledge level-1 capability ER diagram omits table: ${capabilityId}/${tableId}`);
+        }
+    }
+    if (!sameIdentifierSet(erEntityNames, new Set(physicalTableNames.values()))) {
+        throw new Error(`project knowledge level-1 capability ER diagram contains an entity absent from table inventory: ${capabilityId}`);
+    }
+    const fieldHeaders = [
+        '字段',
+        '类型',
+        '可空',
+        '默认值',
+        '键/约束',
+        '业务语义',
+        '读写 api_id',
+        '证据',
+    ];
+    const fieldTableIds = new Set();
+    const fieldNamesByTable = new Map();
+    if (fieldSubsections.length !== tableIds.size) {
+        throw new Error(`project knowledge level-1 capability table inventory and field structures differ: ${capabilityId}`);
+    }
+    const inventoryTableIdOrder = [...tableIds];
+    for (const [fieldSubsectionIndex, subsection] of fieldSubsections.entries()) {
+        const tableIdMatches = [...subsection.body.matchAll(/\btable_id\s*=\s*([A-Za-z_][A-Za-z0-9_]*)\b/g)];
+        if (tableIdMatches.length === 0)
+            continue;
+        if (tableIdMatches.length !== 1) {
+            throw new Error(`project knowledge level-1 capability table field section has duplicate table_id: ${capabilityId}/${subsection.index}`);
+        }
+        const tableId = tableIdMatches[0][1];
+        if (!tableIds.has(tableId) || fieldTableIds.has(tableId)) {
+            throw new Error(`project knowledge level-1 capability table field section has unknown or duplicate table_id: ${capabilityId}/${tableId}`);
+        }
+        if (tableId !== inventoryTableIdOrder[fieldSubsectionIndex]) {
+            throw new Error(`project knowledge level-1 capability table field sections do not follow inventory order: ${capabilityId}/${tableId}`);
+        }
+        fieldTableIds.add(tableId);
+        if (normalizeMarkdownCell(subsection.title) !== physicalTableNames.get(tableId)) {
+            throw new Error(`project knowledge level-1 capability table field section title mismatches physical table: ${capabilityId}/${tableId}`);
+        }
+        const fieldTables = markdownTables(subsection.body);
+        const fieldTable = fieldTables.find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === fieldHeaders.length
+                && headers.every((header, index) => header === fieldHeaders[index]);
+        });
+        if (fieldTables.length !== 1 || !fieldTable || fieldTable.rows.length === 0) {
+            throw new Error(`project knowledge level-1 capability table field structure is missing: ${capabilityId}/${tableId}`);
+        }
+        const fieldNames = new Set();
+        for (const row of fieldTable.rows) {
+            const fieldName = normalizeMarkdownCell(row[0] ?? '');
+            if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(fieldName) || fieldNames.has(fieldName)) {
+                throw new Error(`project knowledge level-1 capability table field is invalid or duplicate: ${capabilityId}/${tableId}/${fieldName || 'missing'}`);
+            }
+            fieldNames.add(fieldName);
+            for (const column of [1, 2, 3, 4, 5]) {
+                if (!normalizeMarkdownCell(row[column] ?? '')) {
+                    throw new Error(`project knowledge level-1 capability table field structure is incomplete: ${capabilityId}/${tableId}/${fieldName}`);
+                }
+            }
+            const apiIds = traceIdentifierList(row[6] ?? '');
+            const inventoryApiIds = tableApiIds.get(tableId) ?? new Set();
+            if (apiIds.length === 0 || apiIds.some((apiId) => !inventoryApiIds.has(apiId))) {
+                throw new Error(`project knowledge level-1 capability table field references unknown api_id: ${capabilityId}/${tableId}/${fieldName}`);
+            }
+            if (exactCodeAnchors(row[7] ?? '').length === 0) {
+                throw new Error(`project knowledge level-1 capability table field missing exact evidence: ${capabilityId}/${tableId}/${fieldName}`);
+            }
+        }
+        fieldNamesByTable.set(tableId, fieldNames);
+    }
+    if (!sameIdentifierSet(tableIds, fieldTableIds)) {
+        throw new Error(`project knowledge level-1 capability table inventory and field structures differ: ${capabilityId}`);
+    }
+    if (tableIds.size > 1) {
+        const relationshipHeaders = [
+            'relation_id',
+            '主表 table_id',
+            '关系/基数',
+            '从表 table_id',
+            '关联键',
+            '业务语义',
+            '证据',
+        ];
+        const relationshipTables = markdownTables(erRelationshipSubsection.body);
+        const relationshipTable = relationshipTables.find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === relationshipHeaders.length
+                && headers.every((header, index) => header === relationshipHeaders[index]);
+        });
+        if (relationshipTables.length !== 1 || !relationshipTable || relationshipTable.rows.length === 0) {
+            throw new Error(`project knowledge level-1 capability table design missing ER relationship evidence: ${capabilityId}`);
+        }
+        const relationIds = new Set();
+        const relatedTableIds = new Set();
+        const matchedErRelationshipIndexes = new Set();
+        for (const row of relationshipTable.rows) {
+            const relationId = normalizeMarkdownCell(row[0] ?? '');
+            const sourceTableId = normalizeMarkdownCell(row[1] ?? '');
+            const cardinality = normalizeMarkdownCell(row[2] ?? '');
+            const targetTableId = normalizeMarkdownCell(row[3] ?? '');
+            const relationKey = normalizeMarkdownCell(row[4] ?? '');
+            const semantics = normalizeMarkdownCell(row[5] ?? '');
+            if (!projectKnowledgeTraceIdentifierPattern.test(relationId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(relationId)
+                || relationIds.has(relationId)
+                || !tableIds.has(sourceTableId)
+                || !tableIds.has(targetTableId)
+                || sourceTableId === targetTableId
+                || !/^(?:1:1|1:N|N:1|N:M|无直接关系)$/.test(cardinality)
+                || relationKey.length < 2
+                || semantics.length < 2
+                || exactCodeAnchors(row[6] ?? '').length === 0) {
+                throw new Error(`project knowledge level-1 capability has invalid ER relationship evidence: ${capabilityId}/${relationId || 'missing'}`);
+            }
+            relationIds.add(relationId);
+            relatedTableIds.add(sourceTableId);
+            relatedTableIds.add(targetTableId);
+            if (cardinality !== '无直接关系') {
+                const relationKeyMatch = /^([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)\s*(?:->|→)\s*([A-Za-z_][A-Za-z0-9_]*)\.([A-Za-z_][A-Za-z0-9_]*)$/
+                    .exec(relationKey);
+                if (!relationKeyMatch
+                    || relationKeyMatch[1] !== sourceTableId
+                    || relationKeyMatch[3] !== targetTableId
+                    || !fieldNamesByTable.get(sourceTableId)?.has(relationKeyMatch[2])
+                    || !fieldNamesByTable.get(targetTableId)?.has(relationKeyMatch[4])) {
+                    throw new Error(`project knowledge level-1 capability ER relationship key mismatches fields: ${capabilityId}/${relationId}`);
+                }
+                const sourcePhysicalName = physicalTableNames.get(sourceTableId);
+                const targetPhysicalName = physicalTableNames.get(targetTableId);
+                const evidencedRelationshipIndex = erRelationships.findIndex((relationship, relationshipIndex) => {
+                    if (matchedErRelationshipIndexes.has(relationshipIndex))
+                        return false;
+                    const isForward = relationship.source === sourcePhysicalName
+                        && relationship.target === targetPhysicalName;
+                    const isReverse = relationship.source === targetPhysicalName
+                        && relationship.target === sourcePhysicalName;
+                    if (!isForward && !isReverse)
+                        return false;
+                    const operatorParts = relationship.operator.split(/--|\.\./);
+                    const leftIsMany = /[{}]/.test(operatorParts[0] ?? '');
+                    const rightIsMany = /[{}]/.test(operatorParts[1] ?? '');
+                    const renderedCardinality = leftIsMany
+                        ? (rightIsMany ? 'N:M' : 'N:1')
+                        : (rightIsMany ? '1:N' : '1:1');
+                    const relationshipCardinality = isReverse
+                        ? (renderedCardinality === '1:N'
+                            ? 'N:1'
+                            : (renderedCardinality === 'N:1' ? '1:N' : renderedCardinality))
+                        : renderedCardinality;
+                    return relationshipCardinality === cardinality && relationship.label === semantics;
+                });
+                if (evidencedRelationshipIndex < 0) {
+                    throw new Error(`project knowledge level-1 capability ER diagram omits evidenced relationship: ${capabilityId}/${relationId}`);
+                }
+                matchedErRelationshipIndexes.add(evidencedRelationshipIndex);
+            }
+            else if (relationKey !== 'not_applicable') {
+                throw new Error(`project knowledge level-1 capability unrelated table pair requires relation key not_applicable: ${capabilityId}/${relationId}`);
+            }
+            else {
+                const sourcePhysicalName = physicalTableNames.get(sourceTableId);
+                const targetPhysicalName = physicalTableNames.get(targetTableId);
+                if (erRelationships.some((relationship) => ((relationship.source === sourcePhysicalName && relationship.target === targetPhysicalName)
+                    || (relationship.source === targetPhysicalName && relationship.target === sourcePhysicalName)))) {
+                    throw new Error(`project knowledge level-1 capability unrelated table pair conflicts with ER diagram: ${capabilityId}/${relationId}`);
+                }
+            }
+        }
+        if (!sameIdentifierSet(tableIds, relatedTableIds)) {
+            throw new Error(`project knowledge level-1 capability ER relationship evidence omits table: ${capabilityId}`);
+        }
+        if (matchedErRelationshipIndexes.size !== erRelationships.length) {
+            throw new Error(`project knowledge level-1 capability ER diagram contains an unevidenced relationship: ${capabilityId}`);
+        }
+    }
+    else {
+        if (erRelationships.length > 0
+            || markdownTables(erRelationshipSubsection.body).length > 0
+            || !/ER\s*关系证据\s*[:：]\s*not_applicable\s*[（(]单表，无需跨表关系[）)]/.test(erRelationshipSubsection.body)) {
+            throw new Error(`project knowledge level-1 capability single-table design must declare ER relationship not_applicable: ${capabilityId}`);
+        }
+    }
+    return physicalTableNames;
+}
 function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapabilities, gapReportBody) {
-    const userOperationPanorama = projectKnowledgeSection(body, /^##\s+\d+\.?\s+用户业务操作全景\s*$/m);
-    if (!userOperationPanorama) {
-        throw new Error(`project knowledge level-1 capability detailed design missing user operation panorama: ${capabilityId}`);
+    if (/^##\s+\d+\.?\s+(?:用户业务操作全景|跨二级能力用户旅程|跨模块协作|共享业务语义与一级治理)\s*$/m.test(body)) {
+        throw new Error(`project knowledge level-1 capability detailed design uses a legacy flat or separate cross-capability section: ${capabilityId}`);
+    }
+    const outwardCapabilitiesSection = projectKnowledgeSection(body, /^##\s+3\.?\s+对外业务能力与接口实现\s*$/m);
+    if (!outwardCapabilitiesSection) {
+        throw new Error(`project knowledge level-1 capability detailed design missing outward capability implementation: ${capabilityId}`);
+    }
+    for (const requiredHeading of [
+        '1. 设计结论与能力边界',
+        '2. 二级能力完整性与导航',
+        '3. 对外业务能力与接口实现',
+        '4. 业务语义',
+        '5. 表结构设计',
+        '6. 缺口与覆盖说明',
+        '7. 文档完整性校验',
+        '8. 文档导航与证据索引',
+    ]) {
+        const escapedHeading = requiredHeading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (!new RegExp(`^##\\s+${escapedHeading}\\s*$`, 'm').test(body)) {
+            throw new Error(`project knowledge level-1 capability detailed design missing fixed section ${requiredHeading}: ${capabilityId}`);
+        }
     }
     const journeyControlLines = body.split(/\r?\n/).filter((line) => (/\buser_journey_design_status\s*=/.test(line)
         && /\buser_journey_coverage\s*=/.test(line)
@@ -1214,75 +1719,34 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
             throw new Error(`project knowledge level-1 capability partial user journey gap is not traced in overview and gap report: ${capabilityId}/${journeyGapId}`);
         }
     }
-    const panoramaLines = userOperationPanorama.split(/\r?\n/);
-    const headerLineIndex = panoramaLines.findIndex((line) => {
-        const trimmed = line.trim();
-        return trimmed.startsWith('|') && trimmed.endsWith('|') && /`?journey_id`?/.test(trimmed);
-    });
-    if (headerLineIndex < 0 || panoramaLines.length <= headerLineIndex + 2) {
-        throw new Error(`project knowledge level-1 capability detailed design missing user journey table: ${capabilityId}`);
+    const outwardCapabilities = numberedMarkdownSubsections(outwardCapabilitiesSection, 3);
+    const allOutwardCapabilityHeadings = [...outwardCapabilitiesSection.matchAll(/^###(?!#)\s+/gm)];
+    if (outwardCapabilities.length === 0) {
+        throw new Error(`project knowledge level-1 capability detailed design has no outward capabilities: ${capabilityId}`);
     }
-    const headers = splitMarkdownTableRow(panoramaLines[headerLineIndex])
-        .map((header) => header.replace(/[`*]/g, '').trim());
-    const requiredHeaders = [
-        'journey_id',
-        '用户/角色',
-        '所属二级能力/模块',
-        '提供的业务',
-        '用户目标',
-        '用户怎么操作',
-        '接口/入口',
-        'Controller/Handler',
-        'Service/UseCase',
-        '读取数据',
-        '写入/产生数据',
-        '用户可见结果',
-        '二级能力详情',
-        '证据',
-    ];
-    for (const requiredHeader of requiredHeaders) {
-        if (!headers.includes(requiredHeader)) {
-            throw new Error(`project knowledge level-1 capability user journey table missing ${requiredHeader}: ${capabilityId}`);
-        }
+    if (allOutwardCapabilityHeadings.length !== outwardCapabilities.length
+        || outwardCapabilities.some((section, index) => section.index !== index + 1)) {
+        throw new Error(`project knowledge level-1 outward capability sections are not sequential: ${capabilityId}`);
     }
-    if (headers.length !== requiredHeaders.length
-        || headers.some((header, index) => header !== requiredHeaders[index])) {
-        throw new Error(`project knowledge level-1 capability user journey table does not match fixed schema: ${capabilityId}`);
-    }
-    const separatorLine = panoramaLines[headerLineIndex + 1].trim();
-    const separatorCells = separatorLine.startsWith('|') && separatorLine.endsWith('|')
-        ? splitMarkdownTableRow(separatorLine)
-        : [];
-    if (!separatorLine.startsWith('|')
-        || !separatorLine.endsWith('|')
-        || separatorCells.length !== headers.length
-        || separatorCells.some((cell) => !/^:?-{3,}:?$/.test(cell))) {
-        throw new Error(`project knowledge level-1 capability user journey table has malformed separator: ${capabilityId}`);
-    }
-    const rows = [];
-    for (let index = headerLineIndex + 2; index < panoramaLines.length; index += 1) {
-        const line = panoramaLines[index].trim();
-        if (!line.startsWith('|') || !line.endsWith('|'))
-            break;
-        rows.push(splitMarkdownTableRow(line));
-    }
-    if (rows.some((cells) => cells.length !== headers.length)) {
-        throw new Error(`project knowledge level-1 capability user journey table has malformed row: ${capabilityId}`);
-    }
-    if (rows.length === 0) {
-        throw new Error(`project knowledge level-1 capability detailed design has no user journeys: ${capabilityId}`);
-    }
-    const field = (row, name) => row[headers.indexOf(name)] ?? '';
+    const knownSecondaryIds = new Set(secondaryCapabilities.map((secondary) => secondary.secondary_capability_id));
     const journeySecondaryIds = new Set();
     const journeyIds = new Set();
+    const stepIds = new Set();
+    const apiIds = new Set();
+    const stepTableIds = new Set();
+    const apiSecondaryIds = new Map();
+    const stepTableApiIds = new Map();
+    const stepTableSecondaryIds = new Map();
     const journeyIdsBySecondary = new Map();
     const isGenericText = (value) => {
-        const normalized = value.replace(/`/g, '').trim();
+        const normalized = normalizeMarkdownCell(value);
         return /^(?:现有入口集合|现有操作|对应(?:接口|入口|方法|服务|数据)|相关(?:数据|表|对象)|详见二级能力文档|形成(?:或查询)?业务结果|返回结果|待补充|TODO|TBD)$/i.test(normalized)
             || /^(?:读取|写入|产生)(?:相关数据|相关表|相关对象)$/i.test(normalized);
     };
     const concreteData = (value, operation) => {
-        if (isGenericText(value))
+        const normalized = normalizeMarkdownCell(value);
+        if (isGenericText(value)
+            || /\{[^}]+\}|TODO|TBD|待补|待定/i.test(normalized))
             return false;
         const concreteCodeToken = [...value.matchAll(/`([^`\n]+)`/g)]
             .map((match) => match[1].trim())
@@ -1291,69 +1755,323 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
         if (concreteCodeToken)
             return true;
         const action = operation === '读取' ? '读取' : '(?:写入|产生|落库)';
-        return new RegExp(`^(?:无|无需|无须|不(?:需|需要)?)(?:${action})(?:数据|数据库|业务表|持久化数据)?[：:，,；;（(].{2,}`).test(value.trim());
+        if (new RegExp(`^(?:无|无需|无须|不(?:需|需要)?)(?:${action})(?:数据|数据库|业务表|持久化数据)?[：:，,；;（(].{2,}`).test(value.trim())) {
+            return true;
+        }
+        const meaningfulSummary = normalized
+            .replace(/^(?:读取|查询|获取|加载|写入|产生|更新|删除|发送|发布|返回|记录)+/, '')
+            .replace(/^(?:当前|目标|对应|相关|业务)+/, '')
+            .replace(/(?:相关|对应|业务)?(?:数据|对象|记录|信息|状态|结果)$/, '')
+            .trim();
+        return meaningfulSummary.length >= 2
+            && !/^(?:none|n\/a|na|not_applicable|missing_evidence|data|table|object|todo|tbd|-)$/i.test(meaningfulSummary);
     };
-    for (const row of rows) {
-        const journeyId = field(row, 'journey_id').replace(/`/g, '').trim() || 'unknown';
-        if (!/^[A-Za-z0-9][A-Za-z0-9_.:\-]*$/.test(journeyId)) {
+    const section3Tables = markdownTables(outwardCapabilitiesSection);
+    if (section3Tables.some((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length !== 2 || headers[0] !== '项目' || headers[1] !== '内容';
+    })) {
+        throw new Error(`project knowledge level-1 outward capability section contains a legacy flat list: ${capabilityId}`);
+    }
+    for (const outwardCapability of outwardCapabilities) {
+        if (outwardCapability.title.length < 2 || /\{[^}]+\}|TODO|TBD|待补|待定/i.test(outwardCapability.title)) {
+            throw new Error(`project knowledge level-1 outward capability has invalid title: ${capabilityId}/${outwardCapability.index}`);
+        }
+        const subsubsections = numberedMarkdownSubsubsections(outwardCapability.body, 3, outwardCapability.index);
+        const expectedSubsubsectionTitles = [
+            '业务说明',
+            '二级能力与接口实现逻辑',
+            '实现步骤',
+        ];
+        const allSubsubsectionHeadings = [...outwardCapability.body.matchAll(/^####(?!#)\s+/gm)];
+        if (subsubsections.length !== expectedSubsubsectionTitles.length
+            || allSubsubsectionHeadings.length !== subsubsections.length
+            || subsubsections.some((subsection, index) => (subsection.index !== index + 1
+                || subsection.title !== expectedSubsubsectionTitles[index]))) {
+            throw new Error(`project knowledge level-1 outward capability has invalid fixed subsection structure: ${capabilityId}/${outwardCapability.index}`);
+        }
+        const [businessSubsection, graphSubsection, stepsSubsection] = subsubsections;
+        const summaryTables = markdownTables(businessSubsection.body);
+        if (summaryTables.length !== 1) {
+            throw new Error(`project knowledge level-1 outward capability requires one business summary: ${capabilityId}/${outwardCapability.index}`);
+        }
+        const summary = exactVerticalMarkdownTableFields(summaryTables[0], [
+            'journey_id',
+            '用户/角色',
+            '提供的业务',
+            '用户目标',
+            '用户怎么操作',
+            '用户可见结果',
+            '参与二级能力',
+            '证据',
+        ], `${capabilityId}/3.${outwardCapability.index}.1`);
+        const journeyId = normalizeMarkdownCell(summary.get('journey_id') ?? '') || 'unknown';
+        if (!projectKnowledgeTraceIdentifierPattern.test(journeyId)
+            || invalidProjectKnowledgeTraceIdentifierPattern.test(journeyId)) {
             throw new Error(`project knowledge level-1 capability user journey has invalid journey_id: ${capabilityId}/${journeyId}`);
         }
         if (journeyIds.has(journeyId)) {
             throw new Error(`project knowledge level-1 capability user journey has duplicate journey_id: ${capabilityId}/${journeyId}`);
         }
         journeyIds.add(journeyId);
-        const secondaryId = field(row, '所属二级能力/模块').replace(/`/g, '').trim();
-        if (!secondaryCapabilities.some((secondary) => secondary.secondary_capability_id === secondaryId)) {
-            throw new Error(`project knowledge level-1 capability user journey references unknown secondary capability: ${capabilityId}/${journeyId}`);
-        }
-        journeySecondaryIds.add(secondaryId);
         for (const requiredField of ['用户/角色', '提供的业务', '用户目标', '用户怎么操作', '用户可见结果']) {
-            const value = field(row, requiredField).trim();
-            if (value.length < 2 || isGenericText(value)) {
+            const value = summary.get(requiredField) ?? '';
+            if (normalizeMarkdownCell(value).length < 2 || isGenericText(value)) {
                 throw new Error(`project knowledge level-1 capability user journey missing concrete ${requiredField}: ${capabilityId}/${journeyId}`);
             }
         }
-        const interfaceEntry = field(row, '接口/入口');
-        if (/现有入口集合|对应接口|对应入口/.test(interfaceEntry)) {
-            throw new Error(`project knowledge level-1 capability user journey uses generic interface placeholder: ${capabilityId}/${journeyId}`);
-        }
-        if (!/(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceEntry)) {
-            throw new Error(`project knowledge level-1 capability user journey missing concrete interface: ${capabilityId}/${journeyId}`);
-        }
-        if (exactCodeAnchors(field(row, 'Controller/Handler')).length < 1) {
-            throw new Error(`project knowledge level-1 capability user journey missing exact Controller/Handler anchor: ${capabilityId}/${journeyId}`);
-        }
-        if (exactCodeAnchors(field(row, 'Service/UseCase')).length < 1) {
-            throw new Error(`project knowledge level-1 capability user journey missing exact Service/UseCase anchor: ${capabilityId}/${journeyId}`);
-        }
-        if (!concreteData(field(row, '读取数据'), '读取')) {
-            throw new Error(`project knowledge level-1 capability user journey missing concrete read data: ${capabilityId}/${journeyId}`);
-        }
-        if (!concreteData(field(row, '写入/产生数据'), '写入')) {
-            throw new Error(`project knowledge level-1 capability user journey missing concrete written or produced data: ${capabilityId}/${journeyId}`);
-        }
-        const expectedChildPath = `secondary-capabilities/${secondaryId}/detailed-design.md`;
-        const escapedChildPath = expectedChildPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        if (!new RegExp(`\\]\\((?:business/capabilities/${capabilityId}/)?${escapedChildPath}\\)`).test(field(row, '二级能力详情'))) {
-            throw new Error(`project knowledge level-1 capability user journey omits secondary capability link: ${capabilityId}/${journeyId}`);
-        }
-        if (exactCodeAnchors(field(row, '证据')).length < 1) {
+        if (exactCodeAnchors(summary.get('证据') ?? '').length < 1) {
             throw new Error(`project knowledge level-1 capability user journey missing exact evidence anchor: ${capabilityId}/${journeyId}`);
         }
-        journeyIdsBySecondary.set(secondaryId, [
-            ...(journeyIdsBySecondary.get(secondaryId) ?? []),
-            {
-                journeyId,
-                interfaceEntry: interfaceEntry.replace(/`/g, '').trim(),
-                controllerAnchors: exactCodeAnchors(field(row, 'Controller/Handler')),
-                serviceAnchors: exactCodeAnchors(field(row, 'Service/UseCase')),
-            },
-        ]);
+        const implementationStepTables = markdownTables(stepsSubsection.body);
+        if (implementationStepTables.length === 0) {
+            throw new Error(`project knowledge level-1 outward capability has no interface implementation steps: ${capabilityId}/${journeyId}`);
+        }
+        const implementationSteps = implementationStepTables.map((table, index) => (exactVerticalMarkdownTableFields(table, [
+            'step_id',
+            'secondary_capability_id',
+            'api_id',
+            '接口/入口',
+            'Controller/Handler',
+            'Service/UseCase',
+            '读取数据',
+            '写入/产生数据',
+            '读写 table_id',
+            '二级能力详情',
+            '证据',
+        ], `${capabilityId}/3.${outwardCapability.index}.3/step-${index + 1}`)));
+        const mermaidBlocks = [...graphSubsection.body.matchAll(/```mermaid\s*([\s\S]*?)```/gi)]
+            .map((match) => match[1]);
+        const diagrams = mermaidBlocks.filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
+        if (mermaidBlocks.length !== 1
+            || diagrams.length !== 1
+            || !/(?:-->|==>)/.test(diagrams[0])) {
+            throw new Error(`project knowledge level-1 outward capability requires one connected implementation diagram: ${capabilityId}/${journeyId}`);
+        }
+        const diagram = diagrams[0];
+        const nodeLabels = new Map();
+        for (const nodeMatch of diagram.matchAll(/\b([A-Za-z][A-Za-z0-9_]*)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\))/g)) {
+            const nodeId = nodeMatch[1];
+            const label = normalizeMarkdownCell(nodeMatch[2] ?? nodeMatch[3] ?? nodeMatch[4] ?? nodeMatch[5] ?? '');
+            const existing = nodeLabels.get(nodeId);
+            if (existing && existing !== label) {
+                throw new Error(`project knowledge level-1 outward capability diagram redefines node: ${capabilityId}/${journeyId}/${nodeId}`);
+            }
+            nodeLabels.set(nodeId, label);
+        }
+        const allDiagramEdges = diagram.split(/\r?\n/).flatMap((line, lineIndex) => {
+            const edgeMatch = /^\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?\s*(?:-->|==>)\s*(?:\|"?([^|]+?)"?\|\s*)?([A-Za-z][A-Za-z0-9_]*)/.exec(line);
+            if (!edgeMatch)
+                return [];
+            return [{
+                    lineIndex,
+                    sourceNodeId: edgeMatch[1],
+                    targetNodeId: edgeMatch[3],
+                    label: edgeMatch[2]
+                        ? normalizeMarkdownCell(edgeMatch[2]).replace(/^"|"$/g, '').trim()
+                        : null,
+                }];
+        });
+        const edgeLikeLineCount = diagram.split(/\r?\n/).filter((line) => (!line.trim().startsWith('%%') && /(?:-->|==>|-\.->)/.test(line))).length;
+        if (edgeLikeLineCount !== allDiagramEdges.length) {
+            throw new Error(`project knowledge level-1 outward capability diagram contains an unsupported or untraceable edge: ${capabilityId}/${journeyId}`);
+        }
+        const diagramEdges = allDiagramEdges.filter((edge) => edge.label !== null);
+        const stepSecondaryIds = new Set();
+        let previousSecondaryId = null;
+        let previousTargetNodeId = null;
+        let entryNodeId = null;
+        let previousEdgeLineIndex = -1;
+        const implementationEdgeLineIndexes = new Set();
+        for (const step of implementationSteps) {
+            const stepId = normalizeMarkdownCell(step.get('step_id') ?? '');
+            if (!projectKnowledgeTraceIdentifierPattern.test(stepId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(stepId)
+                || stepIds.has(stepId)) {
+                throw new Error(`project knowledge level-1 outward capability has invalid or duplicate step_id: ${capabilityId}/${journeyId}/${stepId || 'missing'}`);
+            }
+            stepIds.add(stepId);
+            const secondaryId = normalizeMarkdownCell(step.get('secondary_capability_id') ?? '');
+            if (!knownSecondaryIds.has(secondaryId)) {
+                throw new Error(`project knowledge level-1 capability user journey references unknown secondary capability: ${capabilityId}/${journeyId}`);
+            }
+            stepSecondaryIds.add(secondaryId);
+            journeySecondaryIds.add(secondaryId);
+            const apiId = normalizeMarkdownCell(step.get('api_id') ?? '');
+            if (!projectKnowledgeTraceIdentifierPattern.test(apiId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)) {
+                throw new Error(`project knowledge level-1 outward capability has invalid api_id: ${capabilityId}/${journeyId}/${apiId || 'missing'}`);
+            }
+            apiIds.add(apiId);
+            const interfaceEntry = step.get('接口/入口') ?? '';
+            if (/现有入口集合|对应接口|对应入口/.test(interfaceEntry)) {
+                throw new Error(`project knowledge level-1 capability user journey uses generic interface placeholder: ${capabilityId}/${journeyId}`);
+            }
+            if (!/(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)/.test(interfaceEntry)) {
+                throw new Error(`project knowledge level-1 capability user journey missing concrete interface: ${capabilityId}/${journeyId}`);
+            }
+            const controllerAnchors = exactCodeAnchors(step.get('Controller/Handler') ?? '');
+            if (controllerAnchors.length < 1) {
+                throw new Error(`project knowledge level-1 capability user journey missing exact Controller/Handler anchor: ${capabilityId}/${journeyId}`);
+            }
+            const serviceAnchors = exactCodeAnchors(step.get('Service/UseCase') ?? '');
+            if (serviceAnchors.length < 1) {
+                throw new Error(`project knowledge level-1 capability user journey missing exact Service/UseCase anchor: ${capabilityId}/${journeyId}`);
+            }
+            if (!concreteData(step.get('读取数据') ?? '', '读取')) {
+                throw new Error(`project knowledge level-1 capability user journey missing concrete read data: ${capabilityId}/${journeyId}`);
+            }
+            if (!concreteData(step.get('写入/产生数据') ?? '', '写入')) {
+                throw new Error(`project knowledge level-1 capability user journey missing concrete written or produced data: ${capabilityId}/${journeyId}`);
+            }
+            const tableIdValue = normalizeMarkdownCell(step.get('读写 table_id') ?? '');
+            const tableIds = traceIdentifierList(tableIdValue);
+            if (tableIds.length === 0
+                || new Set(tableIds).size !== tableIds.length
+                || tableIds.some((tableId) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(tableId))
+                || (tableIds.includes('not_applicable') && tableIds.length > 1)) {
+                throw new Error(`project knowledge level-1 capability user journey has invalid table_id trace: ${capabilityId}/${journeyId}/${stepId}`);
+            }
+            if (tableIds.includes('not_applicable')) {
+                const noPersistenceStatement = normalizeMarkdownCell([
+                    step.get('读取数据') ?? '',
+                    step.get('写入/产生数据') ?? '',
+                ].join(' '));
+                if (!/(?:无|无需|无须|不需要|不读写|不涉及).{0,12}(?:持久化|数据库|业务表|落库|表)/.test(noPersistenceStatement)) {
+                    throw new Error(`project knowledge level-1 capability user journey table_id not_applicable lacks no-persistence statement: ${capabilityId}/${journeyId}/${stepId}`);
+                }
+            }
+            const persistedTableIds = tableIds.filter((tableId) => tableId !== 'not_applicable');
+            for (const tableId of persistedTableIds) {
+                stepTableIds.add(tableId);
+                stepTableApiIds.set(tableId, new Set([
+                    ...(stepTableApiIds.get(tableId) ?? []),
+                    apiId,
+                ]));
+                stepTableSecondaryIds.set(tableId, new Set([
+                    ...(stepTableSecondaryIds.get(tableId) ?? []),
+                    secondaryId,
+                ]));
+            }
+            const expectedChildPath = `secondary-capabilities/${secondaryId}/detailed-design.md`;
+            const escapedChildPath = expectedChildPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (!new RegExp(`\\]\\((?:business/capabilities/${capabilityId}/)?${escapedChildPath}\\)`).test(step.get('二级能力详情') ?? '')) {
+                throw new Error(`project knowledge level-1 capability user journey omits secondary capability link: ${capabilityId}/${journeyId}`);
+            }
+            if (exactCodeAnchors(step.get('证据') ?? '').length < 1) {
+                throw new Error(`project knowledge level-1 capability user journey missing exact evidence anchor: ${capabilityId}/${journeyId}`);
+            }
+            const normalizedInterfaceEntry = normalizeMarkdownCell(interfaceEntry);
+            if ([...nodeLabels.values()].some((label) => (label.includes(apiId) || label.includes(normalizedInterfaceEntry)))) {
+                throw new Error(`project knowledge level-1 outward capability diagram uses api_id or interface as a node: ${capabilityId}/${journeyId}/${stepId}`);
+            }
+            const matchingEdge = diagramEdges.find((edge) => (!implementationEdgeLineIndexes.has(edge.lineIndex)
+                && edge.lineIndex > previousEdgeLineIndex
+                && edge.label.includes(apiId)
+                && edge.label.includes(normalizedInterfaceEntry)));
+            if (!matchingEdge) {
+                throw new Error(`project knowledge level-1 outward capability diagram must place api_id and interface on one edge: ${capabilityId}/${journeyId}/${stepId}`);
+            }
+            const targetLabel = nodeLabels.get(matchingEdge.targetNodeId) ?? '';
+            const sourceLabel = nodeLabels.get(matchingEdge.sourceNodeId) ?? '';
+            const actorOrRole = normalizeMarkdownCell(summary.get('用户/角色') ?? '');
+            const userOperation = normalizeMarkdownCell(summary.get('用户怎么操作') ?? '');
+            if (!new RegExp(`(?:^|[^A-Za-z0-9_])${secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^A-Za-z0-9_]|$)`).test(targetLabel)
+                || (previousTargetNodeId === null
+                    && (!sourceLabel.includes(actorOrRole) || !sourceLabel.includes(userOperation)))
+                || (previousTargetNodeId !== null && matchingEdge.sourceNodeId !== previousTargetNodeId)
+                || (previousSecondaryId !== null
+                    && previousSecondaryId !== secondaryId
+                    && !new RegExp(`(?:^|[^A-Za-z0-9_])${previousSecondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^A-Za-z0-9_]|$)`).test(sourceLabel))
+                || matchingEdge.lineIndex <= previousEdgeLineIndex) {
+                throw new Error(`project knowledge level-1 outward capability diagram step order or secondary nodes mismatch: ${capabilityId}/${journeyId}/${stepId}`);
+            }
+            if (entryNodeId === null)
+                entryNodeId = matchingEdge.sourceNodeId;
+            previousSecondaryId = secondaryId;
+            previousTargetNodeId = matchingEdge.targetNodeId;
+            previousEdgeLineIndex = matchingEdge.lineIndex;
+            implementationEdgeLineIndexes.add(matchingEdge.lineIndex);
+            apiSecondaryIds.set(apiId, new Set([
+                ...(apiSecondaryIds.get(apiId) ?? []),
+                secondaryId,
+            ]));
+            journeyIdsBySecondary.set(secondaryId, [
+                ...(journeyIdsBySecondary.get(secondaryId) ?? []),
+                {
+                    journeyId,
+                    apiId,
+                    interfaceEntry: normalizedInterfaceEntry,
+                    controllerAnchors,
+                    serviceAnchors,
+                    tableIds: persistedTableIds,
+                    physicalTableNames: new Map(),
+                },
+            ]);
+        }
+        const visibleResult = normalizeMarkdownCell(summary.get('用户可见结果') ?? '');
+        const visibleResultEdge = previousTargetNodeId === null
+            ? undefined
+            : allDiagramEdges.find((edge) => (edge.sourceNodeId === previousTargetNodeId
+                && edge.lineIndex > previousEdgeLineIndex
+                && (nodeLabels.get(edge.targetNodeId) ?? '').includes(visibleResult)));
+        if (!visibleResultEdge) {
+            throw new Error(`project knowledge level-1 outward capability diagram does not end at the user-visible result: ${capabilityId}/${journeyId}`);
+        }
+        if (diagramEdges.some((edge) => (!implementationEdgeLineIndexes.has(edge.lineIndex)
+            && /(?:\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b(?:EVENT|TOPIC|JOB|COMMAND)\s+)/.test(edge.label)))) {
+            throw new Error(`project knowledge level-1 outward capability diagram contains an untraced interface edge: ${capabilityId}/${journeyId}`);
+        }
+        const diagramNodeIds = new Set();
+        const adjacency = new Map();
+        for (const edge of allDiagramEdges) {
+            diagramNodeIds.add(edge.sourceNodeId);
+            diagramNodeIds.add(edge.targetNodeId);
+            adjacency.set(edge.sourceNodeId, new Set([
+                ...(adjacency.get(edge.sourceNodeId) ?? []),
+                edge.targetNodeId,
+            ]));
+            adjacency.set(edge.targetNodeId, new Set([
+                ...(adjacency.get(edge.targetNodeId) ?? []),
+                edge.sourceNodeId,
+            ]));
+        }
+        if (!entryNodeId
+            || [...diagramNodeIds].some((nodeId) => !nodeLabels.has(nodeId))
+            || [...nodeLabels.keys()].some((nodeId) => !diagramNodeIds.has(nodeId))) {
+            throw new Error(`project knowledge level-1 outward capability diagram contains an undefined or disconnected node: ${capabilityId}/${journeyId}`);
+        }
+        const visitedNodeIds = new Set();
+        const pendingNodeIds = [entryNodeId];
+        while (pendingNodeIds.length > 0) {
+            const nodeId = pendingNodeIds.pop();
+            if (visitedNodeIds.has(nodeId))
+                continue;
+            visitedNodeIds.add(nodeId);
+            for (const neighbor of adjacency.get(nodeId) ?? []) {
+                if (!visitedNodeIds.has(neighbor))
+                    pendingNodeIds.push(neighbor);
+            }
+        }
+        if (!sameIdentifierSet(visitedNodeIds, diagramNodeIds)) {
+            throw new Error(`project knowledge level-1 outward capability diagram contains a disconnected branch: ${capabilityId}/${journeyId}`);
+        }
+        const declaredSecondaryIds = new Set(traceIdentifierList(summary.get('参与二级能力') ?? ''));
+        if (!sameIdentifierSet(declaredSecondaryIds, stepSecondaryIds)) {
+            throw new Error(`project knowledge level-1 outward capability secondary capability summary mismatches steps: ${capabilityId}/${journeyId}`);
+        }
     }
     for (const secondary of secondaryCapabilities) {
         const secondaryId = secondary.secondary_capability_id;
         if (!journeySecondaryIds.has(secondaryId)) {
             throw new Error(`project knowledge level-1 capability user journeys omit secondary capability: ${capabilityId}/${secondaryId}`);
+        }
+    }
+    assertLevel1BusinessSemantics(body, capabilityId, secondaryCapabilities);
+    const physicalTableNames = assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabilities, apiIds, stepTableIds, apiSecondaryIds, stepTableApiIds, stepTableSecondaryIds, gapReportBody);
+    for (const journeys of journeyIdsBySecondary.values()) {
+        for (const journey of journeys) {
+            journey.physicalTableNames = new Map(journey.tableIds.map((tableId) => [tableId, physicalTableNames.get(tableId)]));
         }
     }
     return journeyIdsBySecondary;
@@ -1814,16 +2532,31 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
                 if (bindings.length === 0) {
                     throw new Error(`project knowledge secondary capability detailed design omits level-1 journey_id: ${capabilityId}/${secondaryId}/${journey.journeyId}`);
                 }
-                const matchingBinding = bindings.some((binding) => (binding.interfaceEntry === journey.interfaceEntry
+                const matchingBinding = bindings.some((binding) => (binding.apiId === journey.apiId
+                    && binding.interfaceEntry === journey.interfaceEntry
                     && journey.controllerAnchors.every((anchor) => binding.controllerAnchors.includes(anchor))
-                    && journey.serviceAnchors.every((anchor) => binding.serviceAnchors.includes(anchor))));
+                    && journey.serviceAnchors.every((anchor) => binding.serviceAnchors.includes(anchor))
+                    && sameIdentifierSet(new Set(binding.tableIds), new Set(journey.tableIds))
+                    && journey.tableIds.every((tableId) => (binding.physicalTableNames.get(tableId) === journey.physicalTableNames.get(tableId)))));
                 if (!matchingBinding) {
                     throw new Error(`project knowledge secondary capability detailed design mismatches level-1 journey trace: ${capabilityId}/${secondaryId}/${journey.journeyId}`);
                 }
             }
-            for (const journeyId of childJourneyBindings.keys()) {
+            for (const [journeyId, bindings] of childJourneyBindings) {
                 if (!expectedJourneyIds.has(journeyId)) {
-                    throw new Error(`project knowledge secondary capability detailed design contains journey_id absent from level-1 panorama: ${capabilityId}/${secondaryId}/${journeyId}`);
+                    throw new Error(`project knowledge secondary capability detailed design contains journey_id absent from level-1 outward capabilities: ${capabilityId}/${secondaryId}/${journeyId}`);
+                }
+                const expectedBindings = expectedJourneys.filter((journey) => journey.journeyId === journeyId);
+                for (const binding of bindings) {
+                    const matchesParentBinding = expectedBindings.some((journey) => (binding.apiId === journey.apiId
+                        && binding.interfaceEntry === journey.interfaceEntry
+                        && journey.controllerAnchors.every((anchor) => binding.controllerAnchors.includes(anchor))
+                        && journey.serviceAnchors.every((anchor) => binding.serviceAnchors.includes(anchor))
+                        && sameIdentifierSet(new Set(binding.tableIds), new Set(journey.tableIds))
+                        && journey.tableIds.every((tableId) => (binding.physicalTableNames.get(tableId) === journey.physicalTableNames.get(tableId)))));
+                    if (!matchesParentBinding) {
+                        throw new Error(`project knowledge secondary capability detailed design contains interface binding absent from level-1 outward capability: ${capabilityId}/${secondaryId}/${journeyId}/${binding.apiId}`);
+                    }
                 }
             }
             secondaryCapabilityDetailedDesigns.push({

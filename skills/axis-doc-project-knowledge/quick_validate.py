@@ -35,10 +35,16 @@ REQUIRED_TERMS = {
         "business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md",
         "doc_gap_report",
         "missing_evidence",
-        "用户业务操作全景",
+        "对外业务能力与接口实现",
         "user_journey_design_status",
         "user_journey_coverage",
         "user_journey_gap_id",
+        "table_design_status",
+        "table_design_coverage",
+        "table_design_gap_id",
+        "表结构设计",
+        "table_id",
+        "ER diagram",
         "level1_capability_dependency_graph",
         "business/level1-capability-dependency-graph.yaml",
         "dependency_graph_status",
@@ -53,6 +59,8 @@ REQUIRED_TERMS = {
         "Service/UseCase",
         "读取数据",
         "写入/产生数据",
+        "读写 `table_id`",
+        "ER 关系证据",
         "用户可见结果",
         "level1_journey_id",
         "flow_id",
@@ -109,6 +117,7 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "HTTP / EVENT / TOPIC / JOB / COMMAND",
     "interface_not_applicable_reason",
     "interface_not_applicable_evidence",
+    "table_id={parent_table_ids_or_not_applicable}",
 ]
 
 LEGACY_TOP_LEVEL_SEMANTIC_TITLES = {
@@ -214,15 +223,152 @@ def validate(skill_dir: Path) -> int:
             return fail("reader-facing journey coverage contract section found")
         for heading in [
             "## 2. 二级能力完整性与导航",
-            "## 3. 用户业务操作全景",
-            "## 4. 跨二级能力用户旅程",
-            "## 5. 共享业务语义与一级治理",
+            "## 3. 对外业务能力与接口实现",
+            "## 4. 业务语义",
+            "## 5. 表结构设计",
             "## 6. 缺口与覆盖说明",
             "## 7. 文档完整性校验",
-            "## 8. 文档导航、证据索引与术语表",
+            "## 8. 文档导航与证据索引",
         ]:
             if heading not in level1_overview_template:
                 return fail(f"level-1 capability overview missing heading: {heading}")
+        for term in [
+            "table_design_status={detailed_or_not_applicable}",
+            "table_design_coverage={complete_partial_or_not_applicable}",
+            "table_design_gap_id={gap_id_or_not_applicable}",
+            "### 3.1 {provided_business_capability_name}",
+            "#### 3.1.1 业务说明",
+            "#### 3.1.2 二级能力与接口实现逻辑",
+            "#### 3.1.3 实现步骤",
+            "| `journey_id` | `{journey_id}` |",
+            "| 参与二级能力 | `{participating_secondary_capability_ids}` |",
+            "| `step_id` | `{step_id}` |",
+            "| `secondary_capability_id` | `{secondary_capability_id}` |",
+            "| `api_id` | `{api_id}` |",
+            "| 读写 `table_id` | `{read_write_table_ids_or_not_applicable}` |",
+            "| 专业术语 | 定义 | 适用场景与边界 | 易混淆术语及区别 | 关联二级能力 | 权威来源/证据 |",
+            "| `table_id` | 物理表名 | 业务实体/用途 | 所属二级能力 | 读写 `api_id` | 证据 |",
+            "### 5.2 ER 图",
+            "#### 5.2.1 ER 关系证据",
+            "### 5.3 `{physical_table_name}`",
+            "| `relation_id` | 主表 `table_id` | 关系/基数 | 从表 `table_id` | 关联键 | 业务语义 | 证据 |",
+            "ER 关系证据：not_applicable（单表，无需跨表关系）",
+            "字段小节固定从 `5.3` 开始并按表清单顺序连续编号",
+            "小节标题只写表清单中的实际物理表名",
+            "表清单 `table_id` 集合必须与第 3 章全部步骤“读写 `table_id`”的非 `not_applicable` 值去重并集严格相等",
+            "table_id={table_id}",
+            "| 字段 | 类型 | 可空 | 默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |",
+            "| 原因 | {no_persistence_reason} |",
+            "| 证据 | {exact_repository_evidence} |",
+        ]:
+            if term not in level1_overview_template:
+                return fail(
+                    f"level-1 capability overview missing required contract: {term}"
+                )
+        section3_match = re.search(
+            r"^##\s+3\.?\s+对外业务能力与接口实现\s*$([\s\S]*?)(?=^##\s+4\.?\s+)",
+            level1_overview_template,
+            re.MULTILINE,
+        )
+        if not section3_match:
+            return fail("level-1 Section 3 cannot be isolated")
+        section3 = section3_match.group(1)
+        ordered_subsections = [
+            "#### 3.1.1 业务说明",
+            "#### 3.1.2 二级能力与接口实现逻辑",
+            "#### 3.1.3 实现步骤",
+        ]
+        subsection_positions = []
+        for subsection in ordered_subsections:
+            if section3.count(subsection) != 1:
+                return fail(
+                    "level-1 example must contain exactly one ordered subsection: "
+                    + subsection
+                )
+            subsection_positions.append(section3.index(subsection))
+        if subsection_positions != sorted(subsection_positions):
+            return fail("level-1 3.N.1/3.N.2/3.N.3 order is invalid")
+        if not re.search(
+            r"-->\|\"\{api_id\}: \{method_and_path_or_event_job_command\}\"\|\s*"
+            r"secondary_1\[",
+            section3,
+        ):
+            return fail(
+                "level-1 Mermaid must use api_id plus complete interface as an edge label"
+            )
+        if not re.search(
+            r"\| 写入/产生数据 \|[^\n]+\|\n"
+            r"\| 读写 `table_id` \| `\{read_write_table_ids_or_not_applicable\}` \|\n"
+            r"\| 二级能力详情 \|",
+            section3,
+        ):
+            return fail("level-1 implementation step table-id row is misplaced or missing")
+        if re.search(
+            r"^##\s+\d+\.?\s+(?:用户业务操作全景|跨二级能力用户旅程|共享业务语义与一级治理|文档导航、证据索引与术语表)\s*$",
+            level1_overview_template,
+            re.MULTILINE,
+        ):
+            return fail("legacy level-1 reader-facing section found")
+        if re.search(
+            r"^\|\s*`journey_id`\s*\|\s*用户/角色\s*\|\s*所属二级能力/模块\s*\|",
+            level1_overview_template,
+            re.MULTILINE,
+        ):
+            return fail("legacy level-1 fourteen-column panorama table found")
+        table_design_section = re.search(
+            r"^##\s+5\.?\s+表结构设计\s*$([\s\S]*?)(?=^##\s+6\.?\s+)",
+            level1_overview_template,
+            re.MULTILINE,
+        )
+        if not table_design_section:
+            return fail("level-1 table-design section cannot be isolated")
+        er_diagram = re.search(
+            r"```mermaid\s*\nerDiagram\s*\n([\s\S]*?)```",
+            table_design_section.group(1),
+        )
+        if not er_diagram or "{PHYSICAL_TABLE_A}" not in er_diagram.group(1):
+            return fail("level-1 ER example must use actual physical-table placeholders")
+        if re.search(r"\{table_id\}", er_diagram.group(1), re.IGNORECASE):
+            return fail("level-1 ER entities must not use table_id placeholders")
+        table_control_lines = [
+            line
+            for line in table_design_section.group(1).splitlines()
+            if re.search(r"\btable_design_status\s*=", line)
+            and re.search(r"\btable_design_coverage\s*=", line)
+            and re.search(r"\btable_design_gap_id\s*=", line)
+        ]
+        if len(table_control_lines) != 1:
+            return fail("level-1 table-design section must contain one control line")
+        ordered_table_design_headings = [
+            "### 5.1 表清单",
+            "### 5.2 ER 图",
+            "#### 5.2.1 ER 关系证据",
+            "### 5.3 `{physical_table_name}`",
+        ]
+        table_design_heading_positions = []
+        for heading in ordered_table_design_headings:
+            if table_design_section.group(1).count(heading) != 1:
+                return fail(
+                    "level-1 table-design example must contain exactly one heading: "
+                    + heading
+                )
+            table_design_heading_positions.append(
+                table_design_section.group(1).index(heading)
+            )
+        if table_design_heading_positions != sorted(table_design_heading_positions):
+            return fail("level-1 5.1/5.2/5.2.1/5.3 order is invalid")
+        if re.search(
+            r"^###\s+5\.3\s+ER\s*关系证据\s*$",
+            table_design_section.group(1),
+            re.MULTILINE,
+        ):
+            return fail("level-1 ER relationship evidence must be nested at 5.2.1")
+        if re.search(
+            r"^###\s+5\.3\s+`?\{physical_table_name\}`?\s+字段设计\s*$",
+            table_design_section.group(1),
+            re.MULTILINE,
+        ):
+            return fail("level-1 field subsection title must be the physical table name")
         dependency_template_path = (
             skill_dir / "references" / "level1-capability-dependency-graph-template.yaml"
         )
@@ -253,6 +399,16 @@ def validate(skill_dir: Path) -> int:
         for term in GROUPED_INTERFACE_TEMPLATE_TERMS:
             if term not in interface_template:
                 return fail(f"grouped interface template missing required term: {term}")
+        if not re.search(
+            r"^\| 实体/表 \|[^\n]*"
+            r"`table_id=\{parent_table_ids_or_not_applicable\}`[^\n]*"
+            r"\{physical_table_names_or_not_applicable\}[^\n]*\|",
+            interface_template,
+            re.MULTILINE,
+        ):
+            return fail(
+                "grouped interface entity/table row must contain parent table_id or not_applicable"
+            )
         if re.search(
             r"^### 5\.\d+ (?:接口清单与代码追踪|内部处理逻辑|请求字段|响应字段|错误码与异常映射)\s*$",
             interface_template,
