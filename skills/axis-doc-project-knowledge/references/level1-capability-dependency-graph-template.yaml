@@ -1,0 +1,37 @@
+# Canonical machine source for project-wide level-1 capability dependencies.
+# Keep derivation_status=pending_level1_completion and edges=[] until every
+# level-1 user journey and every owning secondary interface design is complete.
+schema: axis.level1_capability_dependency_graph
+schema_version: "0.2"
+derivation_status: pending_level1_completion
+derivation_method: model_synthesis
+derivation_revision: not_derived
+gap_id: gap_level1_dependency_graph_derivation
+nodes:
+  - level1_capability_id: example_operations
+    level1_capability_name: 示例经营
+edges: []
+
+# After the project-wide model synthesis gate passes, replace the lifecycle
+# fields with derivation_status=derived, a stable derivation_revision and
+# gap_id=not_applicable. Replace edges=[] with evidence-backed entries shaped
+# as follows. Multiple parents, staged reverse relationships and cycles are
+# allowed; self edges, unknown nodes and duplicate staged relationships are not.
+# Every journey_id and api_id must exist in the source or target capability's
+# current overview/secondary design. Every evidence_ref must be an exact code
+# anchor or an existing canonical project-document anchor.
+#
+# edges:
+#   - edge_id: example_handoff
+#     from_level1_capability_id: example_operations
+#     to_level1_capability_id: example_fulfillment
+#     relation_type: business_handoff
+#     stage: request
+#     summary: 上游能力向下游能力交接已确认业务请求。
+#     journey_ids:
+#       - EXAMPLE_SUBMIT
+#     api_ids:
+#       - EXAMPLE_CREATE
+#     evidence_refs:
+#       - src/example/ExampleApplicationService.java:20-48#submit
+#     confidence: high

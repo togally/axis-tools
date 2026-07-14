@@ -403,6 +403,7 @@ assert.deepEqual(projectKnowledge.files.sort(), [
   'agents/openai.yaml',
   'quick_validate.py',
   'references/business-capability-detailed-design-template.md',
+  'references/level1-capability-dependency-graph-template.yaml',
   'references/project-business-architecture-template.md',
   'references/project-technical-architecture-template.md',
   'references/secondary-capability-detailed-design-template.md',
@@ -453,6 +454,14 @@ for (const requiredText of [
   'user_journey_design_status',
   'user_journey_coverage',
   'user_journey_gap_id',
+  'dependency_graph_status',
+  'dependency_graph_revision',
+  'dependency_graph_gap_id',
+  'business/level1-capability-dependency-graph.yaml',
+  'not_derived',
+  '项目级统一模型梳理',
+  '直接入边',
+  '直接出边',
   'Controller/Handler',
   'Service/UseCase',
   '读取数据',
@@ -521,6 +530,32 @@ for (const requiredText of [
   );
 }
 assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /一级能力详细设计说明书/);
+
+const level1CapabilityDependencyGraphTemplate = await readFile(
+  path.join(
+    repoRoot,
+    'skills',
+    'axis-doc-project-knowledge',
+    'references',
+    'level1-capability-dependency-graph-template.yaml',
+  ),
+  'utf8',
+);
+for (const requiredText of [
+  'axis.level1_capability_dependency_graph',
+  'pending_level1_completion',
+  'model_synthesis',
+  'not_derived',
+  'from_level1_capability_id',
+  'to_level1_capability_id',
+  'relation_type',
+  'stage',
+  'journey_ids',
+  'api_ids',
+  'evidence_refs',
+]) {
+  assert.match(level1CapabilityDependencyGraphTemplate, new RegExp(requiredText));
+}
 
 const secondaryCapabilityDetailedDesignTemplate = await readFile(
   path.join(

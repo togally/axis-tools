@@ -39,6 +39,16 @@ REQUIRED_TERMS = {
         "user_journey_design_status",
         "user_journey_coverage",
         "user_journey_gap_id",
+        "level1_capability_dependency_graph",
+        "business/level1-capability-dependency-graph.yaml",
+        "dependency_graph_status",
+        "dependency_graph_revision",
+        "dependency_graph_gap_id",
+        "pending_level1_completion",
+        "not_derived",
+        "项目级统一模型梳理",
+        "直接入边",
+        "直接出边",
         "Controller/Handler",
         "Service/UseCase",
         "读取数据",
@@ -188,6 +198,27 @@ def validate(skill_dir: Path) -> int:
         return fail("credential-like value or private network URL found")
 
     if skill_name == "axis-doc-project-knowledge":
+        dependency_template_path = (
+            skill_dir / "references" / "level1-capability-dependency-graph-template.yaml"
+        )
+        if not dependency_template_path.exists():
+            return fail("level-1 capability dependency graph template not found")
+        dependency_template = dependency_template_path.read_text(encoding="utf-8")
+        for term in [
+            "axis.level1_capability_dependency_graph",
+            "derivation_status",
+            "model_synthesis",
+            "not_derived",
+            "from_level1_capability_id",
+            "to_level1_capability_id",
+            "relation_type",
+            "stage",
+            "evidence_refs",
+        ]:
+            if term not in dependency_template:
+                return fail(
+                    f"level-1 capability dependency graph template missing required term: {term}"
+                )
         interface_template_path = (
             skill_dir / "references" / "secondary-capability-detailed-design-template.md"
         )

@@ -92,6 +92,7 @@
         "agents/openai.yaml",
         "quick_validate.py",
         "references/business-capability-detailed-design-template.md",
+        "references/level1-capability-dependency-graph-template.yaml",
         "references/project-business-architecture-template.md",
         "references/project-technical-architecture-template.md",
         "references/secondary-capability-detailed-design-template.md"

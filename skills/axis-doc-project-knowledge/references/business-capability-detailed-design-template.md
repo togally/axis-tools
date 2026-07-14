@@ -8,6 +8,7 @@
 > 证据基线：{source_commit}
 
 > 用户旅程设计完整性：`user_journey_design_status=detailed` · `user_journey_coverage={complete_or_partial}` · `user_journey_gap_id={gap_id_or_not_applicable}`
+> 一级能力依赖投影：`dependency_graph_status={pending_level1_completion_or_derived}` · `dependency_graph_revision={not_derived_or_revision}` · `dependency_graph_gap_id={gap_id_or_not_applicable}`
 
 [返回业务架构](architecture/business.md) · [上一个能力]({previous_capability_document_path}) · [下一个能力]({next_capability_document_path})
 
@@ -17,7 +18,7 @@
 
 ## 1. 设计结论与能力边界
 
-说明本能力为哪些用户/角色提供哪些业务价值、覆盖哪些二级能力/模块、与相邻一级能力如何分工，以及证据不足的边界。结论只能来自业务架构、清单、仓库证据或明确的人工作证。
+说明本能力为哪些用户/角色提供哪些业务价值、覆盖哪些二级能力/模块、与相邻一级能力如何分工，以及证据不足的边界。结论只能来自业务架构、清单、仓库证据或明确的人工作证。上游和下游不得由本文件单独推断，只能从项目级统一模型梳理得到的 canonical 依赖图投影。
 
 | 字段 | 内容 | 来源 |
 | --- | --- | --- |
@@ -26,8 +27,16 @@
 | 纳入范围 | {included_scope} | {evidence_ref} |
 | 排除范围 | {excluded_scope} | {evidence_ref} |
 | 主要用户/角色 | {actors} | {evidence_ref} |
-| 上游能力 | {upstream_capability_ids} | {evidence_ref} |
-| 下游能力 | {downstream_capability_ids} | {evidence_ref} |
+| 上游能力 | `{direct_upstream_capability_ids_or_not_derived}` | `business/level1-capability-dependency-graph.yaml` |
+| 下游能力 | `{direct_downstream_capability_ids_or_not_derived}` | `business/level1-capability-dependency-graph.yaml` |
+
+依赖投影规则：
+
+- 先完成 inventory 中全部一级能力总览和全部所属二级能力接口设计；只要任一一级 `user_journey_coverage=partial` 或任一二级 `interface_coverage=partial`，项目图保持 `pending_level1_completion`，本表上下游都必须写 `not_derived`，不得放入模型猜测或局部候选关系；
+- 全部文档完整后，`axis-doc-project-knowledge` 一次性读取完整 inventory、全部当前一级总览和二级追溯，由模型进行项目级统一模型梳理，生成 `business/level1-capability-dependency-graph.yaml`；
+- `derived` 状态下，上游能力严格等于 canonical 图中指向本能力的直接入边来源，下游能力严格等于从本能力发出的直接出边目标；没有直接关系时使用 `[]`，祖先、后代和完整路径由 Dashboard 遍历图得到；
+- 图允许一个能力具有多个上游，也允许用不同 `stage` 表达分阶段反向关系；因此机器源是有向依赖图，Dashboard 可提供树状视图。禁止把“上一个能力/下一个能力”的文档导航顺序当作业务依赖；
+- 禁止局部手工修订某一份总览的上下游。一级能力集合、边界或关系证据变化时，先把图和所有投影退回 pending，再统一派生并批量回填。
 
 本文件的历史版本进入 `_archive`。二级能力独立修订和存档；只有用户业务操作全景、一级边界、共享规则、跨能力协作或导航发生变化时才修订本文件。
 
@@ -107,6 +116,7 @@
 - 一级 `journey_id` 与所属二级 `level1_journey_id` 集合双向一致；每个 ID 绑定至少一个 `flow_id` 或 `api_id` 并展开内部代码、持久化和测试追溯；一级为 `complete` 时所有子文档的接口覆盖也为 `complete`；
 - 本文件未复制字段字典、完整调用链、Mapper/Repository 明细、ER、索引/约束、事务/并发或测试矩阵；
 - 本总览能返回业务架构，并能导航到上一个能力、下一个能力和每份二级能力详细设计；每个二级文档也能返回本总览并导航到相邻二级能力；
+- `dependency_graph_status`、`dependency_graph_revision` 和 `dependency_graph_gap_id` 与项目级图一致；pending 时上下游均为 `not_derived`，derived 时分别精确等于直接入边和直接出边；
 - 当前文件状态、revision、metadata、archive 和 `supersedes` 一致。
 
 ## 9. 文档导航、证据索引与术语表

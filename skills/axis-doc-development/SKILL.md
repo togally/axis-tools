@@ -64,6 +64,7 @@ The retained detailed-design hierarchy uses a level-1 overview plus independentl
 - create one overview document per level-1 capability and one detailed-design document per declared secondary capability;
 - use `level1_capability_id` as the canonical document key and `level1_capability_name` as its reader-facing title;
 - read the complete `secondary_capabilities` array from `business/inventory.yaml` before drafting;
+- treat `business/level1-capability-dependency-graph.yaml` as the only source for level-1 upstream/downstream; never infer or hand-edit those relationships inside one feature or one overview;
 - include every secondary capability in the level-1 overview as a summary and canonical link, even when only one secondary capability changed;
 - give each `secondary_capability_id` an independent document containing its complete business and code design;
 - keep `business_ids` inside the owning secondary-capability entry as traceability to business/implementation evidence; a `business_id` never creates another level-1 detailed-design document;
@@ -78,6 +79,8 @@ Default canonical path:
 ```
 
 Feature and requirement documents live beneath that level-1 capability and identify the secondary capabilities they affect. Updating one feature revises the owning secondary document; the overview changes when its user-journey row, coverage state/gap, summary, shared design, boundary or navigation changes.
+
+Level-1 dependency projection is a project-wide exception to local document editing. Each overview records `dependency_graph_status`, `dependency_graph_revision` and `dependency_graph_gap_id`; its upstream/downstream fields are only the canonical graph's direct incoming/outgoing sets. If any level-1 or child document is incomplete, both values remain `not_derived`. If this task changes a level-1 boundary or relationship evidence, invoke `$axis-doc-project-knowledge`: archive the current graph and affected overviews, return the graph/projections to pending, wait until all level-1 `user_journey_coverage` and child `interface_coverage` values are complete, run one 项目级统一模型梳理, then batch-update every affected overview. Do not mistake “上一个/下一个能力” navigation for dependency direction.
 
 ### Mandatory Level-1 User-Journey Contract
 
@@ -172,7 +175,7 @@ Generating a target document is not enough. Classify and apply its knowledge imp
 | Formatting, wording, or evidence correction only | Target feature/requirement document only |
 | Feature behavior, validation, API, state, transaction, or schema detail | Feature/requirement document plus the matching interface groups in `secondary_capability_detailed_design`; also update the level-1 journey row and coverage state when any panorama field changes. Add a standalone database-design document only when the user explicitly requests it |
 | Secondary-capability actor, permission, state ownership, or internal business flow | Owning secondary design, affected level-1 journey rows/coverage gaps and summary/link, `business_inventory`, and affected feature/requirement documents |
-| Level-1 capability boundary, value stream, shared business object, or governance rule | Reviewed revision of `project_business_architecture` plus affected level-1 documents |
+| Level-1 capability boundary, value stream, shared business object, governance rule, or upstream/downstream evidence | Reviewed revision of `project_business_architecture` plus affected level-1 documents; invalidate `level1_capability_dependency_graph`, then let `$axis-doc-project-knowledge` globally re-derive and batch-project direct edges |
 | System boundary, shared technical capability, deployment topology, cross-cutting consistency, security, or performance principle | Reviewed revision of `project_technical_architecture` plus affected capability/feature documents |
 
 Do not rewrite global documents when the impact is local. Update `metadata.yaml`, document refs, revision links, `doc_gap_report`, and traceability when the repository uses Axis v0.2 project knowledge. Use `$axis-doc-project-knowledge` for whole-project bootstrap or multi-capability reconciliation, not as a second feature-document generator.
@@ -226,6 +229,7 @@ This skill may establish that code must be added or modified, but document appro
 - Current paths remain stable and archive paths stay under `_archive`.
 - `approved` content is superseded by a new `review` revision rather than overwritten.
 - There is exactly one current overview for the owning level-1 capability and one current detailed design per declared secondary capability; parent/child and adjacent-document navigation is complete.
+- No feature-local edit invents upstream/downstream. The current dependency graph is either pending with `not_derived` projections and a tracked gap, or globally derived with every overview equal to its direct incoming/outgoing projection.
 - Every level-1 overview records `user_journey_design_status=detailed`, `user_journey_coverage=complete|partial`, and the correct `user_journey_gap_id`; complete coverage uses `not_applicable`, while partial coverage records unlisted journeys under a stable gap ID.
 - Every declared secondary capability has at least one listed journey; every listed journey uses the fixed fields, has a unique `journey_id`, exact interface/entry, concrete Controller/Handler and Service/UseCase `path:begin-end#symbol` anchors, read/write or produced-data summary, user-visible result, evidence and a canonical secondary-document link; neither anchor may be `missing_evidence` or `not_applicable`.
 - Level-1 `journey_id` and owning-child `level1_journey_id` sets match in both directions, with every ID bound to a matching `flow_id` and/or `api_id` plus complete internal code, data-touchpoint and test/acceptance traceability; a complete level-1 overview has only children with complete interface coverage.

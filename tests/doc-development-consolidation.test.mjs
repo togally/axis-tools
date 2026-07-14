@@ -8,12 +8,40 @@ import {
   flatSecondaryDetailedDesign,
   validGroupedSecondaryDetailedDesign,
   validGroupedSecondaryDetailedDesignWithInternalLogic,
+  validLevel1CapabilityDependencyGraph,
   validLevel1CapabilityDetailedDesign,
+  validPartialLevel1CapabilityDetailedDesign,
   validSecondaryDetailedDesign,
 } from './helpers/project-knowledge-fixtures.mjs';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+
+function businessArchitectureDocument({
+  status = 'derived',
+  revision = status === 'derived' ? '1' : 'not_derived',
+  gapId = status === 'derived' ? 'not_applicable' : 'gap_level1_dependency_graph_derivation',
+  capabilities = [{ id: 'merchant_operations', name: '商户经营' }],
+  edgeIds = [],
+} = {}) {
+  return [
+    '# 业务架构',
+    '',
+    `> 依赖图派生状态：\`dependency_graph_status=${status}\` · \`dependency_graph_revision=${revision}\` · \`dependency_graph_gap_id=${gapId}\``,
+    '',
+    '唯一机器源：`business/level1-capability-dependency-graph.yaml`',
+    '',
+    ...capabilities.map(({ id, name }) => `[${name}](business/capabilities/${id}/detailed-design.md)`),
+    ...(edgeIds.length > 0 ? [
+      '',
+      '```mermaid',
+      'flowchart LR',
+      ...edgeIds.map((edgeId) => `    merchant_operations -->|${edgeId}| customer_support`),
+      '```',
+    ] : []),
+    '',
+  ].join('\n');
+}
 
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const skillNames = manifest.skills.map((skill) => skill.name);
@@ -102,6 +130,7 @@ assert.deepEqual(projectKnowledge.files.sort(), [
   'agents/openai.yaml',
   'quick_validate.py',
   'references/business-capability-detailed-design-template.md',
+  'references/level1-capability-dependency-graph-template.yaml',
   'references/project-business-architecture-template.md',
   'references/project-technical-architecture-template.md',
   'references/secondary-capability-detailed-design-template.md',
@@ -325,7 +354,7 @@ try {
   await writeFile(path.join(projectRoot, 'metadata.yaml'), 'document_language: zh-CN\nstatus: review\n', 'utf8');
   await writeFile(path.join(projectRoot, 'architecture', 'technical.md'), '# 技术架构\n', 'utf8');
   const businessArchitecturePath = path.join(projectRoot, 'architecture', 'business.md');
-  await writeFile(businessArchitecturePath, '# 业务架构\n\n[商户经营](business/capabilities/merchant_operations/detailed-design.md)\n', 'utf8');
+  await writeFile(businessArchitecturePath, businessArchitectureDocument(), 'utf8');
   await writeFile(path.join(projectRoot, 'business', 'inventory.yaml'), [
     'level1_capabilities:',
     '- level1_capability_id: merchant_operations',
@@ -402,6 +431,170 @@ try {
     validLevel1CapabilityDetailedDesign('merchant_operations'),
     'utf8',
   );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-missing-level1-graph-a0b1c2d2',
+    ]),
+    /project knowledge level-1 capability dependency graph missing: business\/level1-capability-dependency-graph\.yaml/,
+  );
+  const capabilityDependencyGraphPath = path.join(
+    projectRoot,
+    'business',
+    'level1-capability-dependency-graph.yaml',
+  );
+  await writeFile(
+    capabilityDependencyGraphPath,
+    validLevel1CapabilityDependencyGraph(),
+    'utf8',
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {
+      upstream: ['unknown_capability'],
+    }),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-graph-projection-a0b1c2d1',
+    ]),
+    /project knowledge level-1 capability upstream projection mismatches canonical graph: merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations'),
+    'utf8',
+  );
+  const level1JourneyGapId = 'gap_level1_merchant_operations_user_journey_coverage';
+  const dependencyGraphGapId = 'gap_level1_dependency_graph_derivation';
+  const pendingLevel1Document = validPartialLevel1CapabilityDetailedDesign('merchant_operations');
+  await writeFile(businessArchitecturePath, businessArchitectureDocument({
+    status: 'pending_level1_completion',
+  }), 'utf8');
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    pendingLevel1Document,
+    'utf8',
+  );
+  await writeFile(
+    capabilityDependencyGraphPath,
+    validLevel1CapabilityDependencyGraph(undefined, [], {
+      status: 'pending_level1_completion',
+      gapId: dependencyGraphGapId,
+    }),
+    'utf8',
+  );
+  await writeFile(
+    path.join(projectRoot, 'gaps', 'doc-gap-report.md'),
+    `# 文档缺口\n\n${level1JourneyGapId}\n\n${dependencyGraphGapId}\n`,
+    'utf8',
+  );
+  await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010100Z-project-knowledge-level1-graph-pending-a0b1c2d0',
+  ]);
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    pendingLevel1Document.replace('| 上游能力 | `not_derived` |', '| 上游能力 | `merchant_operations` |'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-graph-pending-projection-a0b1c2cf',
+    ]),
+    /level-1 capability must keep dependency projection not_derived until global analysis: merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    pendingLevel1Document,
+    'utf8',
+  );
+  await writeFile(
+    capabilityDependencyGraphPath,
+    validLevel1CapabilityDependencyGraph(undefined, [{
+      upstream: 'merchant_operations',
+      downstream: 'merchant_operations',
+    }], {
+      status: 'pending_level1_completion',
+      gapId: dependencyGraphGapId,
+    }),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-graph-pending-edge-a0b1c2ce',
+    ]),
+    /pending level-1 capability dependency graph must not contain derived edges/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations'),
+    'utf8',
+  );
+  await writeFile(businessArchitecturePath, businessArchitectureDocument(), 'utf8');
+  await writeFile(
+    capabilityDependencyGraphPath,
+    validLevel1CapabilityDependencyGraph(undefined, [], {
+      status: 'pending_level1_completion',
+      gapId: dependencyGraphGapId,
+    }),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-graph-complete-pending-a0b1c2cd',
+    ]),
+    /complete level-1 capability set requires a derived dependency graph/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {
+      upstream: ['merchant_operations'],
+      downstream: ['merchant_operations'],
+    }),
+    'utf8',
+  );
+  await writeFile(
+    capabilityDependencyGraphPath,
+    validLevel1CapabilityDependencyGraph(undefined, [{
+      upstream: 'merchant_operations',
+      downstream: 'merchant_operations',
+    }]),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-graph-self-edge-a0b1c2cc',
+    ]),
+    /level-1 capability dependency graph contains a self edge: merchant_operations_to_merchant_operations/,
+  );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations'),
+    'utf8',
+  );
+  await writeFile(capabilityDependencyGraphPath, validLevel1CapabilityDependencyGraph(), 'utf8');
+  await writeFile(path.join(projectRoot, 'gaps', 'doc-gap-report.md'), '# 文档缺口\n', 'utf8');
   const validLevel1WithRows = validLevel1CapabilityDetailedDesign('merchant_operations');
   const merchantJourneyRow = validLevel1WithRows
     .split('\n')
@@ -889,7 +1082,7 @@ try {
     ]),
     /business architecture omits capability overview link: merchant_operations/,
   );
-  await writeFile(businessArchitecturePath, '# 业务架构\n\n[商户经营](business/capabilities/merchant_operations/detailed-design.md)\n', 'utf8');
+  await writeFile(businessArchitecturePath, businessArchitectureDocument(), 'utf8');
 
   await writeFile(merchantSecondaryPath, flatSecondaryDetailedDesign('merchant_governance'), 'utf8');
   await writeFile(catalogSecondaryPath, flatSecondaryDetailedDesign('catalog_inventory'), 'utf8');
@@ -1492,6 +1685,102 @@ try {
       '--run-id', '20260713T010104Z-project-knowledge-incomplete-d4e5f6a7',
     ]),
     /level-1 capability user journeys omit secondary capability: merchant_operations\/catalog_inventory/,
+  );
+
+  const customerSupportCapabilityPath = path.join(
+    projectRoot,
+    'business',
+    'capabilities',
+    'customer_support',
+  );
+  const customerSupportSecondaryPath = path.join(
+    customerSupportCapabilityPath,
+    'secondary-capabilities',
+    'support_operations',
+  );
+  await mkdir(customerSupportSecondaryPath, { recursive: true });
+  await writeFile(path.join(projectRoot, 'business', 'inventory.yaml'), [
+    'level1_capabilities:',
+    '- level1_capability_id: merchant_operations',
+    '  level1_capability_name: 商户经营',
+    '  secondary_capabilities:',
+    '  - secondary_capability_id: merchant_governance',
+    '    name: 入驻申请、审核与门店管理',
+    '    business_ids:',
+    '    - merchant_shop_governance',
+    '  - secondary_capability_id: catalog_inventory',
+    '    name: 分类、品牌、商品、SKU与库存',
+    '    business_ids:',
+    '    - product_catalog_inventory',
+    '- level1_capability_id: customer_support',
+    '  level1_capability_name: 客户支持',
+    '  secondary_capabilities:',
+    '  - secondary_capability_id: support_operations',
+    '    name: 客户问题处理',
+    '    business_ids:',
+    '    - customer_support_operations',
+  ].join('\n'), 'utf8');
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {
+      downstream: ['customer_support'],
+    }),
+    'utf8',
+  );
+  await writeFile(
+    path.join(customerSupportCapabilityPath, 'detailed-design.md'),
+    validLevel1CapabilityDetailedDesign('customer_support', [
+      { id: 'support_operations', name: '客户问题处理' },
+    ], {
+      upstream: ['merchant_operations'],
+    }),
+    'utf8',
+  );
+  await writeFile(
+    path.join(customerSupportSecondaryPath, 'detailed-design.md'),
+    validSecondaryDetailedDesign('support_operations'),
+    'utf8',
+  );
+  await writeFile(businessArchitecturePath, businessArchitectureDocument({
+    capabilities: [
+      { id: 'merchant_operations', name: '商户经营' },
+      { id: 'customer_support', name: '客户支持' },
+    ],
+    edgeIds: ['merchant_to_customer_support'],
+  }), 'utf8');
+  const twoCapabilityGraph = validLevel1CapabilityDependencyGraph([
+    { id: 'merchant_operations', name: '商户经营' },
+    { id: 'customer_support', name: '客户支持' },
+  ], [{
+    edgeId: 'merchant_to_customer_support',
+    upstream: 'merchant_operations',
+    downstream: 'customer_support',
+    journeyId: 'MERCHANT_GOVERNANCE_EXECUTE',
+    apiId: 'ORDER_CREATE',
+    evidenceRef: 'src/merchant_governance/CapabilityService.java:20-40#execute',
+  }]);
+  await writeFile(capabilityDependencyGraphPath, twoCapabilityGraph, 'utf8');
+  const { stdout: twoCapabilityStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260714T010117Z-project-knowledge-level1-graph-edge-f7a8b9cb',
+  ]);
+  assert.equal(JSON.parse(twoCapabilityStdout).ok, true);
+
+  await writeFile(
+    capabilityDependencyGraphPath,
+    twoCapabilityGraph.replace('      - ORDER_CREATE', '      - FAKE_API'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260714T010118Z-project-knowledge-level1-graph-fake-api-f7a8b9cc',
+    ]),
+    /level-1 capability dependency graph edge references unknown api_id: merchant_to_customer_support\/FAKE_API/,
   );
 } finally {
   await rm(capabilityRepo, { recursive: true, force: true });

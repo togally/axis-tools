@@ -259,7 +259,19 @@ export function validLevel1CapabilityDetailedDesign(
     { id: 'merchant_governance', name: '入驻申请、审核与门店管理' },
     { id: 'catalog_inventory', name: '分类、品牌、商品、SKU与库存' },
   ],
+  dependencyProjection = {},
 ) {
+  const dependencyStatus = dependencyProjection.status ?? 'derived';
+  const dependencyRevision = dependencyStatus === 'derived' ? '1' : 'not_derived';
+  const dependencyGapId = dependencyStatus === 'derived'
+    ? 'not_applicable'
+    : (dependencyProjection.gapId ?? 'gap_level1_dependency_graph_derivation');
+  const upstreamCapabilityIds = dependencyStatus === 'derived'
+    ? (dependencyProjection.upstream ?? []).map((id) => `\`${id}\``).join(', ') || '`[]`'
+    : '`not_derived`';
+  const downstreamCapabilityIds = dependencyStatus === 'derived'
+    ? (dependencyProjection.downstream ?? []).map((id) => `\`${id}\``).join(', ') || '`[]`'
+    : '`not_derived`';
   const moduleRows = secondaryCapabilities.map(({ id, name }) => (
     `| \`${id}\` | ${name} | 商户、平台运营人员 | [查看实现细节](secondary-capabilities/${id}/detailed-design.md) |`
   ));
@@ -276,10 +288,18 @@ export function validLevel1CapabilityDetailedDesign(
     '> 文档状态：评审中  ',
     `> 能力标识：\`${level1CapabilityId}\`  `,
     '> 用户旅程完整性：`user_journey_design_status=detailed` · `user_journey_coverage=complete` · `user_journey_gap_id=not_applicable`',
+    `> 一级能力依赖投影：\`dependency_graph_status=${dependencyStatus}\` · \`dependency_graph_revision=${dependencyRevision}\` · \`dependency_graph_gap_id=${dependencyGapId}\``,
     '',
     '## 1. 能力面向的用户与业务',
     '',
     '本能力面向商户和平台运营人员，说明用户能完成什么业务、如何操作以及系统产生什么结果。',
+    '',
+    '### 1.1 项目级能力依赖投影',
+    '',
+    '| 字段 | 内容 | 来源 |',
+    '| --- | --- | --- |',
+    `| 上游能力 | ${upstreamCapabilityIds} | \`business/level1-capability-dependency-graph.yaml\` |`,
+    `| 下游能力 | ${downstreamCapabilityIds} | \`business/level1-capability-dependency-graph.yaml\` |`,
     '',
     '## 2. 模块与业务服务',
     '',
@@ -321,4 +341,74 @@ export function validLevel1CapabilityDetailedDesign(
     '每个模块均可从用户操作追溯到接口、Controller、Service、数据影响和二级能力详细设计。',
     '',
   ].join('\n');
+}
+
+export function validLevel1CapabilityDependencyGraph(
+  capabilities = [
+    { id: 'merchant_operations', name: '商户经营' },
+  ],
+  edges = [],
+  options = {},
+) {
+  const status = options.status ?? 'derived';
+  const revision = status === 'derived' ? (options.revision ?? '1') : 'not_derived';
+  const gapId = status === 'derived'
+    ? 'not_applicable'
+    : (options.gapId ?? 'gap_level1_dependency_graph_derivation');
+  const lines = [
+    'schema: axis.level1_capability_dependency_graph',
+    'schema_version: "0.2"',
+    `derivation_status: ${status}`,
+    'derivation_method: model_synthesis',
+    `derivation_revision: ${revision}`,
+    `gap_id: ${gapId}`,
+    'nodes:',
+    ...capabilities.flatMap(({ id, name }) => [
+      `  - level1_capability_id: ${id}`,
+      `    level1_capability_name: ${name}`,
+    ]),
+  ];
+  if (edges.length === 0) {
+    lines.push('edges: []');
+  } else {
+    lines.push('edges:');
+    for (const edge of edges) {
+      lines.push(
+        `  - edge_id: ${edge.edgeId ?? `${edge.upstream}_to_${edge.downstream}`}`,
+        `    from_level1_capability_id: ${edge.upstream}`,
+        `    to_level1_capability_id: ${edge.downstream}`,
+        `    relation_type: ${edge.relationType ?? 'business_handoff'}`,
+        `    stage: ${edge.stage ?? 'execution'}`,
+        `    summary: ${edge.summary ?? '上游能力向下游能力交接业务处理'}`,
+        '    journey_ids:',
+        `      - ${edge.journeyId ?? 'EXAMPLE_JOURNEY'}`,
+        '    api_ids:',
+        `      - ${edge.apiId ?? 'EXAMPLE_API'}`,
+        '    evidence_refs:',
+        `      - ${edge.evidenceRef ?? 'src/example/CapabilityService.java:10-20#execute'}`,
+        `    confidence: ${edge.confidence ?? 'high'}`,
+      );
+    }
+  }
+  return `${lines.join('\n')}\n`;
+}
+
+export function validPartialLevel1CapabilityDetailedDesign(
+  level1CapabilityId,
+  secondaryCapabilities,
+  options = {},
+) {
+  const journeyGapId = options.journeyGapId ?? `gap_level1_${level1CapabilityId}_user_journey_coverage`;
+  const dependencyGapId = options.dependencyGapId ?? 'gap_level1_dependency_graph_derivation';
+  return validLevel1CapabilityDetailedDesign(
+    level1CapabilityId,
+    secondaryCapabilities,
+    { status: 'pending_level1_completion', gapId: dependencyGapId },
+  )
+    .replace('user_journey_coverage=complete', 'user_journey_coverage=partial')
+    .replace('user_journey_gap_id=not_applicable', `user_journey_gap_id=${journeyGapId}`)
+    .replace(
+      '每个模块均可从用户操作追溯到接口、Controller、Service、数据影响和二级能力详细设计。',
+      `${journeyGapId}：仍有未覆盖用户业务操作；已检查当前模块，需补齐入口与代码证据。`,
+    );
 }
