@@ -471,6 +471,11 @@ for (const requiredText of [
   'flow_id',
   'api_id',
   'Section 5 is grouped by contract',
+  'Secondary Capability Granularity Contract',
+  'one independently reviewable business outcome',
+  'hidden authoring metadata',
+  'file basename, line range and symbol',
+  'One diagram uses one semantic layer',
   '接口清单与代码追溯',
   '内部处理逻辑',
   '5.2.8',
@@ -492,6 +497,23 @@ const businessCapabilityDetailedDesignTemplate = await readFile(
     'business-capability-detailed-design-template.md',
   ),
   'utf8',
+);
+const assertNoNestedHtmlComments = (body, label) => {
+  let inComment = false;
+  for (const token of body.matchAll(/<!--|-->/g)) {
+    if (token[0] === '<!--') {
+      assert.equal(inComment, false, `${label} must not nest HTML comments`);
+      inComment = true;
+    } else {
+      assert.equal(inComment, true, `${label} has an unmatched HTML comment close`);
+      inComment = false;
+    }
+  }
+  assert.equal(inComment, false, `${label} has an unclosed HTML comment`);
+};
+assertNoNestedHtmlComments(
+  businessCapabilityDetailedDesignTemplate,
+  'business capability detailed-design template',
 );
 for (const requiredText of [
   '# {project_name} · {level1_capability_name} 一级能力接口详情设计',
@@ -554,6 +576,16 @@ assert.doesNotMatch(
   businessCapabilityDetailedDesignTemplate,
   /^\|\s*`journey_id`\s*\|\s*用户\/角色\s*\|\s*所属二级能力\/模块\s*\|/m,
 );
+assert.match(businessCapabilityDetailedDesignTemplate, /<!-- axis-document-metadata/);
+assert.match(businessCapabilityDetailedDesignTemplate, /<!-- axis-evidence:/);
+assert.match(businessCapabilityDetailedDesignTemplate, /每个节点只能表达一个最小业务动作、业务判断、业务状态或用户可见结果/);
+assert.match(businessCapabilityDetailedDesignTemplate, /同一张图不得混用业务节点与代码方法节点/);
+assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /^>\s*文档状态：/m);
+assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /^>\s*文档版本：/m);
+assert.match(
+  businessCapabilityDetailedDesignTemplate,
+  /^\| 二级能力 \| 业务摘要 \| 详情 \|$/m,
+);
 for (const requiredHeading of [
   '## 2. 二级能力完整性与导航',
   '## 3. 对外业务能力与接口实现',
@@ -602,6 +634,10 @@ const secondaryCapabilityDetailedDesignTemplate = await readFile(
   ),
   'utf8',
 );
+assertNoNestedHtmlComments(
+  secondaryCapabilityDetailedDesignTemplate,
+  'secondary capability detailed-design template',
+);
 for (const requiredText of [
   '详细设计说明书',
   'secondary_capability_id',
@@ -636,8 +672,10 @@ for (const requiredText of [
   'HTTP / EVENT / TOPIC / JOB / COMMAND',
   'interface_not_applicable_reason',
   'interface_not_applicable_evidence',
-  '代码对象与关系',
-  '文件路径:起始行-结束行#符号',
+  '业务相关字段',
+  '文件名:起始行-结束行#符号',
+  '<!-- axis-document-metadata',
+  '<!-- axis-evidence:',
 ]) {
   assert.match(secondaryCapabilityDetailedDesignTemplate, new RegExp(requiredText));
 }
@@ -645,6 +683,11 @@ assert.doesNotMatch(
   secondaryCapabilityDetailedDesignTemplate,
   /^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$/m,
 );
+assert.doesNotMatch(secondaryCapabilityDetailedDesignTemplate, /^>\s*文档状态：/m);
+assert.doesNotMatch(secondaryCapabilityDetailedDesignTemplate, /^>\s*文档版本：/m);
+assert.doesNotMatch(secondaryCapabilityDetailedDesignTemplate, /^##\s+\d+\.?\s+代码对象与关系\s*$/m);
+assert.match(secondaryCapabilityDetailedDesignTemplate, /同一张图只选择一种视角：业务或方法/);
+assert.match(secondaryCapabilityDetailedDesignTemplate, /每个方法节点只写一个具体方法调用/);
 for (const legacyTopLevelTitle of [
   '实体、表与对象关系',
   '表结构设计',

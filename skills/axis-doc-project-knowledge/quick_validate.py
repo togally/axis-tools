@@ -72,6 +72,11 @@ REQUIRED_TERMS = {
         "可调用接口/能力",
         "授权证据",
         "Section 5 is grouped by contract",
+        "Secondary Capability Granularity Contract",
+        "one independently reviewable business outcome",
+        "hidden authoring metadata",
+        "file basename, line range and symbol",
+        "One diagram uses one semantic layer",
         "接口清单与代码追溯",
         "内部处理逻辑",
         "认证与授权执行",
@@ -94,7 +99,7 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "| 实现层 | 精确定位 | 职责 |",
     "#### 5.1.2 内部处理逻辑",
     "处理说明：{concrete_internal_processing_summary}",
-    "| 步骤 | 内部处理 | 代码对象 | 数据读写/状态变化 | 失败处理 |",
+    "| 步骤 | 方法 | 业务作用 | 数据/状态变化 | 失败处理 |",
     "实际输出必须替换所有花括号内容",
     "#### 5.1.3 请求字段",
     "| 字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态 |",
@@ -120,6 +125,13 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "interface_not_applicable_reason",
     "interface_not_applicable_evidence",
     "table_id={parent_table_ids_or_not_applicable}",
+    "<!-- axis-document-metadata",
+    "<!-- axis-evidence:",
+    "业务相关字段",
+    "文件名:起始行-结束行#符号",
+    "同一张图只选择一种视角：业务或方法",
+    "每个方法节点只写一个具体方法调用",
+    "axis-implementation-machine-table",
 ]
 
 LEGACY_TOP_LEVEL_SEMANTIC_TITLES = {
@@ -146,6 +158,22 @@ def fail(message: str) -> int:
 
 def has_cjk(text: str) -> bool:
     return re.search(r"[\u3400-\u9fff]", text) is not None
+
+
+def html_comment_structure_error(text: str) -> str | None:
+    in_comment = False
+    for token in re.finditer(r"<!--|-->", text):
+        if token.group(0) == "<!--":
+            if in_comment:
+                return "nested HTML comments found"
+            in_comment = True
+        else:
+            if not in_comment:
+                return "unmatched HTML comment close found"
+            in_comment = False
+    if in_comment:
+        return "unclosed HTML comment found"
+    return None
 
 
 def parse_frontmatter(skill_md: str) -> dict[str, str]:
@@ -496,6 +524,20 @@ def validate(skill_dir: Path) -> int:
         level1_overview_template = level1_overview_template_path.read_text(
             encoding="utf-8"
         )
+        comment_error = html_comment_structure_error(level1_overview_template)
+        if comment_error:
+            return fail(f"level-1 capability overview {comment_error}")
+        for term in [
+            "<!-- axis-document-metadata",
+            "<!-- axis-evidence:",
+            "| 二级能力 | 业务摘要 | 详情 |",
+            "每个节点只能表达一个最小业务动作、业务判断、业务状态或用户可见结果",
+            "同一张图不得混用业务节点与代码方法节点",
+        ]:
+            if term not in level1_overview_template:
+                return fail(f"level-1 reader contract missing: {term}")
+        if re.search(r"^>\s*文档(?:状态|版本)：", level1_overview_template, re.MULTILINE):
+            return fail("level-1 authoring metadata is reader-visible")
         if re.search(
             r"^##\s+\d+\.?\s+用户旅程覆盖契约\s*$",
             level1_overview_template,
@@ -540,7 +582,7 @@ def validate(skill_dir: Path) -> int:
             "table_id={table_id}",
             "| 字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |",
             "| 原因 | {no_persistence_reason} |",
-            "| 证据 | {exact_repository_evidence} |",
+            "<!-- axis-evidence: {exact_repository_evidence} -->",
         ]:
             if term not in level1_overview_template:
                 return fail(
@@ -570,8 +612,8 @@ def validate(skill_dir: Path) -> int:
         if subsection_positions != sorted(subsection_positions):
             return fail("level-1 3.N.1/3.N.2/3.N.3 order is invalid")
         if not re.search(
-            r"-->\|\"\{api_id\}: \{method_and_path_or_event_job_command\}\"\|\s*"
-            r"secondary_1\[",
+            r"(?:-->|==>)\|\"\{api_id\}: \{method_and_path_or_event_job_command\}\"\|\s*"
+            r"secondary_1_\{secondary_capability_id\}\[",
             section3,
         ):
             return fail(
@@ -613,7 +655,7 @@ def validate(skill_dir: Path) -> int:
             return fail("level-1 ER entities must not use table_id placeholders")
         table_control_lines = [
             line
-            for line in table_design_section.group(1).splitlines()
+            for line in level1_overview_template.splitlines()
             if re.search(r"\btable_design_status\s*=", line)
             and re.search(r"\btable_design_coverage\s*=", line)
             and re.search(r"\btable_design_gap_id\s*=", line)
@@ -677,6 +719,9 @@ def validate(skill_dir: Path) -> int:
         if not interface_template_path.exists():
             return fail("secondary capability detailed-design template not found")
         interface_template = interface_template_path.read_text(encoding="utf-8")
+        comment_error = html_comment_structure_error(interface_template)
+        if comment_error:
+            return fail(f"secondary capability detailed-design template {comment_error}")
         for term in GROUPED_INTERFACE_TEMPLATE_TERMS:
             if term not in interface_template:
                 return fail(f"grouped interface template missing required term: {term}")
@@ -715,6 +760,10 @@ def validate(skill_dir: Path) -> int:
             re.MULTILINE,
         ):
             return fail("legacy duplicate identity or participant section found")
+        if re.search(r"^>\s*文档(?:状态|版本)：", interface_template, re.MULTILINE):
+            return fail("secondary authoring metadata is reader-visible")
+        if re.search(r"^##\s+\d+\.?\s+代码对象与关系\s*$", interface_template, re.MULTILINE):
+            return fail("secondary template repeats a top-level code-object chapter")
         for line in interface_template.splitlines():
             heading_match = re.fullmatch(
                 r"##\s+(?:\d+(?:\.\d+)*[.、]?\s*)?(.+?)\s*", line

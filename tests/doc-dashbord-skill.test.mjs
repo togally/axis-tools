@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -56,11 +57,11 @@ const scriptBody = await readFile(script, 'utf8');
 assert.match(scriptBody, /~\/Documents\/axis\/axis-document-review/);
 const missingTarget = await mkdtemp(path.join(tmpdir(), 'axis-doc-dashbord-status-'));
 await rm(missingTarget, { recursive: true, force: true });
+const scaffoldTarget = `${missingTarget}-scaffold`;
 try {
   const { stdout } = await execFileAsync('python3', [script, 'status', '--target', missingTarget]);
   assert.equal(JSON.parse(stdout).state, 'repo_missing');
 
-  const scaffoldTarget = `${missingTarget}-scaffold`;
   const scaffolded = await execFileAsync('python3', [script, 'scaffold', '--target', scaffoldTarget]);
   assert.equal(JSON.parse(scaffolded.stdout).state, 'ready');
   const scaffoldPackage = JSON.parse(await readFile(path.join(scaffoldTarget, 'package.json'), 'utf8'));
@@ -68,6 +69,33 @@ try {
   for (const dependency of ['dompurify', 'highlight.js', 'marked', 'mermaid']) {
     assert.ok(scaffoldPackage.dependencies?.[dependency], `${dependency} should be bundled in the local scaffold`);
   }
+  const scaffoldDocumentReferencePath = path.join(scaffoldTarget, 'src', 'document-reference.mjs');
+  const scaffoldDocumentReferenceTestPath = path.join(scaffoldTarget, 'tests', 'document-reference.test.mjs');
+  assert.ok(
+    existsSync(scaffoldDocumentReferencePath),
+    'the local scaffold must include src/document-reference.mjs',
+  );
+  assert.ok(
+    existsSync(scaffoldDocumentReferenceTestPath),
+    'the local scaffold must include relative-link and compact-locator tests',
+  );
+  for (const excludedPath of ['.git', 'node_modules', '.axis-runtime', 'public/app.js']) {
+    assert.equal(
+      existsSync(path.join(scaffoldTarget, excludedPath)),
+      false,
+      `${excludedPath} must stay out of the bundled local scaffold`,
+    );
+  }
+  const scaffoldDocumentReference = await readFile(scaffoldDocumentReferencePath, 'utf8');
+  assert.match(scaffoldDocumentReference, /resolveProjectDocumentPath/);
+  assert.match(scaffoldDocumentReference, /compactDocumentLocator/);
+  assert.match(scaffoldDocumentReference, /compactEvidencePaths/);
+  const scaffoldDocumentReferenceTest = await readFile(scaffoldDocumentReferenceTestPath, 'utf8');
+  assert.match(scaffoldDocumentReferenceTest, /secondary-capabilities\/community_content_interaction\/detailed-design\.md/);
+  assert.match(scaffoldDocumentReferenceTest, /community_engagement \/ community_content_interaction \/ detailed-design\.md/);
+  assert.match(scaffoldDocumentReferenceTest, /AppPetFriendCircleControllerTest\.java:73-96#/);
+  assert.match(scaffoldPackage.scripts?.test ?? '', /tests\/document-reference\.test\.mjs/);
+  await execFileAsync(process.execPath, [scaffoldDocumentReferenceTestPath], { cwd: scaffoldTarget });
   const scaffoldBrowser = await readFile(path.join(scaffoldTarget, 'src', 'browser.mjs'), 'utf8');
   const scaffoldCore = await readFile(path.join(scaffoldTarget, 'src', 'core.mjs'), 'utf8');
   assert.match(scaffoldCore, /axis\.package\.manifest/);
@@ -109,7 +137,9 @@ try {
   assert.match(scaffoldCss, /\.archive-banner/);
   assert.match(scaffoldCss, /\.document-navigation/);
   assert.match(scaffoldCss, /\.capability-children/);
-  await rm(scaffoldTarget, { recursive: true, force: true });
 } finally {
-  await rm(missingTarget, { recursive: true, force: true });
+  await Promise.all([
+    rm(missingTarget, { recursive: true, force: true }),
+    rm(scaffoldTarget, { recursive: true, force: true }),
+  ]);
 }
