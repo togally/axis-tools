@@ -287,6 +287,7 @@ const packagedSkillNames = [
   'axis-code-arch-optimize',
   'axis-code-bugfix',
   'axis-code-capture',
+  'axis-doc-contract-review',
   'axis-doc-dashbord',
   'axis-doc-development',
   'axis-doc-drift-capture',
@@ -320,6 +321,51 @@ for (const skillName of packagedSkillDirs) {
   const openAiYaml = await readFile(path.join(repoRoot, 'skills', skillName, 'agents', 'openai.yaml'), 'utf8');
   assert.match(openAiYaml, new RegExp(`\\$${skillName}\\b`));
 }
+
+const contractReview = manifest.skills.find((skill) => skill.name === 'axis-doc-contract-review');
+assert.ok(contractReview, 'axis-doc-contract-review should be packaged');
+assert.deepEqual(contractReview.files.sort(), [
+  'SKILL.md',
+  'agents/openai.yaml',
+  'references/review-matrix.md',
+  'scripts/validate_agreement_docx.py',
+]);
+assert.match(contractReview.description, /Word\/DOCX contract or user agreement/i);
+assert.match(contractReview.description, /批注回应版和清洁版/);
+
+const contractReviewRoot = path.join(repoRoot, 'skills', 'axis-doc-contract-review');
+const contractReviewBody = await readFile(path.join(contractReviewRoot, 'SKILL.md'), 'utf8');
+for (const requiredText of [
+  'Comment-by-Comment Adjudication',
+  'current official primary sources',
+  'target jurisdiction',
+  'annotated response',
+  'publication-clean',
+  'review-only shading',
+  'review-only font colors',
+  'normalized body and table text',
+  'render every page',
+  'qualified local counsel',
+  'Three-Step Work Contract',
+  'Light Adversarial Review',
+  'Model Reasoning Level',
+  'After Use Deposition',
+]) {
+  assert.match(contractReviewBody, new RegExp(requiredText, 'i'));
+}
+assert.match(contractReviewBody, /accept.*partially accept.*reject.*needs facts/i);
+assert.match(contractReviewBody, /clean filename.*clean.*清洁版/i);
+
+const contractReviewOpenAi = await readFile(path.join(contractReviewRoot, 'agents', 'openai.yaml'), 'utf8');
+assert.match(contractReviewOpenAi, /^\s*display_name: "axis-doc-contract-review"$/m);
+assert.match(contractReviewOpenAi, /Review Word agreements with legal grounds.*评审 Word 协议/);
+assert.match(contractReviewOpenAi, /\$axis-doc-contract-review/);
+
+const { stdout: contractReviewValidatorOutput } = await execFileAsync('python3', [
+  path.join(contractReviewRoot, 'scripts', 'validate_agreement_docx.py'),
+  '--self-test',
+]);
+assert.match(contractReviewValidatorOutput, /"ok": true/);
 
 const consolidationAudit = await readFile(path.join(repoRoot, 'docs', 'axis-skill-consolidation-audit.md'), 'utf8');
 for (const requiredText of [
@@ -915,6 +961,7 @@ for (const skillName of [
   'axis-code-arch-optimize',
   'axis-code-bugfix',
   'axis-skill-create',
+  'axis-doc-contract-review',
   'axis-doc-development',
   'axis-doc-drift-capture',
   'axis-doc-project-knowledge',

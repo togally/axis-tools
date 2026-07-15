@@ -39,6 +39,17 @@
       ]
     },
     {
+      "name": "axis-doc-contract-review",
+      "description": "Use when a user needs a Word/DOCX contract or user agreement reviewed comment by comment, revised with current legal grounds, and delivered as separate annotated-response and publication-clean files. / 用于逐条评审 Word/DOCX 合同或用户协议，依据现行法律修订，并分别交付批注回应版和清洁版。",
+      "path": "skills/axis-doc-contract-review",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/review-matrix.md",
+        "scripts/validate_agreement_docx.py"
+      ]
+    },
+    {
       "name": "axis-doc-dashbord",
       "description": "Use when a user wants to start and open the local Axis document dashboard, and the standalone application may need to be pulled or scaffolded first. / 用于启动并打开本地 Axis 文档看板；当独立应用不存在时，先让用户选择拉取公开仓库或使用内置模板本地自建。",
       "path": "skills/axis-doc-dashbord",
