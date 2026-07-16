@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-test-benchmark"
-  short_description: "Benchmark APIs and modules safely / 安全压测 API 与模块"
-  default_prompt: "Use $axis-test-benchmark to safely benchmark APIs or modules, clarify scope, and explain capacity."
+  short_description: "Measure API and module capacity / 测量 API 与模块容量"
+  default_prompt: "Use $axis-test-benchmark to confirm one safe target path, measure reproducible latency and throughput, and report capacity without unsupported user-count claims."
 
 policy:
   allow_implicit_invocation: true

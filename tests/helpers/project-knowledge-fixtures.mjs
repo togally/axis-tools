@@ -216,11 +216,9 @@ export function validGroupedSecondaryDetailedDesignWithInternalLogic(secondaryCa
     '',
     '```mermaid',
     'flowchart LR',
-    '    A["Web 管理端提交订单"] --> B["CapabilityController.execute 校验请求"]',
-    '    B --> C["CapabilityService.execute 检查业务单号"]',
-    `    C --> D["OrderMapper.insert 写入 ${tableId}"]`,
-    '    D --> E["返回 OrderView 的 id 与 status"]',
-    '    C -->|"业务单号重复"| F["返回 400 且不落库"]',
+    '    A["CapabilityController.execute()"] -->|"校验请求"| B["CapabilityService.execute()"]',
+    '    B -->|"持久化业务记录"| C["OrderMapper.insert()"]',
+    '    C -->|"映射响应"| D["OrderView.from()"]',
     '```',
   ].join('\n');
   const queryLogic = [
@@ -359,13 +357,16 @@ export function validLevel1CapabilityDetailedDesign(
     const participatingSecondaryIds = [...new Set(capability.steps.map((step) => step.secondaryId))];
     const graphLines = [];
     capability.steps.forEach((step, stepIndex) => {
-      const fromNode = stepIndex === 0 ? 'U' : `S${stepIndex}`;
-      const toNode = `S${stepIndex + 1}`;
+      const fromNode = stepIndex === 0
+        ? `journey_${capability.journeyId}`
+        : `S${stepIndex}_${capability.steps[stepIndex - 1].secondaryId}`;
+      const toNode = `S${stepIndex + 1}_${step.secondaryId}`;
       graphLines.push(
-        `    ${fromNode}${stepIndex === 0 ? `["${capability.actor}：${capability.userOperation}"]` : ''} -->|"api_id: ${step.apiId} · ${step.interfaceEntry}"| ${toNode}["secondary_capability_id: ${step.secondaryId}"]`,
+        `    ${fromNode}${stepIndex === 0 ? '["发起业务请求"]' : ''} -->|"api_id: ${step.apiId} · ${step.interfaceEntry}"| ${toNode}["${step.secondaryName}"]`,
       );
     });
-    graphLines.push(`    S${capability.steps.length} --> R["${capability.visibleResult}"]`);
+    const finalStep = capability.steps.at(-1);
+    graphLines.push(`    S${capability.steps.length}_${finalStep.secondaryId} --> R["${capability.visibleResult}"]`);
     const stepTables = capability.steps.flatMap((step, stepIndex) => [
       `##### 步骤 ${stepIndex + 1} · ${step.secondaryName}`,
       '',

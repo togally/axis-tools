@@ -59,7 +59,7 @@ for (const schemaPath of requiredFiles.filter((file) => file.startsWith('schemas
 }
 
 const skillTemplate = await readRequired('templates/skill/SKILL.md');
-assert.match(skillTemplate, /^---\nname: axis-skill-example\n/ms);
+assert.match(skillTemplate, /^---\nname: axis-tools-skill-example\n/ms);
 assert.match(skillTemplate, /description: Use when/);
 assert.match(skillTemplate, /## After Use Deposition/);
 
@@ -74,7 +74,7 @@ assert.match(assetTemplate, /visibility: public/);
 assert.match(assetTemplate, /redaction_checked: true/);
 
 const skillsCatalog = await readRequired('catalog/skills.public.yaml');
-assert.match(skillsCatalog, /axis-skill-example/);
+assert.match(skillsCatalog, /axis-tools-skill-example/);
 assert.match(skillsCatalog, /mock/);
 
 const assetsCatalog = await readRequired('catalog/assets.public.yaml');

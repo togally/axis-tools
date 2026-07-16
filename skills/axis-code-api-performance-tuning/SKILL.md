@@ -1,113 +1,81 @@
 ---
 name: axis-code-api-performance-tuning
-description: Use when API benchmarks or load tests identify slow read endpoints and the user asks to optimize latency without breaking correctness. / 用于压测发现读接口慢且需要在保证正确性的前提下优化响应性能。
+description: Use when measured slow read APIs need implementation or query optimization without changing business correctness. / 用于已有慢读接口测量证据且需要在不改变业务正确性的前提下优化实现或查询。
 ---
 
 # API Performance Tuning
 
-Use this skill after a benchmark has identified slow read endpoints and the user wants the implementation optimized without trading away correctness.
+Optimize only a proven slow read path. Preserve business semantics first, then improve latency with focused code, query, cache, or concurrency changes and same-environment evidence.
 
-## When To Use
+## When to Use
 
-- API benchmark, load test, p95/p99, QPS, or concurrency results point to specific slow endpoints.
-- The user asks to optimize slow interfaces and also asks for good tests around normal performance fixes.
-- Multiple read paths are involved and fixes may include caching, batching, indexing, or parallelizing independent calls.
+- A benchmark or trace identifies concrete slow read endpoints, p95/p99, data volume, and environment.
+- The requested result is an implementation, query, cache, batching, index, or safe parallelism change.
+- Correctness, freshness, authorization, ordering, and fallback behavior can be stated and tested.
 
-Do not use this as a replacement for the benchmark skill. Use the benchmark skill first to produce endpoint evidence. Do not use this for destructive write-load tests.
+## Do Not Use
 
-## Core Rule
+- Use `$axis-test-benchmark` when the requested result is measurement or capacity evidence only.
+- Use `$axis-code-bugfix` for functional errors, crashes, wrong results, or flaky behavior without a latency-optimization goal.
+- Do not optimize from route names, an undeployed local diff, or benchmark output whose target and commit cannot be identified.
+- Do not use this workflow for destructive write-load tests.
 
-Treat every performance optimization as a behavior change. First prove the slow path and the intended safety property, then make the smallest change that improves latency without stale, leaked, or inconsistent data.
+## Inputs
+
+- Benchmark or trace evidence: target, environment, deployed revision, load shape, latency distribution, error rate, and slow endpoint.
+- Real code path: controller, service, data access, cache, remote calls, fallbacks, and existing tests.
+- Correctness boundary: actor scope, request parameters, freshness, ordering, invalidation, failure isolation, and strong-state constraints.
+- Acceptance target and authorized scope, including whether schema, deployment, or live benchmarking is allowed.
 
 ## Three-Step Work Contract
 
-1. Co-create the optimization target with the user.
-   Clarify which benchmark, endpoint group, data volume, deployment environment, correctness boundary, and acceptance metric matter. Preserve the user's priority, then challenge only the risky parts: stale data, unsafe caching, missing invalidation, bad endpoint-to-code mapping, or benchmark results from code that is not deployed.
-2. Execute the optimization result.
-   After explicit confirmation, write RED checks where code behavior changes, implement the narrow optimization, and keep the change inside the agreed scope.
-3. Verify the result.
-   Run focused GREEN tests, adjacent regressions, whitespace checks, and eligible same-environment benchmarks. Report the measured result and clearly label anything not deployed or not benchmarked.
+1. Co-create the target. Confirm the measured path, acceptance metric, data scale, deployed revision, and correctness boundary; keep this brief when the request already provides them.
+2. Execute the agreed result. Write a focused RED check, implement the narrowest safe optimization, and avoid unrelated cleanup.
+3. Verify the result. Run GREEN and adjacent regression checks, then rerun only benchmarks whose environment contains the change.
 
-Keep light adversarial review under 30% of the interaction. Use more in the proposal when safety is unclear, and less once the user has confirmed execution and the code path is proven.
+## Light Adversarial Review
 
-Performance tuning has two phases:
-
-- Proposal phase: preserve evidence, trace real code, classify safe levers, and present a concrete optimization plan.
-- Execution phase: only after explicit user confirmation, write RED tests, implement, verify, rerun eligible benchmarks, and deposit reusable lessons.
+Keep review at or below 30% of the interaction. Challenge stale or cross-tenant caches, incomplete invalidation, unsafe ThreadLocal use, N+1 assumptions, environment mismatch, and strong-state caching. Once evidence and scope are clear, execute decisively.
 
 ## Plan Confirmation Gate
 
-After the proposal phase, STOP and ask whether to implement. Do not write RED tests, edit code, change schema, or run implementation benchmarks until the user explicitly confirms development execution.
+If the user asks only for a plan, assessment, or whether optimization is possible, present the evidence-backed proposal and stop for implementation authorization. Do not write RED tests, edit code, change schema, or run implementation benchmarks while the request remains plan-only.
 
-The proposal must include:
-
-- slow endpoints, measured symptoms, and suspected root cause;
-- code paths and data sources inspected;
-- optimization class chosen and why it is safe;
-- cache/index/read-model/fallback/invalidation risks;
-- planned RED tests and verification commands;
-- files or modules expected to change;
-- deployment, backfill, or benchmark requirements.
-
-If the user asks for a plan,方案,assessment, or "can this be optimized", provide the plan and wait. If the user later says to implement, execute, develop, fix, or confirms the plan, continue from the RED-test step.
+If the original request already asks to implement, optimize, fix, or execute within a clear scope, that is authorization; do not add a redundant confirmation pause. Ask again only when execution would expand into schema changes, deployment, external writes, or another materially different scope.
 
 ## Workflow
 
-1. Preserve benchmark evidence.
-   Record target URL, endpoint file, auth mode, tested concurrency, QPS, p95/p99/max, business error rate, and the exact slow endpoint groups.
+1. Preserve the benchmark evidence and map each slow endpoint to the real code and data sources.
+2. Classify the bottleneck before choosing a lever: repeated calls, N+1, inefficient query or sort, missing index, remote fan-out, serialization, cache miss, or environment capacity.
+3. Write RED tests for the selected safety boundary, such as call counts, cache keys and invalidation, ordering, fallback, concurrency start, or freshness.
+4. Implement one narrow optimization using existing repository patterns. Keep private business policy in its owning module.
+5. Run focused GREEN tests, related regressions, and whitespace or static checks.
+6. Compare before and after only in the same effective environment and revision. Otherwise label the result as a baseline or unverified projection.
 
-2. Map endpoints to real code.
-   For each slow endpoint, trace controller, service, data access, cache annotations, remote calls, fallback paths, and existing tests. Do not optimize from route names alone.
+## Outputs
 
-3. Classify safe levers.
-   - Stable private read views: cache by principal and all request parameters; add write-side invalidation for every mutation that can change the view.
-   - Stable public reads: use short TTLs and explicit invalidation from admin or catalog writes.
-   - Independent read calls: run concurrently, preserve response ordering, keep per-group failure isolation, and verify the code does not depend on request ThreadLocal context.
-   - N+1 paths: batch child lookups and assert mapper/client call counts.
-   - Database hot paths: prefer narrow composite indexes that match filters and sort order.
-   - Strong-state paths: avoid blind caching for orders, payments, coupons, inventory, queues, and booking state unless invalidation coverage is complete.
+- Slow path and measured symptom.
+- Optimization class, changed files or behavior, and correctness rules preserved.
+- Exact RED/GREEN commands and results.
+- Same-environment before/after latency evidence, or an explicit reason it is unavailable.
+- Residual deployment, data-volume, invalidation, or dependency risk.
 
-4. Present the optimization plan and wait for confirmation.
-   Use the Plan Confirmation Gate. The plan is not permission to code. If confirmation is not explicit, stop after the plan and ask one direct question about whether to execute.
+## Safety and Boundaries
 
-5. Write RED tests before implementation.
-   Good tests include:
-   - cache contract tests for cache name, key, `unless`, TTL policy, and every write invalidation path;
-   - concurrency tests with latches proving all independent groups start before any slow group blocks completion;
-   - N+1 regression tests asserting one batched child query per relation;
-   - route/fallback tests proving search/read-model paths do not fall back to the database when a usable result exists;
-   - freshness tests proving writes invalidate or bypass stale reads.
+- Never cache orders, payments, inventory, coupons, bookings, queues, or other strong state without complete scope and invalidation proof.
+- Cache private reads by principal and all behavior-changing parameters; never share tenant or member data across keys.
+- Do not claim improvement from a target that does not contain the changed code.
+- Do not add broad retries, unbounded parallelism, hidden fallbacks, or unrelated architecture refactors.
+- Schema changes, deployments, and live load are separate state-changing actions and require matching authority.
 
-6. Implement narrowly.
-   Prefer existing cache helpers, thread/future style, pagination utilities, and query wrappers. Avoid mixing unrelated refactors into performance work.
+## Checks
 
-7. Verify in layers.
-   Run the RED command and record its expected failure. Run focused GREEN tests, related regression tests, and whitespace checks. Rerun a benchmark only against an environment that actually contains the new code; if the target is not deployed, clearly label the benchmark as a remote baseline or comparison, not proof of the local fix.
-
-8. Deposit reusable lessons after execution.
-   Do this only after implementation and verification, not after the proposal-only phase. Check whether the work produced reusable corrections, validation commands, edge cases, benchmark caveats, or decision rules. If yes, update the relevant skill bundle, validate it, install or refresh the local copy, and push when permissions allow. If no reusable lesson exists, say that no skill update is needed.
-
-## Reporting
-
-Report:
-- slow endpoints and chosen optimization class;
-- whether implementation was explicitly confirmed, or that the work stopped at proposal;
-- RED and GREEN commands with results;
-- what was intentionally not cached and why;
-- benchmark before/after, or a clear note that remote results do not include local changes;
-- reusable lessons deposited after execution, or why no deposition was needed;
-- remaining deployment or data-volume risks.
-
-## Common Mistakes
-
-- Caching member data without member-scoped keys.
-- Caching strong-state pages because they are slow.
-- Parallelizing code that reads request-local login or tenant context inside worker threads.
-- Reporting HTTP 200 as success while wrapped business codes are failures.
-- Claiming benchmark improvement from a remote environment where the code was not deployed.
-- Treating an optimization plan as approval to start coding.
-- Depositing lessons before execution proves the lesson is reusable.
+- The measured endpoint maps to the edited path and deployed revision.
+- RED failed for the intended missing behavior; GREEN and adjacent regressions pass.
+- Business success codes, authorization, freshness, ordering, fallback, and invalidation remain correct.
+- Benchmark comparison uses the same workload, data scale, target class, and revision boundary.
+- Anything not deployed or remeasured is labeled unverified.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+Deposit lessons only after implementation and verification. If the work produced a reusable safety rule, test pattern, benchmark caveat, or optimization decision rule, update the relevant skill bundle, validate it, refresh the local copy, and push when permissions allow. Otherwise report that no skill update is needed.

@@ -8,7 +8,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
 
 function argValue(name) {
   const index = process.argv.indexOf(name);
@@ -30,7 +30,7 @@ function defaultValidator() {
 
 function ensureSkillName(name) {
   if (!skillNamePattern.test(name)) {
-    throw new Error(`Skill name must use axis-{category}-<action>: ${name}`);
+    throw new Error(`Skill name must use an approved axis-{category}-<action> prefix, including axis-tools- for meta-tools: ${name}`);
   }
   return name;
 }

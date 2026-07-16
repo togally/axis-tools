@@ -43,6 +43,131 @@ function businessArchitectureDocument({
   ].join('\n');
 }
 
+const compactSecondaryCapabilities = Array.from({ length: 14 }, (_, index) => ({
+  id: `compact_capability_${String(index + 1).padStart(2, '0')}`,
+  name: `最小能力 ${String(index + 1).padStart(2, '0')}`,
+  businessId: `compact_business_${String(index + 1).padStart(2, '0')}`,
+}));
+
+function compactPartialSecondaryDetailedDesign(secondary, index) {
+  const classStem = `Compact${String(index + 1).padStart(2, '0')}`;
+  const route = `/app/compact/${String(index + 1).padStart(2, '0')}`;
+  return [
+    `# ${secondary.name}`,
+    '',
+    '<!-- axis-document-metadata',
+    'reader_profile=compact',
+    'document_status=review',
+    'revision=1',
+    'level1_capability_id=compact_operations',
+    `secondary_capability_id=${secondary.id}`,
+    `business_ids=${secondary.businessId}`,
+    'interface_design_status=detailed interface_coverage=partial interface_gap_id=gap_compact_secondary_traceability',
+    '-->',
+    '',
+    '[返回能力总览](../../detailed-design.md)',
+    '',
+    '## 1. 能力定位与边界',
+    '',
+    `负责${secondary.name}的独立业务结果；不负责其他能力的状态变更。`,
+    '',
+    '## 2. 调用主体、权限与接口矩阵',
+    '',
+    '| 主体 | 策略 | 真实入口 | 结果 | 定位 |',
+    '| --- | --- | --- | --- | --- |',
+    `| 登录会员 | authenticated + compact:execute | POST ${route} | 完成${secondary.name} | ${classStem}Controller.java:10-20#execute |`,
+    '',
+    '## 3. 能力级流程与跨接口关系',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    `    A["${classStem}Controller.execute()"] --> B["${classStem}Service.execute()"]`,
+    '```',
+    '',
+    '节点只表示一个方法。',
+    '',
+    '## 4. 业务对象、状态与规则',
+    '',
+    `- ${secondary.name}只处理当前登录会员可见的数据。`,
+    '- 重复请求按当前业务状态返回，不产生第二份业务记录。',
+    '',
+    '## 5. 接口详细设计',
+    '',
+    '| 入口 | 处理方法 | 成功结果 | 边界 |',
+    '| --- | --- | --- | --- |',
+    `| POST ${route} | execute | 完成${secondary.name} | 仅处理当前能力边界 |`,
+    '',
+    '## 6. 覆盖缺口',
+    '',
+    '覆盖状态为 partial。真实集成测试与全部字段仍需补证；缺口：gap_compact_secondary_traceability。',
+    '',
+    `<!-- axis-evidence: src/compact/${classStem}Controller.java:10-20#execute -->`,
+    `<!-- axis-evidence: src/compact/${classStem}Service.java:30-45#execute -->`,
+    '',
+  ].join('\n');
+}
+
+function compactPartialLevel1DetailedDesign() {
+  const secondaryRows = compactSecondaryCapabilities.map((secondary) => (
+    `| ${secondary.name} | 完成${secondary.name} | [查看](secondary-capabilities/${secondary.id}/detailed-design.md) |`
+  ));
+  const entryRows = compactSecondaryCapabilities.map((secondary, index) => (
+    `| ${secondary.name}入口 | \`POST /app/compact/${String(index + 1).padStart(2, '0')}\` | ${secondary.name} | 完成${secondary.name} |`
+  ));
+  return [
+    '# 示例项目 · 精简能力总览',
+    '',
+    '<!-- axis-document-metadata',
+    'reader_profile=compact',
+    'document_status=review',
+    'revision=1',
+    'level1_capability_id=compact_operations',
+    'user_journey_design_status=detailed user_journey_coverage=partial user_journey_gap_id=gap_compact_user_journey_coverage',
+    'table_design_status=detailed table_design_coverage=partial table_design_gap_id=gap_compact_table_coverage',
+    'dependency_graph_status=pending_level1_completion dependency_graph_revision=not_derived dependency_graph_gap_id=gap_level1_dependency_graph_derivation',
+    '-->',
+    '',
+    '## 1. 能力边界',
+    '',
+    '负责十四项可独立评审的最小业务结果，不承担其他一级能力的业务状态。',
+    '',
+    '## 2. 二级能力',
+    '',
+    '| 二级能力 | 最小业务结果 | 详情 |',
+    '| --- | --- | --- |',
+    ...secondaryRows,
+    '',
+    '## 3. 对外业务入口',
+    '',
+    '| 业务 | 代表入口 | 原子能力 | 用户结果 |',
+    '| --- | --- | --- | --- |',
+    ...entryRows,
+    '',
+    '## 4. 原子流程',
+    '',
+    '```mermaid',
+    'flowchart LR',
+    '    A["Compact01Controller.execute()"] --> B["Compact01Service.execute()"]',
+    '```',
+    '',
+    '每个节点只表示一个方法。',
+    '',
+    '## 5. 关键规则',
+    '',
+    '- 每项二级能力只产生一个可独立验收的业务结果。',
+    '- 重复请求不得跨能力修改状态。',
+    '',
+    '## 6. 证据与缺口',
+    '',
+    '- `Compact01Controller.java:10-20#execute`',
+    '',
+    '当前覆盖为 partial，未覆盖入口和表设计需补证：gap_compact_user_journey_coverage、gap_compact_table_coverage。',
+    '',
+    '<!-- axis-evidence: src/compact/Compact01Controller.java:10-20#execute -->',
+    '',
+  ].join('\n');
+}
+
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
 const skillNames = manifest.skills.map((skill) => skill.name);
 
@@ -84,25 +209,19 @@ for (const requiredText of [
   'market',
   'master_draft',
   'Expansion Gate',
-  'project_technical_architecture',
-  'project_business_architecture',
-  'business_capability_detailed_design',
-  'secondary_capability_detailed_design',
+  'development_document_set',
+  'project_knowledge_change_set',
   'level1_capability_id',
-  'secondary_capabilities',
-  'one overview document per level-1 capability',
+  'secondary_capability_id',
+  '$axis-doc-project-knowledge',
   'approved',
-  'supersedes',
-  '_archive',
-  'Mandatory OSS Synchronization Gate',
-  'project-knowledge-capture',
-  'oss-publish',
-  '--dry-run',
-  'published',
-  'OSS-first',
+  'archive',
+  'Never call a real OSS upload',
+  'FileName:begin-end#symbol',
 ]) {
   assert.match(developmentBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
+assert.doesNotMatch(developmentBody, /Mandatory OSS Synchronization Gate|OSS-first|axis project-knowledge-capture|axis oss-publish/);
 
 const technicalAndDatabaseDesign = await readFile(
   path.join(repoRoot, development.path, 'references', 'technical-and-database-design.md'),
@@ -125,37 +244,36 @@ for (const requiredText of [
 
 const projectKnowledge = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge');
 assert.ok(projectKnowledge, 'axis-doc-project-knowledge should merge bootstrap and business-domain maintenance');
-assert.deepEqual(projectKnowledge.files.sort(), [
+for (const requiredFile of [
   'SKILL.md',
   'agents/openai.yaml',
   'quick_validate.py',
-  'references/business-capability-detailed-design-template.md',
-  'references/level1-capability-dependency-graph-template.yaml',
-  'references/project-business-architecture-template.md',
-  'references/project-technical-architecture-template.md',
+  'references/project-knowledge-contracts.md',
+  'references/secondary-capability-boundary-matrix-v3.1.md',
   'references/secondary-capability-detailed-design-template.md',
-]);
+  'references/secondary-capability-eval-cases.json',
+  'scripts/evaluate_secondary_capability_prompts.mjs',
+]) assert.ok(projectKnowledge.files.includes(requiredFile), `missing project-knowledge bundle file: ${requiredFile}`);
 const projectKnowledgeBody = await readFile(path.join(repoRoot, projectKnowledge.path, 'SKILL.md'), 'utf8');
 for (const requiredText of [
   'bootstrap',
   'scan_and_reconcile',
-  'requirement_design',
   'project_technical_architecture',
   'project_business_architecture',
   'business_inventory',
-  'business_capability_detailed_design',
   'level1_capability_id',
-  'level1_capability_name',
-  'secondary_capabilities',
-  'business/capabilities/{level1_capability_id}/detailed-design.md',
-  'business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md',
-  'one canonical overview per level1_capability_id',
-  'every secondary capability',
-  'secondary_capability_detailed_design',
-  'doc_gap_report',
+  'secondary_capability_id',
+  'one independently reviewable business outcome',
+  'reader_profile=compact',
+  'six useful sections',
+  'does **not** require `3.N`',
+  '$axis-tools-prompt-create',
+  'OSS Upload Confirmation Gate',
+  'exact pair',
 ]) {
-  assert.match(projectKnowledgeBody, new RegExp(requiredText));
+  assert.match(projectKnowledgeBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
+assert.doesNotMatch(projectKnowledgeBody, /requirement_design/);
 assert.doesNotMatch(projectKnowledgeBody, /one canonical (?:domain )?detailed design per `?business_id`?/i);
 
 const capabilityTemplate = await readFile(
@@ -236,11 +354,12 @@ for (const requiredText of [
   '请求字段',
   '响应字段',
   '错误码与异常映射',
-  '代码对象与关系',
-  '文件路径:起始行-结束行#符号',
+  '业务相关字段',
+  '{evidence_file_name}:{begin_line}-{end_line}#{symbol}',
 ]) {
   assert.match(secondaryCapabilityTemplate, new RegExp(requiredText));
 }
+assert.doesNotMatch(secondaryCapabilityTemplate, /^##\s+\d+\.?\s+代码对象与关系\s*$/m);
 for (const legacyTopLevelTitle of [
   '实体、表与对象关系',
   '表结构设计',
@@ -477,6 +596,55 @@ try {
     validLevel1CapabilityDependencyGraph(),
     'utf8',
   );
+  const readerFacingDualTables = validLevel1CapabilityDetailedDesign('merchant_operations')
+    .replace(
+      '#### 3.1.1 业务说明\n\n| 项目 | 内容 |',
+      [
+        '#### 3.1.1 业务说明',
+        '',
+        '| 项目 | 内容 |',
+        '| --- | --- |',
+        '| 提供的业务 | 入驻申请、审核与门店管理 |',
+        '| 用户可见结果 | 返回业务编号和当前状态 |',
+        '',
+        '<!-- axis-journey-machine-table',
+        '| 项目 | 内容 |',
+      ].join('\n'),
+    )
+    .replace(
+      '\n\n#### 3.1.2 二级能力与接口实现逻辑',
+      '\n-->\n\n#### 3.1.2 二级能力与接口实现逻辑',
+    )
+    .replace(
+      '##### 步骤 1 · 入驻申请、审核与门店管理\n\n| 项目 | 内容 |',
+      [
+        '##### 步骤 1 · 入驻申请、审核与门店管理',
+        '',
+        '| 项目 | 内容 |',
+        '| --- | --- |',
+        '| 接口/入口 | `POST /api/merchant_governance/actions` |',
+        '| 业务数据变化 | 写入业务记录并返回处理状态 |',
+        '',
+        '<!-- axis-step-machine-table',
+        '| 项目 | 内容 |',
+      ].join('\n'),
+    )
+    .replace(
+      '| 证据 | `test/merchant_governance/CapabilityFlowTest.java:10-30#executeJourney` |\n\n### 3.2',
+      '| 证据 | `test/merchant_governance/CapabilityFlowTest.java:10-30#executeJourney` |\n-->\n\n### 3.2',
+    );
+  await writeFile(
+    path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
+    readerFacingDualTables,
+    'utf8',
+  );
+  const { stdout: readerFacingDualTablesStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010100Z-project-knowledge-reader-facing-dual-tables-a0b1c306',
+  ]);
+  assert.equal(JSON.parse(readerFacingDualTablesStdout).ok, true);
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
     validLevel1CapabilityDetailedDesign('merchant_operations', undefined, {
@@ -1039,11 +1207,11 @@ try {
     /level-1 outward capability diagram must place api_id and interface on one edge: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE\/merchant_governance_execute_step/,
   );
   const level1WithApiAndInterfaceNodes = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
-    '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1["secondary_capability_id: merchant_governance"]',
+    '    journey_MERCHANT_GOVERNANCE_EXECUTE["发起业务请求"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1_merchant_governance["入驻申请、审核与门店管理"]',
     [
-      '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] --> A["api_id: MERCHANT_GOVERNANCE_EXECUTE"]',
+      '    journey_MERCHANT_GOVERNANCE_EXECUTE["发起业务请求"] --> A["api_id: MERCHANT_GOVERNANCE_EXECUTE"]',
       '    A --> I["POST /api/merchant_governance/actions"]',
-      '    I --> S1["secondary_capability_id: merchant_governance"]',
+      '    I --> S1_merchant_governance["入驻申请、审核与门店管理"]',
     ].join('\n'),
   );
   assert.doesNotMatch(
@@ -1670,8 +1838,8 @@ try {
     {},
     { crossSecondary: true },
   ).replace(
-    '    S1 -->|"api_id: CATALOG_INVENTORY_EXECUTE · POST /api/catalog_inventory/actions"| S2["secondary_capability_id: catalog_inventory"]',
-    '    S1_ALIAS["secondary_capability_id: merchant_governance"] -->|"api_id: CATALOG_INVENTORY_EXECUTE · POST /api/catalog_inventory/actions"| S2["secondary_capability_id: catalog_inventory"]',
+    '    S1_merchant_governance -->|"api_id: CATALOG_INVENTORY_EXECUTE · POST /api/catalog_inventory/actions"| S2_catalog_inventory["分类、品牌、商品、SKU与库存"]',
+    '    S1_ALIAS_merchant_governance["入驻申请、审核与门店管理"] -->|"api_id: CATALOG_INVENTORY_EXECUTE · POST /api/catalog_inventory/actions"| S2_catalog_inventory["分类、品牌、商品、SKU与库存"]',
   );
   await writeFile(merchantLevel1DetailedDesignPath, disconnectedCrossSecondaryGraph, 'utf8');
   await assert.rejects(
@@ -1685,8 +1853,8 @@ try {
   );
 
   const level1GraphWithoutUserStart = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
-    'U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"]',
-    'U["内部调度器发起处理"]',
+    'journey_MERCHANT_GOVERNANCE_EXECUTE["发起业务请求"]',
+    'unbound_entry["发起业务请求"]',
   );
   await writeFile(merchantLevel1DetailedDesignPath, level1GraphWithoutUserStart, 'utf8');
   await assert.rejects(
@@ -1699,9 +1867,27 @@ try {
     /level-1 outward capability diagram step order or secondary nodes mismatch: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE\/merchant_governance_execute_step/,
   );
 
+  const level1GraphWithMixedMethodNode = [
+    'reader_profile=strict_full',
+    validLevel1CapabilityDetailedDesign('merchant_operations').replace(
+      'S1_merchant_governance["入驻申请、审核与门店管理"]',
+      'S1_merchant_governance["CapabilityController.execute()：处理入驻申请"]',
+    ),
+  ].join('\n');
+  await writeFile(merchantLevel1DetailedDesignPath, level1GraphWithMixedMethodNode, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010100Z-project-knowledge-level1-mixed-method-node-a0b1c305',
+    ]),
+    /level-1 outward capability diagram mixes business and method nodes: merchant_operations\/MERCHANT_GOVERNANCE_EXECUTE/,
+  );
+
   const level1GraphWithoutVisibleResult = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
-    'S1 --> R["返回业务编号和当前状态"]',
-    'S1 --> R["内部处理结束"]',
+    'S1_merchant_governance --> R["返回业务编号和当前状态"]',
+    'S1_merchant_governance --> R["内部处理结束"]',
   );
   await writeFile(merchantLevel1DetailedDesignPath, level1GraphWithoutVisibleResult, 'utf8');
   await assert.rejects(
@@ -1715,9 +1901,9 @@ try {
   );
 
   const level1GraphWithDisconnectedBranch = validLevel1CapabilityDetailedDesign('merchant_operations').replace(
-    '    S1 --> R["返回业务编号和当前状态"]',
+    '    S1_merchant_governance --> R["返回业务编号和当前状态"]',
     [
-      '    S1 --> R["返回业务编号和当前状态"]',
+      '    S1_merchant_governance --> R["返回业务编号和当前状态"]',
       '    X["旁路开始"] --> Y["旁路结束"]',
     ].join('\n'),
   );
@@ -1959,13 +2145,13 @@ try {
       '| `step_id` | `merchant_governance_repeat_execute_step` |',
     );
   const repeatedApiOriginalGraph = [
-    '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1["secondary_capability_id: merchant_governance"]',
-    '    S1 --> R["返回业务编号和当前状态"]',
+    '    journey_MERCHANT_GOVERNANCE_EXECUTE["发起业务请求"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1_merchant_governance["入驻申请、审核与门店管理"]',
+    '    S1_merchant_governance --> R["返回业务编号和当前状态"]',
   ].join('\n');
   const repeatedApiSequentialGraph = [
-    '    U["商户或平台运营人员：在业务页面提交入驻申请、审核与门店管理操作"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1["secondary_capability_id: merchant_governance"]',
-    '    S1 -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S2["secondary_capability_id: merchant_governance"]',
-    '    S2 --> R["返回业务编号和当前状态"]',
+    '    journey_MERCHANT_GOVERNANCE_EXECUTE["发起业务请求"] -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S1_merchant_governance["入驻申请、审核与门店管理"]',
+    '    S1_merchant_governance -->|"api_id: MERCHANT_GOVERNANCE_EXECUTE · POST /api/merchant_governance/actions"| S2_merchant_governance["入驻申请、审核与门店管理"]',
+    '    S2_merchant_governance --> R["返回业务编号和当前状态"]',
   ].join('\n');
   const repeatedApiJourneyDocument = repeatedApiBaseDocument
     .replace(repeatedApiOriginalGraph, repeatedApiSequentialGraph)
@@ -2790,6 +2976,66 @@ try {
     /secondary capability interface internal logic missing flow diagram or step table: merchant_operations\/merchant_governance\/5\.1/,
   );
 
+  const merchantWithMixedMethodNode = [
+    'reader_profile=strict_full',
+    merchantWithInterfaceLogic.replace(
+      'B["CapabilityService.execute()"]',
+      'B["CapabilityService.execute()：检查业务单号"]',
+    ),
+  ].join('\n');
+  await writeFile(merchantSecondaryPath, merchantWithMixedMethodNode, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010115Z-project-knowledge-interface-mixed-method-node-f7a8b9cb',
+    ]),
+    /secondary capability interface method node is not atomic: merchant_operations\/merchant_governance\/5\.1/,
+  );
+
+  const merchantWithBareStrictFullNode = [
+    'reader_profile=strict_full',
+    merchantWithInterfaceLogic.replace(
+      '    B -->|"持久化业务记录"| C["OrderMapper.insert()"]',
+      [
+        '    B -->|"持久化业务记录"| C["OrderMapper.insert()"]',
+        '    C --> BusinessStep',
+      ].join('\n'),
+    ),
+  ].join('\n');
+  await writeFile(merchantSecondaryPath, merchantWithBareStrictFullNode, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010115Z-project-knowledge-interface-bare-node-f7a8b9cc',
+    ]),
+    /secondary capability interface method node is not atomic: merchant_operations\/merchant_governance\/5\.1/,
+  );
+
+  const merchantWithSemicolonBareStrictFullNode = [
+    'reader_profile=strict_full',
+    merchantWithInterfaceLogic.replace(
+      '    A["CapabilityController.execute()"] -->|"校验请求"| B["CapabilityService.execute()"]',
+      '    A["CapabilityController.execute()"] --> B["CapabilityService.execute()"]; BusinessStep --> A',
+    ),
+  ].join('\n');
+  await writeFile(merchantSecondaryPath, merchantWithSemicolonBareStrictFullNode, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', capabilityRepo,
+      '--run-id', '20260713T010115Z-project-knowledge-interface-semicolon-bare-node-f7a8b9cd',
+    ]),
+    /secondary capability interface method node is not atomic: merchant_operations\/merchant_governance\/5\.1/,
+  );
+
   const merchantWithOldRequestNumber = merchantWithInterfaceLogic.replace(
     '#### 5.2.3 请求字段',
     '#### 5.2.2 请求字段',
@@ -2825,6 +3071,36 @@ try {
     '--run-id', '20260713T010117Z-project-knowledge-interface-logic-grouped-f7a8b9ca',
   ]);
   assert.equal(JSON.parse(groupedInterfaceLogicStdout).ok, true);
+
+  const firstImplementationTablePattern = /\| 实现层 \| 精确定位 \| 职责 \|\n\| --- \| --- \| --- \|\n\| Controller\/入口 \|[^\n]+\n\| Service\/用例 \|[^\n]+\n\| Mapper\/Repository \|[^\n]+\n\| 实体\/表 \|[^\n]+\n\| 测试 \|[^\n]+/;
+  const firstImplementationTable = firstImplementationTablePattern.exec(merchantWithInterfaceLogic)?.[0];
+  assert.ok(firstImplementationTable);
+  const readerFacingImplementationTable = [
+    '| 实现层 | 精确定位 | 职责 |',
+    '| --- | --- | --- |',
+    '| Controller/入口 | `CapabilityController.java:10-20#execute` | 接收创建请求 |',
+    '| Service/用例 | `CapabilityService.java:20-40#execute` | 执行业务编排 |',
+    '| Mapper/Repository | `OrderMapper.java:8-12#insert` | 保存业务记录 |',
+    '| 实体/表 | `CapabilityRecord.java:10-30#CapabilityRecord` | 承载业务状态 |',
+    '| 测试 | `OrderTest.java:10-30#createOrder` | 验证主流程 |',
+    '',
+    '<!-- axis-implementation-machine-table',
+    firstImplementationTable,
+    '-->',
+  ].join('\n');
+  const merchantWithReaderFacingImplementation = merchantWithInterfaceLogic.replace(
+    firstImplementationTable,
+    readerFacingImplementationTable,
+  );
+  await writeFile(merchantSecondaryPath, merchantWithReaderFacingImplementation, 'utf8');
+  await writeFile(catalogSecondaryPath, catalogWithInterfaceLogic, 'utf8');
+  const { stdout: readerFacingImplementationStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', capabilityRepo,
+    '--run-id', '20260713T010117Z-project-knowledge-reader-facing-implementation-f7a8b9cc',
+  ]);
+  assert.equal(JSON.parse(readerFacingImplementationStdout).ok, true);
 
   await writeFile(
     path.join(projectRoot, 'business', 'capabilities', 'merchant_operations', 'detailed-design.md'),
@@ -2969,10 +3245,409 @@ try {
   await rm(capabilityRepo, { recursive: true, force: true });
 }
 
+const compactCapabilityRepo = await mkdtemp(path.join(tmpdir(), 'axis-compact-capability-knowledge-'));
+try {
+  const compactProjectRoot = path.join(
+    compactCapabilityRepo,
+    '.axis',
+    'docs',
+    'orgs',
+    'org_compact',
+    'projects',
+    'compact-project',
+  );
+  const compactCapabilityRoot = path.join(
+    compactProjectRoot,
+    'business',
+    'capabilities',
+    'compact_operations',
+  );
+  await mkdir(path.join(compactProjectRoot, 'architecture'), { recursive: true });
+  await mkdir(path.join(compactProjectRoot, 'gaps'), { recursive: true });
+  for (const secondary of compactSecondaryCapabilities) {
+    await mkdir(
+      path.join(compactCapabilityRoot, 'secondary-capabilities', secondary.id),
+      { recursive: true },
+    );
+  }
+  await writeFile(path.join(compactCapabilityRepo, '.axis', 'config.yml'), [
+    'contract_version: "0.2"',
+    'organization:',
+    '  id: org_compact',
+    '  registry: .axis/organizations.yml',
+    'project:',
+    '  slug: compact-project',
+    '  display_name: Compact Project',
+    'package:',
+    '  outbox_dir: .axis/outbox',
+    'release:',
+    '  channel: private_beta',
+    '  gate: not_requested',
+    'oss:',
+    '  provider: aliyun-oss',
+    '  profile: private_beta_main',
+    'skills:',
+    '  project_init: axis-doc-project-init',
+    '  coding_capture: axis-code-capture',
+    '  test_report: axis-test-report',
+    '  oss_publish: axis-ops-oss-publish',
+  ].join('\n'), 'utf8');
+  await writeFile(path.join(compactCapabilityRepo, '.axis', 'organizations.yml'), [
+    'schema: axis.organization_registry',
+    'schema_version: "0.2"',
+    'organizations:',
+    '  - id: org_compact',
+    '    slug: compact',
+    '    display_name: Compact',
+    '    status: active',
+    '    oss_profiles:',
+    '      - name: private_beta_main',
+    '        provider: aliyun-oss',
+    '        bucket: compact-bucket',
+    '        prefix: axis/v0.2',
+    '        endpoint_env: TEST_OSS_ENDPOINT',
+    '        region_env: TEST_OSS_REGION',
+    '        access_key_id_env: TEST_OSS_KEY',
+    '        access_key_secret_env: TEST_OSS_SECRET',
+    '    products:',
+    '      - slug: compact-product',
+    '        display_name: Compact Product',
+    '        projects:',
+    '          - slug: compact-project',
+    '            display_name: Compact Project',
+  ].join('\n'), 'utf8');
+  await writeFile(path.join(compactProjectRoot, 'metadata.yaml'), 'document_language: zh-CN\nstatus: review\n', 'utf8');
+  await writeFile(path.join(compactProjectRoot, 'architecture', 'technical.md'), '# 技术架构\n', 'utf8');
+  await writeFile(
+    path.join(compactProjectRoot, 'architecture', 'business.md'),
+    businessArchitectureDocument({
+      status: 'pending_level1_completion',
+      revision: 'not_derived',
+      gapId: 'gap_level1_dependency_graph_derivation',
+      capabilities: [{ id: 'compact_operations', name: '精简能力' }],
+    }),
+    'utf8',
+  );
+  const compactInventoryPath = path.join(compactProjectRoot, 'business', 'inventory.yaml');
+  const compactInventory = [
+    'level1_capabilities:',
+    '- level1_capability_id: compact_operations',
+    '  level1_capability_name: 精简能力',
+    '  secondary_capabilities:',
+    ...compactSecondaryCapabilities.flatMap((secondary) => [
+      `  - secondary_capability_id: ${secondary.id}`,
+      `    secondary_capability_name: ${secondary.name}`,
+      `    business_ids: [${secondary.businessId}]`,
+    ]),
+  ].join('\n');
+  await writeFile(compactInventoryPath, compactInventory, 'utf8');
+  const compactLevel1Path = path.join(compactCapabilityRoot, 'detailed-design.md');
+  const compactLevel1 = compactPartialLevel1DetailedDesign();
+  await writeFile(compactLevel1Path, compactLevel1, 'utf8');
+  const compactSecondaryPaths = new Map();
+  for (const [index, secondary] of compactSecondaryCapabilities.entries()) {
+    const documentPath = path.join(
+      compactCapabilityRoot,
+      'secondary-capabilities',
+      secondary.id,
+      'detailed-design.md',
+    );
+    compactSecondaryPaths.set(secondary.id, documentPath);
+    await writeFile(documentPath, compactPartialSecondaryDetailedDesign(secondary, index), 'utf8');
+  }
+  await writeFile(path.join(compactProjectRoot, 'gaps', 'doc-gap-report.md'), [
+    '# 文档缺口',
+    '',
+    '- gap_compact_user_journey_coverage：补齐其余业务入口和验收证据。',
+    '- gap_compact_table_coverage：补齐表结构与关系证据。',
+    '- gap_compact_secondary_traceability：补齐接口字段与真实集成测试。',
+    '- gap_level1_dependency_graph_derivation：全部能力 complete 后统一派生。',
+    '',
+  ].join('\n'), 'utf8');
+  await writeFile(
+    path.join(compactProjectRoot, 'business', 'level1-capability-dependency-graph.yaml'),
+    validLevel1CapabilityDependencyGraph(
+      [{ id: 'compact_operations', name: '精简能力' }],
+      [],
+      { status: 'pending_level1_completion' },
+    ),
+    'utf8',
+  );
+
+  const { stdout: compactCaptureStdout } = await execFileAsync(process.execPath, [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    'project-knowledge-capture',
+    '--repo', compactCapabilityRepo,
+    '--run-id', '20260715T010100Z-project-knowledge-compact-partial-a1b2c3d4',
+  ]);
+  const compactCapture = JSON.parse(compactCaptureStdout);
+  assert.equal(compactCapture.ok, true);
+  assert.equal(
+    compactCapture.files.filter((file) => /secondary-capabilities\/.+\/detailed-design\.md$/.test(file)).length,
+    14,
+  );
+
+  const firstCompactSecondary = compactSecondaryCapabilities[0];
+  const firstCompactSecondaryPath = compactSecondaryPaths.get(firstCompactSecondary.id);
+  const firstCompactSecondaryBody = compactPartialSecondaryDetailedDesign(firstCompactSecondary, 0);
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace('reader_profile=compact\n', ''),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010100Z-project-knowledge-compact-profile-a1b2c3d0',
+    ]),
+    /compact partial secondary capability requires reader_profile=compact: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      'Compact01Controller.java:10-20#execute |',
+      'Compact01Controller.java:21-22#execute |',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010100Z-project-knowledge-compact-evidence-line-a1b2c3d1',
+    ]),
+    /compact partial short locator does not exactly match path evidence: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      'Compact01Controller.java:10-20#execute |',
+      'Compact01Controller.java:10-20#wrongSymbol |',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010100Z-project-knowledge-compact-evidence-symbol-a1b2c3d2',
+    ]),
+    /compact partial short locator does not exactly match path evidence: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      '<!-- axis-evidence: src/compact/Compact01Controller.java:10-20#execute -->',
+      [
+        '<!-- axis-evidence: src/compact/Compact01Controller.java:10-20#execute -->',
+        '<!-- axis-evidence: src/shadow/Compact01Controller.java:10-20#execute -->',
+      ].join('\n'),
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010100Z-project-knowledge-compact-evidence-ambiguous-a1b2c3d3',
+    ]),
+    /compact partial short locator is ambiguous: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      '    A["Compact01Controller.execute()"] --> B["Compact01Service.execute()"]',
+      [
+        '    A["Compact01Controller.execute()"] --> B["Compact01Service.execute()"]',
+        '    B --> BusinessStep',
+      ].join('\n'),
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010100Z-project-knowledge-compact-bare-node-a1b2c3d4',
+    ]),
+    /compact partial method diagram contains a non-atomic node: compact_operations\/compact_capability_01\/3/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      '    A["Compact01Controller.execute()"] --> B["Compact01Service.execute()"]',
+      '    A["Compact01Controller.execute()"] --> B["Compact01Service.execute()"]; BusinessStep --> A',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010100Z-project-knowledge-compact-semicolon-bare-node-a1b2c3d5',
+    ]),
+    /compact partial method diagram contains a non-atomic node: compact_operations\/compact_capability_01\/3/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(`business_ids=${firstCompactSecondary.businessId}\n`, ''),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010101Z-project-knowledge-compact-business-ids-a1b2c3d5',
+    ]),
+    /compact partial secondary capability metadata business_ids mismatch: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      'B["Compact01Service.execute()"]',
+      'B["校验并保存业务结果"]',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010102Z-project-knowledge-compact-non-atomic-a1b2c3d6',
+    ]),
+    /compact partial method diagram contains a non-atomic node: compact_operations\/compact_capability_01\/3/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
+      '| POST /app/compact/01 | execute | 完成最小能力 01 | 仅处理当前能力边界 |\n',
+      '',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010103Z-project-knowledge-compact-empty-interface-a1b2c3d7',
+    ]),
+    /compact partial secondary capability interface summary is empty: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody
+      .replace(' interface_gap_id=gap_compact_secondary_traceability', '')
+      .replace('；缺口：gap_compact_secondary_traceability。', '。'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010104Z-project-knowledge-compact-gap-a1b2c3d8',
+    ]),
+    /compact partial secondary capability requires an explicit interface gap: compact_operations\/compact_capability_01/,
+  );
+  await writeFile(firstCompactSecondaryPath, firstCompactSecondaryBody, 'utf8');
+
+  await writeFile(
+    compactLevel1Path,
+    compactLevel1.replace(
+      'secondary-capabilities/compact_capability_01/detailed-design.md',
+      'secondary-capabilities/missing/detailed-design.md',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010105Z-project-knowledge-compact-link-a1b2c3d9',
+    ]),
+    /compact partial level-1 overview omits secondary capability link: compact_operations\/compact_capability_01/,
+  );
+  await writeFile(compactLevel1Path, compactLevel1, 'utf8');
+
+  await writeFile(
+    compactLevel1Path,
+    compactLevel1.replace('reader_profile=compact\n', ''),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010105Z-project-knowledge-compact-level1-profile-a1b2c3dc',
+    ]),
+    /compact partial level-1 capability requires reader_profile=compact: compact_operations/,
+  );
+  await writeFile(compactLevel1Path, compactLevel1, 'utf8');
+
+  await writeFile(
+    compactInventoryPath,
+    compactInventory.replace(
+      'business_ids: [compact_business_02]',
+      'business_ids: [compact_business_01]',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010106Z-project-knowledge-inline-duplicate-a1b2c3da',
+    ]),
+    /business_id is assigned to multiple secondary capabilities: compact_business_01/,
+  );
+  await writeFile(
+    compactInventoryPath,
+    compactInventory.replace(
+      'business_ids: [compact_business_02]',
+      'business_ids: [Invalid-Business-Id]',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260715T010107Z-project-knowledge-inline-invalid-a1b2c3db',
+    ]),
+    /secondary capability must contain valid business_ids: compact_operations\/compact_capability_02/,
+  );
+} finally {
+  await rm(compactCapabilityRepo, { recursive: true, force: true });
+}
+
 const dashboardWork = await mkdtemp(path.join(tmpdir(), 'axis-doc-dashboard-archive-'));
 await rm(dashboardWork, { recursive: true, force: true });
 try {
-  const dashboardScript = path.join(repoRoot, 'skills', 'axis-doc-dashbord', 'scripts', 'axis_doc_dashbord.py');
+  const dashboardScript = path.join(repoRoot, 'skills', 'axis-doc-dashboard', 'scripts', 'axis_doc_dashboard.py');
   await execFileAsync('python3', [dashboardScript, 'scaffold', '--target', dashboardWork]);
   const core = await readFile(path.join(dashboardWork, 'src', 'core.mjs'), 'utf8');
   const browser = await readFile(path.join(dashboardWork, 'src', 'browser.mjs'), 'utf8');

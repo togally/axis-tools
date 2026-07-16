@@ -5,7 +5,7 @@ description: Use when a user needs a Word/DOCX contract or user agreement review
 
 # Axis Contract Review
 
-## Use When
+## When to Use
 
 Use this skill when a user provides a Word/DOCX contract, user agreement, terms of service, or policy and needs an independently reviewable legal-drafting outcome:
 
@@ -21,9 +21,11 @@ Use the general document skill for DOCX mechanics when available. This skill own
 
 Do not use this skill for legal representation, litigation strategy, a guarantee of compliance, typography-only editing, or final jurisdiction-specific conclusions when the target jurisdiction or material operating facts are unknown. If jurisdiction changes the answer and cannot be established from the document, ask before making a binding-law conclusion. Recommend qualified local counsel for regulated activity, multi-jurisdiction release, launch-critical uncertainty, or material unresolved risk.
 
-## Inputs and Outputs
+## Inputs
 
 Required inputs are the source DOCX, target jurisdiction, review date, document purpose, contracting-party roles, target version, output location, and the user's clean-format profile. Gather related privacy terms, merchant terms, payment/refund flows, licensing facts, and platform procedures when they materially affect the clauses. Preserve missing entity data, licences, dates, addresses, contacts, or product capabilities as explicit placeholders rather than inventing them.
+
+## Outputs
 
 Default outputs are:
 
@@ -69,7 +71,7 @@ Every substantive modification needs an applicable authority or an explicit cont
 - Distinguish binding law, regulatory guidance, draft rules, and reviewer inference. Do not present a draft, repealed rule, unofficial summary, or out-of-jurisdiction material as binding.
 - Cite sources near the supported conclusion and keep quotations within applicable limits.
 
-## Safety Rules
+## Safety and Boundaries
 
 - Do not state that the agreement has zero legal risk or is conclusively compliant.
 - Do not invent facts or silently broaden authorization beyond the user's request.
@@ -78,7 +80,7 @@ Every substantive modification needs an applicable authority or an explicit cont
 - Do not remove intentional legally significant formatting unless the clean-format profile requires it; distinguish review artifacts from deliberate headings, links, warnings, and placeholders.
 - Stop and request direction when missing jurisdiction, licences, payment structure, party identity, or actual product behavior would materially change the revision.
 
-## Validation
+## Checks
 
 ### Source and comment coverage
 

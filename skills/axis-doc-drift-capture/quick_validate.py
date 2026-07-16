@@ -10,12 +10,19 @@ from pathlib import Path
 
 REQUIRED_TERMS = {
     "axis-doc-drift-capture": [
-        "Three-Step Work Contract",
+        "When to Use",
+        "Do Not Use",
+        "Inputs",
+        "Outputs",
+        "Safety and Boundaries",
         "task_execution_record",
         "version_iteration_record",
         "affected_docs",
         "doc_update_authorization",
-        "No Silent Approved-Doc Rewrite",
+        "record-schemas.md",
+        "drift-classification.md",
+        "does not author canonical knowledge",
+        "Checks",
         "After Use Deposition",
     ],
 }
@@ -80,6 +87,13 @@ def validate(skill_dir: Path) -> int:
     for term in REQUIRED_TERMS[skill_name]:
         if term not in skill_md:
             return fail(f"missing required term in SKILL.md: {term}")
+
+    for reference in [
+        skill_dir / "references" / "record-schemas.md",
+        skill_dir / "references" / "drift-classification.md",
+    ]:
+        if not reference.exists():
+            return fail(f"required reference not found: {reference.name}")
 
     if "$" + skill_name not in agent_yaml:
         return fail(f"agents/openai.yaml must mention ${skill_name}")

@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-test-tdd"
-  short_description: "Run RED/GREEN/REFACTOR / 执行红绿重构"
-  default_prompt: "Use $axis-test-tdd to run this Axis workflow."
+  short_description: "Run non-destructive RED-GREEN / 执行非破坏性红绿重构"
+  default_prompt: "Use $axis-test-tdd for this explicitly requested or conditionally handed-off behavior, preserve user changes, and report honest RED and GREEN evidence."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

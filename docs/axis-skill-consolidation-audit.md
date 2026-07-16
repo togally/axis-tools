@@ -10,15 +10,36 @@ The public document surface is reduced to:
 - `axis-doc-project-knowledge`: project-wide bootstrap and reconciliation of global architecture, inventory, one overview per level-1 capability, independent secondary designs, navigation, metadata and gaps;
 - `axis-doc-drift-capture`: post-task/PR task records, version records and residual drift classification;
 - `axis-doc-project-init`: Axis project configuration;
-- `axis-doc-dashbord`: current-document review plus separate archive traceability.
+- `axis-doc-dashboard`: current-document review plus separate archive traceability.
 
 Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axis-doc-feature-detailed-design`, `axis-doc-business-domain`, and `axis-doc-project-knowledge-bootstrap`. Their durable rules and templates were moved into the two surviving bundles rather than discarded.
 
+## Whole-Inventory Refactor
+
+The current packaged inventory contains 25 canonical skills: the 19 outcome owners established by the whole-inventory refactor plus six non-overlapping additions from `origin/main` (`axis-doc-contract-review` and five `axis-trade-*` skills). All 25 remain because each owns a distinct primary result; no additional merge is justified after comparing trigger, output, evidence and risk boundaries.
+
+The original 19-skill refactor cohort has explicit `When to Use`, `Do Not Use`, `Inputs`, `Outputs`, `Safety and Boundaries`, `Checks`, and `After Use Deposition` sections. Coding, design and external-action workflows also retain a task-specific three-step contract and light adversarial review capped at 30%. Deep schemas, templates and playbooks live in `references/`; each front door stays below 180 lines. The six newer skills keep their own domain-specific gates while participating in the same canonical naming, manifest and routing inventory.
+
+`skills/routing.json` is the executable overlap registry. It assigns one unique primary outcome to every skill and permits only acyclic one-way handoffs. Important boundaries are:
+
+- benchmark measures; API performance tuning changes a proven slow read path;
+- bugfix owns a failure outcome; TDD is an explicitly selected implementation method;
+- code capture and test report package existing evidence only and never trigger automatically;
+- feature development emits a development set plus a project-knowledge change set; project knowledge alone edits the canonical project-wide set;
+- project knowledge may request prompt R&D or an exact-run OSS publication, but neither handoff runs implicitly;
+- skill creation owns packaging; prompt creation owns blind prompt evaluation; skill update owns local installation and migration.
+
+Runtime safety was tightened with the same refactor: benchmark defaults to public GET without login or packaged credentials, side-effect tests require exact impact and cleanup authorization, Codeup rejects untrusted/non-HTTPS token destinations and redirects, and OSS consent is bound to one `run_id + target_prefix` pair.
+
 ## Rename Guard
 
-- packaged skill directories match `axis-(code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*`;
+- packaged skill directories match `axis-(code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*`;
 - frontmatter `name`, manifest `name/path`, OpenAI `display_name`, and `$skill-name` prompt agree;
 - retired document skills must not reappear in the manifest or packaged directory list;
+- retired pre-taxonomy aliases (`axis-api-performance-tuning`, `axis-arch-optimize`, `axis-benchmark`, `axis-bugfix`, `axis-business-domain-doc`, `axis-coding-capture`, `axis-db-design-doc`, `axis-development-doc`, and `axis-ali-dashboard`) must be migrated to their canonical `axis-{category}-*` owners;
+- the misspelled `axis-doc-dashbord` entry is retired in favor of `axis-doc-dashboard`;
+- retired meta-tool IDs `axis-create-skill`, `axis-skill-create`, and `axis-skill-update` must not remain callable or installed; their owners are `axis-tools-skill-create` and `axis-tools-skill-update`;
+- prompt R&D is owned by `axis-tools-prompt-create`, while `axis-tools-skill-create` remains the single packaging entrypoint;
 - references may describe retirement history only in this audit, not as callable handoffs;
 - tests enforce the new consolidated inventory.
 
@@ -34,7 +55,7 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 
 ## Boundaries Kept Separate
 
-`axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, skill lifecycle, platform integrations and operations dashboards also keep their distinct risk and output contracts.
+`axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Contract review remains separate because it owns legal-source, clause-adjudication and DOCX delivery gates rather than software design generation. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, meta-tooling, platform integrations and operations dashboards also keep their distinct risk and output contracts.
 
 The `axis-trade-*` family also remains split by independently selectable outcome: system-parameter governance, factual portfolio ledger, evidence-producing risk research, investment-plan admission, and read-only daily monitoring. The dependency direction is `system + portfolio + research -> plan -> daily brief`; no trade skill may execute an order or package personal financial data in the public repository.
 
@@ -44,7 +65,8 @@ Every modification of an existing canonical design requires a pre-change immutab
 
 ## Current Packaged Document Inventory
 
-- `axis-doc-dashbord`
+- `axis-doc-contract-review`
+- `axis-doc-dashboard`
 - `axis-doc-development`
 - `axis-doc-drift-capture`
 - `axis-doc-project-init`

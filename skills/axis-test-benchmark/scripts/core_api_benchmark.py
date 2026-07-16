@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import statistics
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 try:
@@ -17,8 +19,23 @@ except ImportError as error:  # pragma: no cover
     raise SystemExit("requests is required: python3 -m pip install requests") from error
 
 
-DEFAULT_MEMBER_CLIENT = "member-app"
-DEFAULT_ADMIN_CLIENT = "admin-web"
+DEFAULT_SUCCESS_CODES = ("0", "200", "OK", "SUCCESS", "true")
+SENSITIVE_QUERY_KEYS = {
+    "access_key",
+    "access_token",
+    "api_key",
+    "authorization",
+    "cookie",
+    "credential",
+    "email",
+    "key",
+    "member_phone",
+    "password",
+    "phone",
+    "secret",
+    "session",
+    "token",
+}
 
 
 @dataclass(frozen=True)
@@ -30,11 +47,13 @@ class Endpoint:
     auth: str = "public"
     weight: int = 1
     method: str = "GET"
+    success_codes: tuple[str, ...] = DEFAULT_SUCCESS_CODES
+    accept_any_json: bool = False
 
 
 ENDPOINTS = [
-    Endpoint("health", "public", "/actuator/health", weight=3),
-    Endpoint("openapi", "public", "/v3/api-docs", weight=1),
+    Endpoint("health", "public", "/actuator/health", weight=3, accept_any_json=True),
+    Endpoint("openapi", "public", "/v3/api-docs", weight=1, accept_any_json=True),
     Endpoint("public_list", "public_read", "/api/example/items", {"pageNum": 1, "pageSize": 10}, weight=3),
     Endpoint("public_search", "public_read", "/api/example/search", {"keyword": "demo", "pageNum": 1, "pageSize": 10}, weight=2),
     Endpoint("member_profile", "member_read", "/api/member/profile", auth="member", weight=2),
@@ -69,6 +88,12 @@ def select_builtin_targeted_endpoints(scope: str) -> list[Endpoint]:
 
 
 def endpoint_from_dict(item: dict[str, Any]) -> Endpoint:
+    raw_success_codes = item.get("success_codes")
+    success_codes = (
+        tuple(str(code) for code in raw_success_codes)
+        if isinstance(raw_success_codes, list)
+        else DEFAULT_SUCCESS_CODES
+    )
     return Endpoint(
         name=str(item["name"]),
         group=str(item.get("group") or "custom"),
@@ -77,6 +102,8 @@ def endpoint_from_dict(item: dict[str, Any]) -> Endpoint:
         auth=str(item.get("auth") or "public"),
         weight=int(item.get("weight") or 1),
         method=str(item.get("method") or "GET").upper(),
+        success_codes=success_codes,
+        accept_any_json=bool(item.get("accept_any_json", False)),
     )
 
 
@@ -147,26 +174,56 @@ def format_summary(summary: dict[str, Any]) -> str:
     )
 
 
-def business_success(body: Any) -> tuple[bool, str]:
+def business_success(body: Any, endpoint: Endpoint) -> tuple[bool, str]:
     if not isinstance(body, dict):
         return False, "non_json"
     if "code" in body:
         code = body.get("code")
-        return str(code) == "200", f"code={code}"
+        return str(code) in endpoint.success_codes, f"code={code}"
+    if "success" in body and isinstance(body["success"], bool):
+        return body["success"], f"success={str(body['success']).lower()}"
+    if "status" in body:
+        status = str(body["status"])
+        return status.upper() in {"UP", "OK", "HEALTHY", "SUCCESS"}, f"status={status}"
     if "rows" in body or "total" in body:
         return True, "table"
     if "data" in body:
         return True, "data"
-    return True, "json"
+    if endpoint.accept_any_json:
+        return True, "accepted_json"
+    return False, "unrecognized_json"
 
 
-def extract_token(body: dict[str, Any]) -> str:
-    data = body.get("data") or {}
-    for key in ("access_token", "accessToken", "token"):
-        value = data.get(key)
-        if value:
-            return str(value)
-    raise RuntimeError(f"token not found; response keys={list(data.keys())}")
+def load_token(explicit: str | None, environment_name: str, token_file: str | None) -> str | None:
+    sources = [bool(explicit), bool(os.environ.get(environment_name)), bool(token_file)]
+    if sum(sources) > 1:
+        raise ValueError(f"provide only one token source for {environment_name}: argument, environment, or file")
+    if explicit:
+        return explicit.strip()
+    environment_value = os.environ.get(environment_name)
+    if environment_value:
+        return environment_value.strip()
+    if token_file:
+        value = Path(token_file).expanduser().read_text(encoding="utf-8").strip()
+        if not value:
+            raise ValueError(f"token file for {environment_name} is empty")
+        return value
+    return None
+
+
+def public_headers(client_id: str | None) -> dict[str, str]:
+    return {"clientid": client_id} if client_id else {}
+
+
+def authenticated_headers(token: str, client_id: str | None) -> dict[str, str]:
+    headers = public_headers(client_id)
+    headers["Authorization"] = f"Bearer {token}"
+    return headers
+
+
+def sensitive_query_key(key: str) -> bool:
+    normalized = key.strip().lower().replace("-", "_")
+    return normalized in SENSITIVE_QUERY_KEYS or normalized.endswith(("_token", "_secret", "_password", "_phone", "_email", "_key"))
 
 
 def endpoint_route(endpoint: Endpoint) -> str:
@@ -174,6 +231,9 @@ def endpoint_route(endpoint: Endpoint) -> str:
     if endpoint.params:
         query_parts = []
         for key, value in sorted(endpoint.params.items()):
+            if sensitive_query_key(str(key)):
+                query_parts.append(f"{key}=<redacted>")
+                continue
             if isinstance(value, list | tuple):
                 query_parts.extend(f"{key}={item}" for item in value)
             else:
@@ -187,49 +247,15 @@ class BenchmarkClient:
         self.args = args
         self.base_url = args.base_url.rstrip("/")
         self.timeout = (args.connect_timeout, args.read_timeout)
-        self.headers: dict[str, dict[str, str]] = {}
-
-    def post_json(self, path: str, payload: dict[str, Any], headers: dict[str, str]) -> dict[str, Any]:
-        response = session().post(self.base_url + path, json=payload, headers=headers, timeout=self.timeout)
-        response.raise_for_status()
-        return response.json()
-
-    def login(self, required_auths: set[str] | None = None) -> None:
-        if required_auths is None:
-            required_auths = {"member", "admin"}
-        self.headers = {
-            "public": {"clientid": self.args.member_client_id},
+        member_token = load_token(args.member_token, "AXIS_BENCH_MEMBER_TOKEN", args.member_token_file)
+        admin_token = load_token(args.admin_token, "AXIS_BENCH_ADMIN_TOKEN", args.admin_token_file)
+        self.headers: dict[str, dict[str, str]] = {
+            "public": public_headers(args.public_client_id),
         }
-        if self.args.member_token:
-            self.headers["member"] = {"clientid": self.args.member_client_id, "Authorization": f"Bearer {self.args.member_token}"}
-        if self.args.admin_token:
-            self.headers["admin"] = {"clientid": self.args.admin_client_id, "Authorization": f"Bearer {self.args.admin_token}"}
-        if self.args.no_login:
-            return
-        if "admin" in required_auths and "admin" not in self.headers:
-            admin_body = self.post_json(
-                "/auth/login",
-                {
-                    "clientId": self.args.admin_client_id,
-                    "grantType": "password",
-                    "tenantId": self.args.tenant_id,
-                    "phonenumber": self.args.admin_phone,
-                    "password": self.args.admin_password,
-                },
-                {"clientid": self.args.admin_client_id},
-            )
-            self.headers["admin"] = {"clientid": self.args.admin_client_id, "Authorization": f"Bearer {extract_token(admin_body)}"}
-        if "member" in required_auths and "member" not in self.headers:
-            member_body = self.post_json(
-                "/app/auth/login",
-                {
-                    "clientId": self.args.member_client_id,
-                    "phone": self.args.member_phone,
-                    "password": self.args.member_password,
-                },
-                {"clientid": self.args.member_client_id},
-            )
-            self.headers["member"] = {"clientid": self.args.member_client_id, "Authorization": f"Bearer {extract_token(member_body)}"}
+        if member_token:
+            self.headers["member"] = authenticated_headers(member_token, args.member_client_id)
+        if admin_token:
+            self.headers["admin"] = authenticated_headers(admin_token, args.admin_client_id)
 
     def call(self, endpoint: Endpoint) -> dict[str, Any]:
         started = time.perf_counter()
@@ -255,8 +281,8 @@ class BenchmarkClient:
                 body: Any = response.json()
             except ValueError:
                 body = None
-            success, reason = business_success(body)
-            if response.status_code != 200:
+            success, reason = business_success(body, endpoint)
+            if not 200 <= response.status_code < 300:
                 success, reason = False, f"http={response.status_code}"
             return {"name": endpoint.name, "group": endpoint.group, "route": route, "ms": elapsed, "success": success, "reason": reason}
         except Exception as error:  # noqa: BLE001 - report benchmark failures compactly.
@@ -347,82 +373,62 @@ def steps(max_concurrency: int, raw_steps: str | None) -> list[int]:
     return [value for value in values if value <= max_concurrency]
 
 
-def run_auth_sample(client: BenchmarkClient, required_auths: set[str]) -> None:
-    print("\nAUTH_SAMPLE samples=12 concurrency=4")
-
-    def auth_call(kind: str) -> dict[str, Any]:
-        started = time.perf_counter()
-        try:
-            if kind == "member_login":
-                body = client.post_json(
-                    "/app/auth/login",
-                    {"clientId": client.args.member_client_id, "phone": client.args.member_phone, "password": client.args.member_password},
-                    {"clientid": client.args.member_client_id},
-                )
-            else:
-                body = client.post_json(
-                    "/auth/login",
-                    {
-                        "clientId": client.args.admin_client_id,
-                        "grantType": "password",
-                        "tenantId": client.args.tenant_id,
-                        "phonenumber": client.args.admin_phone,
-                        "password": client.args.admin_password,
-                    },
-                    {"clientid": client.args.admin_client_id},
-                )
-            success, reason = business_success(body)
-            return {"name": kind, "group": "auth", "ms": (time.perf_counter() - started) * 1000, "success": success, "reason": reason}
-        except Exception as error:  # noqa: BLE001
-            return {"name": kind, "group": "auth", "ms": (time.perf_counter() - started) * 1000, "success": False, "reason": type(error).__name__}
-
-    kinds = []
-    if "member" in required_auths:
-        kinds.append("member_login")
-    if "admin" in required_auths:
-        kinds.append("admin_login")
-    for kind in kinds:
-        with ThreadPoolExecutor(max_workers=4) as executor:
-            results = list(executor.map(lambda _: auth_call(kind), range(12)))
-        print(f"auth            {kind:24s} {format_summary(summarize(results))}")
+def run_auth_sample(client: BenchmarkClient, endpoints: list[Endpoint]) -> None:
+    authenticated = [endpoint for endpoint in endpoints if endpoint.auth != "public"]
+    if not authenticated:
+        print("\nAUTH_SAMPLE skipped: no authenticated read endpoints")
+        return
+    print("\nAUTH_SAMPLE authenticated_reads samples=12 concurrency=4")
+    seen_auth: set[str] = set()
+    for endpoint in authenticated:
+        if endpoint.auth in seen_auth:
+            continue
+        seen_auth.add(endpoint.auth)
+        results = run_repeated(client, endpoint, total=12, concurrency=4)
+        print(f"auth            {endpoint.name:24s} {format_summary(summarize(results))}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Safely benchmark core read APIs.")
     parser.add_argument("--base-url", default="http://127.0.0.1:8080")
     parser.add_argument("--profile", default="sample", choices=("sample",), help="Built-in generic endpoint profile to use when --endpoint-file is omitted.")
-    parser.add_argument("--scope", default="all", choices=("all", "public"), help="Built-in endpoint scope: all sample APIs or public-only sample APIs.")
+    parser.add_argument("--scope", default="public", choices=("all", "public"), help="Built-in endpoint scope; public is the safe default.")
     parser.add_argument("--endpoint-file", default=None, help="JSON list of endpoints or object with endpoints list.")
     parser.add_argument("--member-token", default=None, help="Pre-issued bearer token for endpoints with auth=member.")
     parser.add_argument("--admin-token", default=None, help="Pre-issued bearer token for endpoints with auth=admin.")
-    parser.add_argument("--no-login", action="store_true", help="Do not call built-in login endpoints; useful for public-only custom endpoint files.")
-    parser.add_argument("--member-client-id", default=DEFAULT_MEMBER_CLIENT)
-    parser.add_argument("--member-phone", default="13800002002")
-    parser.add_argument("--member-password", default="666666")
-    parser.add_argument("--admin-client-id", default=DEFAULT_ADMIN_CLIENT)
-    parser.add_argument("--admin-phone", default="13900000002")
-    parser.add_argument("--admin-password", default="666666")
-    parser.add_argument("--tenant-id", default="000000")
+    parser.add_argument("--member-token-file", default=None, help="Local UTF-8 file containing only the pre-issued member token.")
+    parser.add_argument("--admin-token-file", default=None, help="Local UTF-8 file containing only the pre-issued admin token.")
+    parser.add_argument("--public-client-id", default=os.environ.get("AXIS_BENCH_PUBLIC_CLIENT_ID"))
+    parser.add_argument("--member-client-id", default=os.environ.get("AXIS_BENCH_MEMBER_CLIENT_ID"))
+    parser.add_argument("--admin-client-id", default=os.environ.get("AXIS_BENCH_ADMIN_CLIENT_ID"))
     parser.add_argument("--duration", type=float, default=25.0)
     parser.add_argument("--baseline-samples", type=int, default=6)
     parser.add_argument("--max-concurrency", type=int, default=60)
     parser.add_argument("--steps", default=None, help="Comma-separated mixed concurrency steps, for example 5,10,20.")
     parser.add_argument("--connect-timeout", type=float, default=3.0)
     parser.add_argument("--read-timeout", type=float, default=18.0)
+    parser.add_argument("--max-error-rate", type=float, default=5.0, help="Stop when business or transport error percentage exceeds this value.")
+    parser.add_argument("--max-p95-ms", type=float, default=5000.0, help="Stop when mixed-traffic p95 exceeds this value.")
     parser.add_argument("--slow-detail-limit", type=int, default=8, help="Number of slow endpoint rows to print per mixed step; use 0 to hide.")
     parser.add_argument("--no-baseline", action="store_true")
-    parser.add_argument("--no-auth-sample", action="store_true")
+    parser.add_argument("--auth-sample", action="store_true", default=False, help="Explicitly sample authenticated read endpoints using supplied tokens.")
+    parser.add_argument("--no-auth-sample", action="store_true", help="Deprecated no-op; auth sampling is already off by default.")
     parser.add_argument("--targeted", action="store_true")
     args = parser.parse_args()
+
+    if args.auth_sample and args.no_auth_sample:
+        parser.error("--auth-sample and --no-auth-sample cannot be used together")
 
     endpoints = load_custom_endpoints(args.endpoint_file) if args.endpoint_file else select_builtin_endpoints(args.scope)
     targeted_endpoints = [] if args.endpoint_file else select_builtin_targeted_endpoints(args.scope)
     required_auths = ({endpoint.auth for endpoint in endpoints} | ({endpoint.auth for endpoint in targeted_endpoints} if args.targeted else set())) - {"public"}
     client = BenchmarkClient(args)
-    client.login(required_auths)
-    missing_auth = sorted({endpoint.auth for endpoint in endpoints} - set(client.headers))
+    missing_auth = sorted(required_auths - set(client.headers))
     if missing_auth:
-        raise SystemExit(f"missing auth headers for: {', '.join(missing_auth)}. Provide tokens or omit --no-login.")
+        raise SystemExit(
+            f"missing auth headers for: {', '.join(missing_auth)}. "
+            "Provide a pre-issued token argument, AXIS_BENCH_*_TOKEN environment variable, or token file."
+        )
     print(f"TARGET {client.base_url}")
     print(f"PROFILE {'custom' if args.endpoint_file else args.profile}")
     if not args.endpoint_file:
@@ -438,15 +444,13 @@ def main() -> None:
             print(line)
             print_errors(results, limit=3)
 
-    if not args.no_auth_sample:
-        if args.no_login or args.endpoint_file:
-            print("\nAUTH_SAMPLE skipped for custom/no-login mode")
-        else:
-            run_auth_sample(client, required_auths)
-            client.login(required_auths)
-            print("\nTOKENS refreshed after auth sample")
+    if args.auth_sample:
+        run_auth_sample(client, endpoints)
 
-    print(f"\nMIXED_READ_STEPS duration={args.duration:g}s stop_if(err>5% or p95>5000ms)")
+    print(
+        f"\nMIXED_READ_STEPS duration={args.duration:g}s "
+        f"stop_if(err>{args.max_error_rate:g}% or p95>{args.max_p95_ms:g}ms)"
+    )
     for concurrency in steps(args.max_concurrency, args.steps):
         results, elapsed = run_for_duration(client, endpoints, concurrency, args.duration)
         summary = summarize(results)
@@ -455,7 +459,7 @@ def main() -> None:
         print_slowest_groups(results)
         print_slowest_endpoints(results, args.slow_detail_limit)
         print_errors(results)
-        if summary["err_pct"] > 5 or summary["p95"] > 5000:
+        if summary["err_pct"] > args.max_error_rate or summary["p95"] > args.max_p95_ms:
             print("  STOP threshold reached")
             break
 
@@ -474,7 +478,7 @@ def main() -> None:
                 summary["qps"] = len(results) / elapsed if elapsed else 0.0
                 print(f"  c={concurrency:2d} {format_summary(summary)}")
                 print_errors(results, limit=3)
-                if summary["err_pct"] > 2 or summary["p95"] > 8000:
+                if summary["err_pct"] > args.max_error_rate or summary["p95"] > args.max_p95_ms:
                     break
 
 

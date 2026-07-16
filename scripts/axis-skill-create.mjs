@@ -10,12 +10,12 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const skillNamePattern = /^(?:axis|orbit)-[a-z0-9][a-z0-9-]*$/;
 const axisSkillCategories = [
-  'doc',
   'code',
-  'test',
-  'skill',
-  'ops',
+  'doc',
   'integration',
+  'ops',
+  'test',
+  'tools',
   'trade',
 ];
 const axisCategorizedSkillPattern = new RegExp(
@@ -67,12 +67,12 @@ function defaultValidator() {
 
 function ensureSkillName(name) {
   if (!skillNamePattern.test(name)) {
-    throw new Error(`Skill name must look like axis-skill-example or orbit-example-skill: ${name}`);
+    throw new Error(`Skill name must look like axis-tools-skill-example or orbit-example-skill: ${name}`);
   }
   if (name.startsWith('axis-') && !axisCategorizedSkillPattern.test(name)) {
     throw new Error(
       `New Axis skill names must use axis-{category}-<action>, where category is one of ` +
-      `${axisSkillCategories.join(', ')}: ${name}`,
+      `${axisSkillCategories.join(', ')}; meta-tools must use axis-tools- and axis-skill- is retired: ${name}`,
     );
   }
   return name;

@@ -21,10 +21,13 @@ Region version:
 
 - Use the Yunxiao instance access domain.
 - Use paths under `/oapi/v1/codeup`.
+- Pass the exact self-hosted HTTPS hostname with both `--domain` and `--allowed-host`. This is an explicit trust decision; suffix matching is never used.
 
 ## Authentication
 
 Send the API token in the `x-yunxiao-token` request header. Never pass the token itself as a command-line argument.
+
+The helper requires HTTPS and blocks redirects before sending token-bearing requests. The official center host is trusted by exact name. A self-hosted region instance must be explicitly allowlisted by exact hostname.
 
 ## Repository Lookup
 

@@ -11,7 +11,7 @@ Use this skill to assess, correct, record, and route proposed investment plans. 
 
 For a new entry, add, replacement entry leg, or any other exposure increase, the plan gate must prove that the proposal uses current eligible research, matches the approved trading system, fits current portfolio constraints, and is explicitly confirmed before it becomes active. A purely protective or risk-reducing exit uses the separate `risk_reduction_exception` contract below: it still requires exact holding and quantity evidence and explicit confirmation, but missing, stale, or incomplete entry research by itself cannot force continued exposure. This skill never executes a transaction. No order execution: never execute or place a trade.
 
-## Use When
+## When to Use
 
 Use this skill when the user wants to:
 
@@ -28,7 +28,7 @@ Do not use this skill to research an asset from scratch, change trading-system p
 
 Never log in to a broker or exchange, call a trading API, prepare a signed transaction, open a wallet signing flow, transfer funds, or claim that recording an active plan means an order was or will be executed.
 
-## Hard Gate Principles
+## Safety and Boundaries
 
 - An entry or exposure-increase proposal must not become an active plan unless research is current and `eligible`, every mandatory system rule passes, portfolio capacity is verified, and the user confirms the exact corrected version.
 - A proposal that does not comply must be labeled `blocked_nonconforming`, `blocked_insufficient_evidence`, or `blocked_disqualifying_risk`. Explain the failure, propose bounded corrections where possible, and do not create an active plan.
@@ -37,7 +37,7 @@ Never log in to a broker or exchange, call a trading API, prepare a signed trans
 - No gate may claim that eligible means safe, profitable, suitable in every circumstance, or free of fundamental risk.
 - A risk-reducing exit deserves special handling: missing entry research or an imperfect original plan must not be used to pressure the user to remain exposed. The exit still needs exact holding identity, quantity bounds, and residual-risk checks.
 
-## Required Inputs
+## Inputs
 
 Resolve or explicitly mark missing:
 
@@ -142,11 +142,18 @@ Default to `high`.
 
 Never downgrade reasoning to make a plan pass more quickly.
 
-## Output and Handoff
+## Outputs
 
 Return the plan version, canonical `asset_id`, `gate_status`, `confirmation_status`, lifecycle state, failed and passed rules, required corrections, calculations, pinned `system_hash`, pinned `research_hash`, residual risks, and canonical proposal path.
 
 Allowed next actions are `request exact confirmation`, `apply user-approved corrections as a new proposal version`, `refresh research`, `request portfolio reconciliation`, `request system-parameter evaluation`, `record declined`, or `stop`. No output from this skill authorizes or performs execution.
+
+## Checks
+
+- Identity, units, current `system_hash`, current `research_hash`, and portfolio capacity are verified.
+- Gate and confirmation states follow the allowed lifecycle; blocked proposals never enter the active index.
+- Sizing, residual exposure, required corrections, immutable versioning, and the `risk_reduction_exception` boundary are explicit.
+- The final report states that this workflow performed no order execution.
 
 ## After Use Deposition
 

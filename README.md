@@ -61,33 +61,35 @@ scripts/                 # 可选：可复用校验或执行脚本
 
 ### 当前提供的 skills
 
-合并与命名规则见 [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md)：当前所有 packaged skills 均使用 `axis-{category}-xxx` 命名，按职责家族整合，暂不做目录级合并。
+合并与命名规则见 [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md)：结果型 packaged skills 使用 `axis-{category}-xxx`，元工具统一使用 `axis-tools-xxx`，按职责家族整合。
 
 | 类别 | Skill | 使用场景 |
 | --- | --- | --- |
 | 云监控与平台 | `axis-ops-ali-dashboard` | 创建、修复或校验阿里云 CloudMonitor/SLS 仪表盘 JSON、下钻动作和业务流大屏。 |
-| 性能与容量 | `axis-test-benchmark` | 对 API、本地模块、服务依赖链路、吞吐、延迟、并发或容量做基准测试。 |
-| 性能与容量 | `axis-code-api-performance-tuning` | 压测或基准测试发现读接口慢，需要在保证正确性的前提下优化延迟。 |
-| 缺陷与架构 | `axis-code-bugfix` | 排查并修复缺陷、生产错误、压测失败、偶发问题或日志截图中的根因问题。 |
-| 缺陷与架构 | `axis-code-arch-optimize` | 局部方法修复需要上升为共享架构能力、中间件、适配器或横切模块。 |
-| 研发实现 | `axis-test-tdd` | 实现功能、修复缺陷、重构或行为变更前，先明确测试和验收口径。 |
+| 性能与容量 | `axis-test-benchmark` | 以默认公开、无登录方式测量 API、本地模块、吞吐、延迟、并发或容量。 |
+| 性能与容量 | `axis-code-api-performance-tuning` | 已有慢读测量证据且要求修改实现或查询，在保持业务正确性的前提下优化。 |
+| 缺陷与架构 | `axis-code-bugfix` | 对可观察的软件故障先定位根因，再做最小修复。 |
+| 缺陷与架构 | `axis-code-arch-optimize` | 多处局部实现已证明存在同一可复用横切边界时，提升为共享架构能力。 |
+| 研发实现 | `axis-test-tdd` | 用户明确要求 TDD/红绿重构，或主代码技能有条件交接测试优先方法时使用。 |
 | 测试验证 | `axis-test-side-effects` | 测试真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作。 |
-| 测试验证 | `axis-test-report` | 将 build、lint、test、benchmark 或压测验证结果采集为 Axis v0.2 测试报告包。 |
-| 文档设计 | `axis-doc-development` | 统一输出、生成、修正或迭代已有/规划功能文档，完成需求问询、原始稿扩写、技术与数据库设计、影响更新和修订归档。 |
-| 文档设计 | `axis-doc-project-knowledge` | 首次生成或持续梳理全局架构、业务清单、逐域详细设计、元数据和文档缺口。 |
+| 测试验证 | `axis-test-report` | 用户明确要求把已有验证证据打包为 Axis v0.2 测试报告时使用；不执行底层测试。 |
+| 文档设计 | `axis-doc-development` | 为单个已有/规划功能产出开发文档集与项目知识变更集，不直接改正式知识或上传。 |
+| 文档设计 | `axis-doc-project-knowledge` | 首次建立或梳理唯一正式的全局、清单、一级、二级、导航与缺口知识集。 |
 | 文档设计 | `axis-doc-drift-capture` | 任务或 PR 完成后记录 task_execution_record、version_iteration_record 和文档漂移影响范围。 |
-| 文档看板 | `axis-doc-dashbord` | 启动并打开独立文档看板；本地应用缺失时，一次确认拉取公开仓库或使用模板本地自建。 |
+| 文档看板 | `axis-doc-dashboard` | 启动并打开独立文档看板；本地应用缺失时，一次确认拉取公开仓库或使用模板本地自建。 |
 | 文档设计 | `axis-doc-project-init` | 通过一次汇总确认配置或迁移 Axis v0.2 的组织、项目、OSS、发布、目录和语言设置。 |
-| 留档与发布 | `axis-code-capture` | 将编码、重构、缺陷修复或架构工作采集为执行报告和经验卡片。 |
+| 文档审查 | `axis-doc-contract-review` | 逐条审查 Word/DOCX 合同或用户协议，并分别交付批注回应版和发布清洁版。 |
+| 留档与发布 | `axis-code-capture` | 用户明确要求时，将已完成编码证据打包为执行报告和经验卡片。 |
 | 留档与发布 | `axis-ops-oss-publish` | 校验、脱敏、dry-run、同步 v0.2 项目文档或上传项目内不可变包。 |
+| 元工具 | `axis-tools-prompt-create` | 通过多数据源、不同模型等级的盲测创建、改进并选择稳健提示词。 |
+| 元工具 | `axis-tools-skill-create` | 作为唯一 skill 创建入口，扫描、创建、审查或重构公开安全的 Axis/Orbit skill。 |
+| 元工具 | `axis-tools-skill-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
 | 投资治理 | `axis-trade-system-governance` | 对交易系统和参数变更执行提案、评价、明确审批、版本化、验证与回滚门禁。 |
 | 投资治理 | `axis-trade-portfolio-ledger` | 维护 A 股、加密资产、现金及可扩展资产类别的本地台账、估值和风险敞口。 |
 | 投资治理 | `axis-trade-risk-research` | 使用当前官方来源调研投资候选的基本面、监管、协议、托管与流动性风险。 |
 | 投资治理 | `axis-trade-plan-gate` | 对新增、加仓、减仓、离场和观察计划执行交易系统、调研与组合风险准入。 |
 | 投资治理 | `axis-trade-daily-brief` | 只读监控持仓、有效计划和关注资产，生成带来源、覆盖状态和推送回执的每日简报。 |
-| Skill 生命周期 | `axis-skill-create` | 扫描对话中的可复用技能机会，并判断是否适合创建公开安全的 Axis/Codex skill。 |
-| Skill 生命周期 | `axis-skill-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
-| 代码平台 | `axis-integration-yunxiao-codeup` | 通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。 |
+| 代码平台 | `axis-integration-yunxiao-codeup` | 通过受信 HTTPS Codeup OpenAPI 查询仓库或创建一个明确请求的合并请求。 |
 
 ### 准备事项
 
@@ -154,6 +156,8 @@ axis install --agent codex --force
 
 安装会复制完整 skill bundle，包括 `SKILL.md`、`agents/`、`references/` 和 `scripts/` 等目录。
 
+从旧的 `axis-create-skill`、`axis-skill-create` 或 `axis-skill-update` 迁移时，先用 `--dry-run --force` 预览，再执行 `--force`。安装器会先备份旧目录再将其退役；不带 `--force` 时会阻止删除本地旧内容。
+
 ### 刷新 skills
 
 从仓库拉取最新版本、安装到本机并校验：
@@ -194,6 +198,8 @@ axis project-init --repo /path/to/project --answers-file /tmp/project-init-answe
 .axis/config.yml
 .gitignore
 ```
+
+`.gitignore` 会固定包含 `.axis/config.local.yml`、`.axis/docs/` 和 `.axis/outbox/`，因此生成的项目文档与发布包只保留在本地，不进入 Git；skill 自身的提示词、模板、公开安全评测源数据和校验脚本仍作为源码维护。
 
 v0.2 项目使用 organization registry 解析 OSS profile。项目配置只声明 `organization.id`、`project.slug` 和 `oss.profile`；`metadata.json` / `manifest.json` 中的 organization、project、OSS、repo/run 字段由工具生成快照，不需要也不允许人工二次配置。
 
@@ -266,7 +272,7 @@ v0.2 OSS 统一使用 `{prefix}/orgs/{organization_id}/projects/{project_slug}` 
 
 ### 本地文档看板
 
-页面已拆分到公开仓库 [togally/axis-document-review](https://github.com/togally/axis-document-review)。使用 `axis-doc-dashbord` skill 检查、启动并打开本地页面；当前文档列表保持 canonical 路径不变，`_archive` 版本只在“历史追溯”面板中出现。若独立应用不存在，skill 会一次询问是拉取公开仓库还是使用内置模板本地自建，不会未经确认执行拉取。
+页面已拆分到公开仓库 [togally/axis-document-review](https://github.com/togally/axis-document-review)。使用 `axis-doc-dashboard` skill 检查、启动并打开本地页面；当前文档列表保持 canonical 路径不变，`_archive` 版本只在“历史追溯”面板中出现。若独立应用不存在，skill 会一次询问是拉取公开仓库还是使用内置模板本地自建，不会未经确认执行拉取。
 
 OSS 发布前，在 shell 环境中设置 `.axis/config.yml` 里声明的环境变量：
 
@@ -293,17 +299,17 @@ node scripts/axis-skill-create.mjs --scan-conversation /tmp/conversation.txt --j
 node scripts/axis-skill-create.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
-  --name axis-skill-example \
-  --description "Use when API evidence should become a reusable public-safe workflow." \
-  --body-file /tmp/axis-skill-example.md \
+  --name axis-tools-skill-example \
+  --description "Use when API evidence should become a reusable public-safe workflow. / 用于将 API 证据沉淀为可复用的公开安全工作流。" \
+  --body-file /tmp/axis-tools-skill-example.md \
   --deposit --commit --push --branch main
 ```
 
 把已有本地 Codex skill 沉淀到本仓库：
 
 ```bash
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example --commit --push --branch main
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example --commit --push --branch main
 ```
 
 沉淀脚本会复制完整 bundle，使用 Codex `quick_validate.py` 校验，并更新 `skills/manifest.json`。
@@ -328,6 +334,7 @@ npm test
 npm run test:cli
 npm run test:local-outbox
 npm run test:skill-deposit
+npm run test:tools-skill-namespace
 npm run test:axis-skills
 npm run test:public-governance
 ```
@@ -335,7 +342,7 @@ npm run test:public-governance
 直接校验某个 skill bundle：
 
 ```bash
-python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-skill-create
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-tools-skill-create
 ```
 
 提交 skill 变更前，至少运行：
@@ -412,33 +419,35 @@ scripts/                 # Optional reusable validators or runners
 
 ### Available Skills
 
-See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md) for consolidation and naming rules. All packaged skills use the `axis-{category}-xxx` naming format and are integrated by capability family instead of directory-level merges.
+See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md) for consolidation and naming rules. Outcome-oriented packaged skills use `axis-{category}-xxx`; meta-tools use `axis-tools-xxx`.
 
 | Category | Skill | When to use it |
 | --- | --- | --- |
 | Cloud monitoring and platforms | `axis-ops-ali-dashboard` | Create, repair, or validate Alibaba Cloud CloudMonitor/SLS dashboard JSON, drilldowns, and business-flow dashboards. |
-| Performance and capacity | `axis-test-benchmark` | Benchmark APIs, local modules, service dependency paths, throughput, latency, concurrency, or capacity. |
-| Performance and capacity | `axis-code-api-performance-tuning` | Optimize slow read endpoints found by benchmarks or load tests while preserving correctness. |
-| Bugfix and architecture | `axis-code-bugfix` | Diagnose and fix bugs, production errors, failed benchmarks, flaky behavior, or pasted log failures. |
-| Bugfix and architecture | `axis-code-arch-optimize` | Promote local method fixes into shared architecture capabilities, middleware, adapters, or cross-cutting modules. |
-| Implementation | `axis-test-tdd` | Define tests and acceptance criteria before implementing features, bugfixes, refactors, or behavior changes. |
+| Performance and capacity | `axis-test-benchmark` | Measure APIs, local modules, throughput, latency, concurrency, or capacity with public/no-login defaults. |
+| Performance and capacity | `axis-code-api-performance-tuning` | Change implementation or queries for a measured slow read while preserving business correctness. |
+| Bugfix and architecture | `axis-code-bugfix` | Find and minimally repair the root cause of an observed software failure. |
+| Bugfix and architecture | `axis-code-arch-optimize` | Promote repeated local implementations into one demonstrated shared cross-cutting boundary. |
+| Implementation | `axis-test-tdd` | Use when TDD is explicitly requested or conditionally selected by an owning code workflow. |
 | Testing and verification | `axis-test-side-effects` | Test backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. |
-| Testing and verification | `axis-test-report` | Capture build, lint, test, benchmark, or pressure-test evidence as an Axis v0.2 test report package. |
-| Documentation and design | `axis-doc-development` | Export, generate, correct, or iterate existing/planned feature documents with discovery, master-draft expansion, technical/database depth, impact updates, and revision archives. |
+| Testing and verification | `axis-test-report` | Package existing validation evidence when explicitly requested; it does not execute the underlying tests. |
+| Documentation and design | `axis-doc-development` | Produce one feature's development-document set and a separate project-knowledge change set without editing canonical knowledge or uploading. |
 | Documentation and design | `axis-doc-project-knowledge` | Bootstrap or reconcile global architecture, business inventory, one overview per level-1 capability, independent secondary-capability designs, navigation, metadata, and document gaps. |
 | Documentation and design | `axis-doc-drift-capture` | Record task execution, version iteration impact, and affected documents after a task or PR completes. |
-| Document dashboard | `axis-doc-dashbord` | Start and open the standalone document dashboard; when missing, ask once before pulling or scaffolding it locally. |
+| Document dashboard | `axis-doc-dashboard` | Start and open the standalone document dashboard; when missing, ask once before pulling or scaffolding it locally. |
 | Documentation and design | `axis-doc-project-init` | Configure or migrate Axis v0.2 organization, project, OSS, release, directory, and language settings with one consolidated confirmation. |
-| Deposition and release | `axis-code-capture` | Capture coding, refactor, bugfix, or architecture work as execution reports and experience cards. |
+| Document review | `axis-doc-contract-review` | Review Word/DOCX contracts or user agreements comment by comment and deliver separate annotated-response and publication-clean files. |
+| Deposition and release | `axis-code-capture` | Package completed coding evidence as an execution report and experience card when explicitly requested. |
 | Deposition and release | `axis-ops-oss-publish` | Validate, redact, dry-run, synchronize v0.2 project documents, or upload immutable packages inside a project. |
+| Meta-tools | `axis-tools-prompt-create` | Create, refine, and select robust prompts through blind evaluation across source kinds and model tiers. |
+| Meta-tools | `axis-tools-skill-create` | Act as the single skill-creation entrypoint for scanning, creating, reviewing, or refactoring public-safe Axis/Orbit skills. |
+| Meta-tools | `axis-tools-skill-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
 | Investment governance | `axis-trade-system-governance` | Gate trading-system parameter changes through proposal, evaluation, explicit approval, versioning, verification, and rollback. |
 | Investment governance | `axis-trade-portfolio-ledger` | Maintain a local ledger, valuation view, and risk exposures across A-shares, crypto assets, cash, and extensible asset classes. |
 | Investment governance | `axis-trade-risk-research` | Research fundamental, regulatory, protocol, custody, and liquidity risks with current official sources. |
 | Investment governance | `axis-trade-plan-gate` | Gate open, add, reduce, exit, and watch plans against the approved system, research, and portfolio capacity. |
 | Investment governance | `axis-trade-daily-brief` | Read holdings, active plans, and watched assets to produce a source-backed daily brief with coverage and delivery status. |
-| Skill lifecycle | `axis-skill-create` | Scan conversations for reusable skill opportunities and decide whether to create a public-safe Axis/Codex skill. |
-| Skill lifecycle | `axis-skill-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
-| Code platform | `axis-integration-yunxiao-codeup` | Query Codeup repositories, create merge requests, or support Git review through Yunxiao Codeup OpenAPI. |
+| Code platform | `axis-integration-yunxiao-codeup` | Query repositories or create one explicitly requested merge request through a trusted HTTPS Codeup endpoint. |
 
 ### Prerequisites
 
@@ -505,6 +514,8 @@ axis install --agent codex --force
 
 Installation copies the full bundle, including `SKILL.md`, `agents/`, `references/`, and `scripts/` where present.
 
+When migrating from `axis-create-skill`, `axis-skill-create`, or `axis-skill-update`, preview with `--dry-run --force`, then run with `--force`. The installer backs up and retires the old directories; without `--force` it refuses to remove local legacy content.
+
 ### Refresh Skills
 
 Pull the latest repository version, install locally, and validate:
@@ -545,6 +556,8 @@ The apply flow creates or updates:
 .axis/config.yml
 .gitignore
 ```
+
+`.gitignore` always includes `.axis/config.local.yml`, `.axis/docs/`, and `.axis/outbox/`, so generated project documents and publication packages remain local and outside Git. Prompt sources, templates, public-safe evaluation cases, and validators inside skill bundles remain maintained source assets.
 
 Axis v0.2 projects resolve OSS profiles through an organization registry. Project config only declares `organization.id`, `project.slug`, and `oss.profile`; organization, project, OSS, and repo/run fields in `metadata.json` and `manifest.json` are generated snapshots, not manually duplicated configuration.
 
@@ -615,7 +628,7 @@ All v0.2 OSS targets use `{prefix}/orgs/{organization_id}/projects/{project_slug
 
 ### Local Document Dashboard
 
-The page now lives in the public [togally/axis-document-review](https://github.com/togally/axis-document-review) repository. Use the `axis-doc-dashbord` skill to inspect, start, and open it. Current canonical documents remain in the normal list; `_archive` revisions appear only in the history trace panel. When the standalone app is missing, the skill asks once whether to pull the public repository or scaffold the bundled local template; it never pulls without confirmation.
+The page now lives in the public [togally/axis-document-review](https://github.com/togally/axis-document-review) repository. Use the `axis-doc-dashboard` skill to inspect, start, and open it. Current canonical documents remain in the normal list; `_archive` revisions appear only in the history trace panel. When the standalone app is missing, the skill asks once whether to pull the public repository or scaffold the bundled local template; it never pulls without confirmation.
 
 Local preferences can live in `.axis/config.local.yml`, such as dry-run mode or a local redaction-pattern file path. Keep that file local, do not commit it, and do not place real credentials in it.
 
@@ -644,17 +657,17 @@ Create a confirmed public-safe skill and deposit it into the repo:
 node scripts/axis-skill-create.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
-  --name axis-skill-example \
-  --description "Use when API evidence should become a reusable public-safe workflow." \
-  --body-file /tmp/axis-skill-example.md \
+  --name axis-tools-skill-example \
+  --description "Use when API evidence should become a reusable public-safe workflow. / 用于将 API 证据沉淀为可复用的公开安全工作流。" \
+  --body-file /tmp/axis-tools-skill-example.md \
   --deposit --commit --push --branch main
 ```
 
 Deposit an existing local Codex skill into this repository:
 
 ```bash
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example --commit --push --branch main
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example --commit --push --branch main
 ```
 
 The deposit script copies the full bundle, validates it with Codex `quick_validate.py`, and updates `skills/manifest.json`.
@@ -679,6 +692,7 @@ Focused tests:
 npm run test:cli
 npm run test:local-outbox
 npm run test:skill-deposit
+npm run test:tools-skill-namespace
 npm run test:axis-skills
 npm run test:public-governance
 ```
@@ -686,7 +700,7 @@ npm run test:public-governance
 Validate one skill bundle directly:
 
 ```bash
-python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-skill-create
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-tools-skill-create
 ```
 
 Before committing skill changes, run at least:

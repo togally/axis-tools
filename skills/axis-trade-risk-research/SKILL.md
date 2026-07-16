@@ -11,7 +11,7 @@ Use this skill to produce a current, source-backed risk review for a precisely i
 
 The output is an evidence snapshot and eligibility opinion, not a promise that the asset is safe, not a price forecast, and not an instruction to trade. A scoped review does not prove risk absence.
 
-## Use When
+## When to Use
 
 Use this skill when the user wants to:
 
@@ -25,7 +25,7 @@ Use this skill when the user wants to:
 
 Do not use this skill to place, simulate, or route an order; connect to a broker, exchange, wallet, or signing device; move funds; alter a trading-system parameter; approve a plan; or claim that an asset has no risk. Use the portfolio workflow for holdings reconciliation and the system-governance workflow for parameter changes.
 
-## Core Safety Contract
+## Safety and Boundaries
 
 - Treat financial facts, laws, listings, audits, governance proposals, token supplies, security incidents, and corporate disclosures as time-sensitive. Research them live unless the user explicitly requests a historical as-of review.
 - Prefer official primary sources. Secondary sources may help discover an event, but they cannot be the sole support for a material eligibility conclusion.
@@ -35,7 +35,7 @@ Do not use this skill to place, simulate, or route an order; connect to a broker
 - Do not silently repair the user's thesis, asset identity, horizon, or intended action. State the correction needed and return the appropriate non-eligible status.
 - Do not expose account identifiers, wallet addresses, credentials, private API endpoints, or exact private holdings in a public skill bundle or public research example.
 
-## Required Inputs
+## Inputs
 
 Resolve these before making an eligibility judgment:
 
@@ -128,11 +128,18 @@ Default to `high` because the workflow affects financial risk and requires multi
 
 Never lower the reasoning level merely to avoid current research.
 
-## Handoff Boundary
+## Outputs
 
 This skill may recommend `proceed to plan gate`, `correct and re-review`, `do not establish the plan`, or `protective-exit review`. It cannot create or activate an investment plan, change an approved parameter, or execute a transaction. `$axis-trade-plan-gate` owns plan eligibility and user confirmation.
 
 No order execution: never execute or place a trade.
+
+## Checks
+
+- Exact asset identity, intended action, review scope, reporting period, evidence cut-off, and official primary sources are recorded.
+- Decisive claims resolve to current source evidence; contradictions, missing evidence, residual risks, and invalidation triggers remain explicit.
+- `research_status`, `fundamental_status`, `valid_until`, and `content_hash` match the immutable snapshot and index.
+- Only eligible research supports risk-increasing plans; all other statuses hand off corrections, blockers, or protective-exit limitations.
 
 ## After Use Deposition
 

@@ -1,30 +1,43 @@
 ---
 name: axis-code-capture
-description: Use when coding, refactor, bugfix, or architecture work needs a public-safe Axis v0.2 execution report and reusable experience card in the local outbox. / 用于将编码、重构、缺陷修复或架构工作采集为公开安全的 Axis v0.2 执行报告和经验卡片。
+description: Use when the user explicitly asks to package completed coding work as an Axis v0.2 execution report and reusable experience card. / 用于用户明确要求将已完成的编码工作打包为 Axis v0.2 执行报告和可复用经验卡片。
 ---
 
 # Coding Capture
 
-Use this skill after implementation work to create a public-safe Axis v0.2 package. The package is written under the organization-scoped local outbox and can later be validated or published.
+Create one public-safe `coding_capture` package from verified implementation evidence. This skill records completed work; it does not diagnose, implement, test, or publish that work.
 
-## Boundary
+## When to Use
 
-- Require a valid v0.2 project configuration before capture. If the config is missing or still v0.1, invoke `axis-doc-project-init` and complete its conversational confirmation flow.
-- Use the deterministic CLI; never hand-write `manifest.json` or `metadata.json`.
-- The package contains `manifest.json`, `metadata.json`, `report.md`, and `experience.md`.
-- Do not paste credentials, private URLs, customer data, internal ticket links, or raw unredacted logs.
+- The user explicitly asks to capture, archive, or package completed coding, refactor, bugfix, or architecture work.
+- An Axis v0.2 execution report and `experience.md` are the requested outputs.
+
+## Do Not Use
+
+- Do not trigger automatically after ordinary coding work.
+- Use the relevant `axis-code-*` skill to diagnose or implement the change.
+- Use `$axis-test-report` when the requested artifact is a validation-only report package.
+- Use `$axis-doc-drift-capture` for task/version records and document-drift classification.
+- Do not create all capture types unless the user explicitly asks for each one.
+
+## Inputs
+
+- Repository with a validated Axis v0.2 project configuration.
+- Completed change summary, changed modules or files, API/data/config impact, and verification evidence.
+- Public-safe title, summary, status, tags, report content, and optional reusable experience.
+- Known gaps, failed or skipped checks, and release or publication intent.
 
 ## Workflow
 
-1. Run `axis validate-config --repo <repo>` and confirm `contract_version: "0.2"` plus the organization-scoped OSS profile.
-2. Prepare public-safe `report.md` and `experience.md`.
-3. Write the package:
+1. Run `axis validate-config --repo <repo>` and confirm `contract_version: "0.2"` plus the organization and project identity. If migration is required, use `$axis-doc-project-init` and complete its confirmation flow.
+2. Prepare a concise public-safe report and experience card. Mark missing evidence instead of inventing it.
+3. Create the package with the deterministic CLI:
 
 ```bash
 axis coding-capture \
   --repo <repo> \
-  --title "Demo Project Coding Capture" \
-  --summary "Public-safe coding capture for the demo-project change." \
+  --title "Public-safe coding capture" \
+  --summary "Verified implementation evidence." \
   --status informational \
   --tag coding-capture \
   --report-file /tmp/coding-report.md \
@@ -32,32 +45,31 @@ axis coding-capture \
 ```
 
 4. Inspect the returned `.axis/outbox/v0.2/<organization_id>/<project_slug>/<run_id>/` package.
-5. Validate or publish it with `axis-ops-oss-publish`.
+5. Use `$axis-ops-oss-publish` only for local validation or after a separate explicit upload decision.
 
-## Report Sections
+## Outputs
 
-Use these sections unless the user provides an approved template:
+- One package containing `manifest.json`, `metadata.json`, `report.md`, and `experience.md`.
+- Returned run id and package-relative location.
+- Report sections covering requirement, implementation, changed scope, API/data/config impact, verification, risk, and reusable lessons.
+- Clear status for failed, skipped, blocked, or unverified evidence.
 
-```markdown
-## 需求理解摘要
-## 实现摘要
-## 文件改动摘要
-## API/数据模型变化
-## 验证命令
-## 风险和后续事项
-## 可复用经验卡片
-```
+## Safety and Boundaries
 
-Keep request summary, implementation summary, changed modules, API/data-model/config impact, verification commands and results, risks and follow-ups, and a reusable public-safe lesson in those sections.
+- Use the CLI; never hand-write package manifests or metadata.
+- Never include credentials, tokens, private URLs, customer data, internal issue links, raw unredacted logs, or private absolute paths.
+- Local capture does not authorize OSS upload. Dry-run or `--local-only` validation may proceed locally; external upload requires explicit current-run user confirmation.
+- Keep `release.channel: private_beta` by default. A public release requires `release.gate: passed` and separate release authority.
+- Do not claim implementation or verification that is absent from the supplied evidence.
 
-## Validation
+## Checks
 
-- `manifest.schema_version`, `metadata.schema_version`, and all four protocol declarations are `0.2`.
-- Organization, project, OSS profile, release, checksum, and public-safety snapshots are present.
-- `release.channel` is `private_beta` by default and `release.gate` must be `passed` before public release.
-- Package files match the manifest and public-safety validation is `passed`.
-- No secret value appears in stdout, stderr, or package files.
+- Schema, metadata, protocol declarations, organization, project, release, checksum, and public-safety snapshots are valid Axis v0.2 values.
+- `manifest.files` matches the four package files and checksums.
+- Package status matches the evidence; failed or skipped checks remain visible.
+- No secret value or private endpoint appears in stdout, stderr, or package files.
+- No OSS upload occurred without explicit confirmation.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+If capture produced a reusable report rule, redaction check, validation command, or edge case, update this skill bundle, validate it, refresh the local copy, and push when permissions allow. Otherwise report that no skill update is needed.

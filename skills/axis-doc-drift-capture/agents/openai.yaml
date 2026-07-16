@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-doc-drift-capture"
-  short_description: "Capture task and document drift records / 记录任务执行和文档漂移"
-  default_prompt: "Use $axis-doc-drift-capture to record task execution, version iteration impact, and affected project knowledge documents after this repository change."
+  short_description: "Capture task records and document drift / 记录任务执行与文档漂移"
+  default_prompt: "Use $axis-doc-drift-capture to create public-safe task and version records, classify affected canonical documents, and recommend follow-up without rewriting project knowledge."
 
 policy:
   allow_implicit_invocation: true

@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-doc-dashboard"
+  short_description: "Start and verify the Axis document dashboard / 启动并核验 Axis 文档看板"
+  default_prompt: "Use $axis-doc-dashboard to locate or prepare the local app, ask once before cloning when it is missing, then start, open, and verify the intended Axis document catalog."
+
+policy:
+  allow_implicit_invocation: true

@@ -9,14 +9,22 @@ Use this skill to record, reconcile, value, and summarize a private cross-asset 
 
 Read [the portfolio ledger contract](references/portfolio-ledger-contract.md) before importing transactions, posting a reconciliation, calculating portfolio totals, or adding an asset class.
 
-## Use This Skill When
+## When to Use
 
 - The user wants to record or reconcile accounts, cash, A-share holdings, crypto assets, funds, liabilities, or other investments.
 - The user supplies statements, transaction exports, wallet or exchange summaries, deposits, withdrawals, transfers, fees, dividends, staking rewards, or corrections.
 - The user asks for portfolio value, cost, realized or unrealized P&L, allocation, concentration, liquidity, custody, currency, or counterparty exposure.
 - A new asset class or account needs to be added to the private `.axis/trade` workspace.
 
+## Do Not Use
+
 Do not use this skill to change trading-system parameters, approve an investment plan, research whether an asset should be purchased, generate a daily news brief, access execution credentials, or place orders.
+
+## Inputs
+
+- Authorized source statements, exports, connector snapshots, or user-supplied corrections with provenance and reporting period.
+- Account and canonical asset identities, cutoff time, timezone, native and base currency, funding-bucket policy, and reconciliation tolerance.
+- Existing `.axis/trade` registry, append-only ledger, import batches, valuations, snapshots, reconciliations, and audit history when present.
 
 ## Ledger Principles
 
@@ -101,7 +109,7 @@ Depending on the request, produce:
 
 Summaries must state the cutoff time, coverage, source quality, reconciliation status, stale inputs, excluded reserves, and any values that remain unknown.
 
-## Public and Private Safety
+## Safety and Boundaries
 
 - Public skill bundles contain only generic schemas, deterministic validators, and synthetic mock examples.
 - All actual accounts, balances, transactions, holdings, source documents, opaque aliases, reconciliations, valuations, snapshots, and audit events remain inside the user's private `.axis/trade` workspace.
@@ -112,7 +120,7 @@ Summaries must state the cutoff time, coverage, source quality, reconciliation s
 - No order execution: never execute or place a trade.
 - If current prices, FX, legal treatment, or product status materially affect the report, verify them from current authoritative sources and label unavailable evidence.
 
-## Validation
+## Checks
 
 A posted update or portfolio snapshot is valid only when:
 

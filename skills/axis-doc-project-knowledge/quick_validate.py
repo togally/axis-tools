@@ -3,82 +3,47 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
 
 
 REQUIRED_TERMS = {
-    "axis-doc-drift-capture": [
-        "Three-Step Work Contract",
-        "task_execution_record",
-        "version_iteration_record",
-        "affected_docs",
-        "doc_update_authorization",
-        "No Silent Approved-Doc Rewrite",
-        "After Use Deposition",
-    ],
     "axis-doc-project-knowledge": [
+        "When to Use",
+        "Do Not Use",
+        "Inputs",
+        "Outputs",
+        "Safety and Boundaries",
         "Three-Step Work Contract",
+        "Light Adversarial Review",
         "bootstrap",
         "scan_and_reconcile",
-        "requirement_design",
         "level1_capability_id",
-        "secondary_capabilities",
         "business_id",
         "business_inventory",
         "project_technical_architecture",
         "project_business_architecture",
-        "business_capability_detailed_design",
-        "secondary_capability_detailed_design",
-        "business/capabilities/{level1_capability_id}/detailed-design.md",
-        "business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md",
-        "doc_gap_report",
-        "missing_evidence",
-        "对外业务能力与接口实现",
-        "user_journey_design_status",
-        "user_journey_coverage",
-        "user_journey_gap_id",
-        "table_design_status",
-        "table_design_coverage",
-        "table_design_gap_id",
-        "表结构设计",
-        "table_id",
-        "ER diagram",
-        "level1_capability_dependency_graph",
-        "business/level1-capability-dependency-graph.yaml",
-        "dependency_graph_status",
-        "dependency_graph_revision",
-        "dependency_graph_gap_id",
-        "pending_level1_completion",
-        "not_derived",
-        "项目级统一模型梳理",
-        "直接入边",
-        "直接出边",
-        "Controller/Handler",
-        "Service/UseCase",
-        "读取数据",
-        "写入/产生数据",
-        "读写 `table_id`",
-        "ER 关系证据",
-        "用户可见结果",
-        "level1_journey_id",
-        "flow_id",
-        "api_id",
-        "interface_design_status",
-        "interface_coverage",
-        "调用主体、权限与接口矩阵",
-        "所需权限/策略",
-        "可调用接口/能力",
-        "授权证据",
-        "Section 5 is grouped by contract",
-        "接口清单与代码追溯",
-        "内部处理逻辑",
-        "认证与授权执行",
-        "事务、并发、性能与容错",
-        "安全、测试与验收",
-        "5.2.8",
-        "not_applicable",
+        "level-1 dependency graph",
+        "secondary_granularity_gate",
+        "one independently reviewable business outcome",
+        "reader_profile=compact",
+        "strict_full",
+        "does **not** require `3.N`",
+        "FileName:begin-end#symbol",
+        "secondary-capability-boundary-matrix-v3.1.md",
+        "$axis-tools-prompt-create",
+        "domain bundle retains its public-safe gold cases",
+        "OSS Upload Confirmation Gate",
+        "oss_upload_readiness=unavailable|ready",
+        "oss_upload_decision=pending|approved|declined",
+        "axis validate-config --repo <repo>",
+        "axis oss-publish --run-id <run_id> --dry-run",
+        "exact `run_id`, `target_prefix`",
+        "End the turn and wait",
+        "$axis-ops-oss-publish",
+        "Checks",
         "After Use Deposition",
     ],
 }
@@ -94,7 +59,7 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "| 实现层 | 精确定位 | 职责 |",
     "#### 5.1.2 内部处理逻辑",
     "处理说明：{concrete_internal_processing_summary}",
-    "| 步骤 | 内部处理 | 代码对象 | 数据读写/状态变化 | 失败处理 |",
+    "| 步骤 | 方法 | 业务作用 | 数据/状态变化 | 失败处理 |",
     "实际输出必须替换所有花括号内容",
     "#### 5.1.3 请求字段",
     "| 字段 | 位置 | 类型/必填 | 约束/枚举 | 业务语义/敏感处理 | 证据/状态 |",
@@ -120,6 +85,13 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "interface_not_applicable_reason",
     "interface_not_applicable_evidence",
     "table_id={parent_table_ids_or_not_applicable}",
+    "<!-- axis-document-metadata",
+    "<!-- axis-evidence:",
+    "业务相关字段",
+    "文件名:起始行-结束行#符号",
+    "同一张图只选择一种视角：业务或方法",
+    "每个方法节点只写一个具体方法调用",
+    "axis-implementation-machine-table",
 ]
 
 LEGACY_TOP_LEVEL_SEMANTIC_TITLES = {
@@ -146,6 +118,22 @@ def fail(message: str) -> int:
 
 def has_cjk(text: str) -> bool:
     return re.search(r"[\u3400-\u9fff]", text) is not None
+
+
+def html_comment_structure_error(text: str) -> str | None:
+    in_comment = False
+    for token in re.finditer(r"<!--|-->", text):
+        if token.group(0) == "<!--":
+            if in_comment:
+                return "nested HTML comments found"
+            in_comment = True
+        else:
+            if not in_comment:
+                return "unmatched HTML comment close found"
+            in_comment = False
+    if in_comment:
+        return "unclosed HTML comment found"
+    return None
 
 
 def parse_frontmatter(skill_md: str) -> dict[str, str]:
@@ -455,6 +443,22 @@ def validate(skill_dir: Path) -> int:
         if term not in skill_md:
             return fail(f"missing required term in SKILL.md: {term}")
 
+    if skill_name == "axis-doc-project-knowledge":
+        if re.search(r"(?m)^\s*\|\s*`requirement_design`\s*\|", skill_md):
+            return fail("retired requirement_design mode must not return")
+        if re.search(r"(?m)^##\s+requirement_design\s*$", skill_md):
+            return fail("retired requirement_design section must not return")
+        if "archive them through `$axis-doc-development`" in skill_md:
+            return fail("project knowledge must not call development for archival")
+        for reference in [
+            skill_dir / "references" / "project-knowledge-contracts.md",
+            skill_dir
+            / "references"
+            / "secondary-capability-boundary-matrix-v3.1.md",
+        ]:
+            if not reference.exists():
+                return fail(f"required reference not found: {reference.name}")
+
     if "$" + skill_name not in agent_yaml:
         return fail(f"agents/openai.yaml must mention ${skill_name}")
     if "allow_implicit_invocation: true" not in agent_yaml:
@@ -488,6 +492,76 @@ def validate(skill_dir: Path) -> int:
             return fail(readability_error)
 
     if skill_name == "axis-doc-project-knowledge":
+        candidate_manifest_path = (
+            skill_dir
+            / "references"
+            / "secondary-capability-prompt-candidates.json"
+        )
+        eval_cases_path = (
+            skill_dir / "references" / "secondary-capability-eval-cases.json"
+        )
+        evaluator_path = (
+            skill_dir / "scripts" / "evaluate_secondary_capability_prompts.mjs"
+        )
+        for required_path, label in [
+            (candidate_manifest_path, "granularity prompt candidate manifest"),
+            (eval_cases_path, "granularity prompt evaluation cases"),
+            (evaluator_path, "granularity prompt evaluator"),
+        ]:
+            if not required_path.exists():
+                return fail(f"{label} not found")
+        try:
+            candidate_manifest = json.loads(
+                candidate_manifest_path.read_text(encoding="utf-8")
+            )
+            eval_cases = json.loads(eval_cases_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            return fail(f"granularity evaluation JSON is invalid: {exc}")
+        selected_prompt_id = candidate_manifest.get("selected_prompt_id")
+        if selected_prompt_id != "boundary_matrix_v3_1":
+            return fail("selected granularity prompt id must be boundary_matrix_v3_1")
+        candidates = candidate_manifest.get("candidates", [])
+        selected_candidate = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.get("prompt_id") == selected_prompt_id
+            ),
+            None,
+        )
+        if not selected_candidate or not selected_candidate.get("prompt_file"):
+            return fail("selected granularity prompt manifest entry is missing")
+        references_dir = (skill_dir / "references").resolve()
+        selected_prompt_path = (
+            references_dir / selected_candidate["prompt_file"]
+        ).resolve()
+        if references_dir not in selected_prompt_path.parents:
+            return fail("selected granularity prompt escapes references directory")
+        if not selected_prompt_path.exists():
+            return fail("selected granularity prompt not found")
+        selected_prompt = selected_prompt_path.read_text(encoding="utf-8")
+        for term in [
+            "Atomic evidence census",
+            "must_split",
+            "must_merge",
+            "exactly once",
+            "one acceptance sentence",
+            "independent reverse audit",
+        ]:
+            if term not in selected_prompt:
+                return fail(f"selected granularity prompt missing: {term}")
+        if len(candidates) < 6:
+            return fail("granularity prompt evaluation requires six candidates")
+        cases = eval_cases.get("cases", [])
+        if len(cases) < 12:
+            return fail("granularity prompt evaluation requires twelve cases")
+        if len([case for case in cases if case.get("evaluation_stage") == "sealed"]) < 3:
+            return fail("granularity prompt evaluation requires three sealed cases")
+        if len(
+            [case for case in cases if case.get("evaluation_stage") == "final_holdout"]
+        ) < 3:
+            return fail("granularity prompt evaluation requires three final holdout cases")
+
         level1_overview_template_path = (
             skill_dir / "references" / "business-capability-detailed-design-template.md"
         )
@@ -496,6 +570,20 @@ def validate(skill_dir: Path) -> int:
         level1_overview_template = level1_overview_template_path.read_text(
             encoding="utf-8"
         )
+        comment_error = html_comment_structure_error(level1_overview_template)
+        if comment_error:
+            return fail(f"level-1 capability overview {comment_error}")
+        for term in [
+            "<!-- axis-document-metadata",
+            "<!-- axis-evidence:",
+            "| 二级能力 | 业务摘要 | 详情 |",
+            "每个节点只能表达一个最小业务动作、业务判断、业务状态或用户可见结果",
+            "同一张图不得混用业务节点与代码方法节点",
+        ]:
+            if term not in level1_overview_template:
+                return fail(f"level-1 reader contract missing: {term}")
+        if re.search(r"^>\s*文档(?:状态|版本)：", level1_overview_template, re.MULTILINE):
+            return fail("level-1 authoring metadata is reader-visible")
         if re.search(
             r"^##\s+\d+\.?\s+用户旅程覆盖契约\s*$",
             level1_overview_template,
@@ -540,7 +628,7 @@ def validate(skill_dir: Path) -> int:
             "table_id={table_id}",
             "| 字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 `api_id` | 证据 |",
             "| 原因 | {no_persistence_reason} |",
-            "| 证据 | {exact_repository_evidence} |",
+            "<!-- axis-evidence: {exact_repository_evidence} -->",
         ]:
             if term not in level1_overview_template:
                 return fail(
@@ -570,8 +658,8 @@ def validate(skill_dir: Path) -> int:
         if subsection_positions != sorted(subsection_positions):
             return fail("level-1 3.N.1/3.N.2/3.N.3 order is invalid")
         if not re.search(
-            r"-->\|\"\{api_id\}: \{method_and_path_or_event_job_command\}\"\|\s*"
-            r"secondary_1\[",
+            r"(?:-->|==>)\|\"\{api_id\}: \{method_and_path_or_event_job_command\}\"\|\s*"
+            r"secondary_1_\{secondary_capability_id\}\[",
             section3,
         ):
             return fail(
@@ -613,7 +701,7 @@ def validate(skill_dir: Path) -> int:
             return fail("level-1 ER entities must not use table_id placeholders")
         table_control_lines = [
             line
-            for line in table_design_section.group(1).splitlines()
+            for line in level1_overview_template.splitlines()
             if re.search(r"\btable_design_status\s*=", line)
             and re.search(r"\btable_design_coverage\s*=", line)
             and re.search(r"\btable_design_gap_id\s*=", line)
@@ -677,6 +765,9 @@ def validate(skill_dir: Path) -> int:
         if not interface_template_path.exists():
             return fail("secondary capability detailed-design template not found")
         interface_template = interface_template_path.read_text(encoding="utf-8")
+        comment_error = html_comment_structure_error(interface_template)
+        if comment_error:
+            return fail(f"secondary capability detailed-design template {comment_error}")
         for term in GROUPED_INTERFACE_TEMPLATE_TERMS:
             if term not in interface_template:
                 return fail(f"grouped interface template missing required term: {term}")
@@ -715,6 +806,10 @@ def validate(skill_dir: Path) -> int:
             re.MULTILINE,
         ):
             return fail("legacy duplicate identity or participant section found")
+        if re.search(r"^>\s*文档(?:状态|版本)：", interface_template, re.MULTILINE):
+            return fail("secondary authoring metadata is reader-visible")
+        if re.search(r"^##\s+\d+\.?\s+代码对象与关系\s*$", interface_template, re.MULTILINE):
+            return fail("secondary template repeats a top-level code-object chapter")
         for line in interface_template.splitlines():
             heading_match = re.fullmatch(
                 r"##\s+(?:\d+(?:\.\d+)*[.、]?\s*)?(.+?)\s*", line

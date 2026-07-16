@@ -9,14 +9,22 @@ Use this skill to initialize, inspect, evaluate, version, or change a trading sy
 
 Read [the system governance contract](references/system-governance-contract.md) before creating a proposal, applying a change, migrating an existing system, or validating the workspace.
 
-## Use This Skill When
+## When to Use
 
 - The user wants to establish or revise a trading-system rule, threshold, formula, scope, data source, or interpretation.
 - The user wants to tune entry, exit, position sizing, portfolio exposure, drawdown, profit protection, market-regime, evidence, or review parameters.
 - The user asks what changed between system versions, whether a proposed change is justified, or whether an approved change was applied correctly.
 - A local trading system needs to be initialized or migrated into the private `.axis/trade` state contract.
 
+## Do Not Use
+
 Do not use this skill to recommend or activate a specific investment plan, reconcile holdings, generate a daily brief, place orders, or access a broker or exchange. Those are separate outcomes.
+
+## Inputs
+
+- Current `.axis/trade/config.yaml`, active system, immutable version history, open proposals, audit events, and affected plans.
+- Exact requested rule or parameter change, rationale, evidence window, risk limits, approval expectations, and rollback conditions.
+- Missing samples, portfolio facts, execution constraints, and market evidence remain explicit gaps rather than inferred values.
 
 ## Governing Principle
 
@@ -87,7 +95,7 @@ Depending on the request, produce one or more of:
 
 Never describe an unverified or unapproved proposal as implemented.
 
-## Public and Private Safety
+## Safety and Boundaries
 
 - Structured state is canonical; rendered Markdown and summaries are derived views.
 - Personal financial data always stays in the private runtime workspace and never enters the public bundle.
@@ -99,7 +107,7 @@ Never describe an unverified or unapproved proposal as implemented.
 - Do not place orders, connect to execution endpoints, promise returns, or claim that the system eliminates loss.
 - Current market, legal, regulatory, or product facts must be verified from current authoritative sources when they materially affect an evaluation. Missing or inaccessible evidence remains explicitly unverified.
 
-## Validation
+## Checks
 
 An applied change is valid only when all of the following are true:
 

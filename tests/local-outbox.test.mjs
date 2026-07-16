@@ -376,6 +376,7 @@ await withTempDir(async (repo) => {
 
   const gitignore = await readFile(path.join(repo, '.gitignore'), 'utf8');
   assert.match(gitignore, /^\.axis\/config\.local\.yml$/m);
+  assert.match(gitignore, /^\.axis\/docs\/$/m);
   assert.match(gitignore, /^\.axis\/outbox\/$/m);
 });
 

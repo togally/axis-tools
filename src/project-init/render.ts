@@ -398,7 +398,7 @@ function renderLocalConfig(
 function renderGitignore(sourceText: string | null): string {
   const lines = (sourceText ?? '').replace(/\r\n/g, '\n').split('\n');
   if (lines.at(-1) === '') lines.pop();
-  for (const required of ['.axis/config.local.yml', '.axis/outbox/']) {
+  for (const required of ['.axis/config.local.yml', '.axis/docs/', '.axis/outbox/']) {
     if (!lines.includes(required)) lines.push(required);
   }
   return `${lines.join('\n')}\n`;

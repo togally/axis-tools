@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -228,6 +228,86 @@ await withTempDir(async (home) => {
   assert.equal(rollbackResult.ok, true);
   assert.equal(rollbackResult.rollback.restored.length > 0, true);
   assert.equal(await readFile(dashboardSkill, 'utf8'), '# local edit for rollback\n');
+});
+
+await withTempDir(async (home) => {
+  const codexHome = path.join(home, '.codex');
+  const backupDir = path.join(home, 'rename-backup');
+  const legacyReplacements = new Map([
+    ['axis-ali-dashboard', 'axis-ops-ali-dashboard'],
+    ['axis-api-performance-tuning', 'axis-code-api-performance-tuning'],
+    ['axis-arch-optimize', 'axis-code-arch-optimize'],
+    ['axis-benchmark', 'axis-test-benchmark'],
+    ['axis-bugfix', 'axis-code-bugfix'],
+    ['axis-business-domain-doc', 'axis-doc-project-knowledge'],
+    ['axis-coding-capture', 'axis-code-capture'],
+    ['axis-create-skill', 'axis-tools-skill-create'],
+    ['axis-db-design-doc', 'axis-doc-development'],
+    ['axis-development-doc', 'axis-doc-development'],
+    ['axis-doc-dashbord', 'axis-doc-dashboard'],
+    ['axis-skill-create', 'axis-tools-skill-create'],
+    ['axis-skill-update', 'axis-tools-skill-update'],
+  ]);
+  const legacyNames = [...legacyReplacements.keys()];
+  for (const name of legacyNames) {
+    const dir = path.join(codexHome, 'skills', name);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'SKILL.md'), `# legacy ${name}\n`, 'utf8');
+  }
+
+  const dryRun = await run([
+    'install', '--agent', 'codex', '--dry-run',
+    ...[...new Set(legacyReplacements.values())].flatMap((name) => ['--skill', name]),
+  ], { env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome } });
+  const dryRunResult = JSON.parse(dryRun.stdout);
+  assert.deepEqual(
+    dryRunResult.inventory.filter((item) => item.renamed_to).map((item) => item.skill).sort(),
+    legacyNames,
+  );
+  assert.equal(dryRunResult.inventory.filter((item) => item.renamed_to).every((item) => item.action === 'block'), true);
+
+  await assert.rejects(
+    () => run([
+      'install', '--agent', 'codex',
+      ...[...new Set(legacyReplacements.values())].flatMap((name) => ['--skill', name]),
+    ], { env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome } }),
+    /Refusing to remove retired skill directory/,
+  );
+
+  const forced = await run([
+    'install', '--agent', 'codex', '--force', '--backup-dir', backupDir,
+    ...[...new Set(legacyReplacements.values())].flatMap((name) => ['--skill', name]),
+  ], { env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome } });
+  const forcedResult = JSON.parse(forced.stdout);
+  assert.deepEqual(
+    forcedResult.installed.filter((item) => item.status === 'retired').map((item) => item.skill).sort(),
+    legacyNames,
+  );
+  for (const name of legacyNames) {
+    await assert.rejects(() => access(path.join(codexHome, 'skills', name)), /ENOENT/);
+  }
+  for (const name of new Set(legacyReplacements.values())) {
+    await access(path.join(codexHome, 'skills', name, 'SKILL.md'));
+  }
+
+  await run(['install', '--rollback', backupDir], {
+    env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome },
+  });
+  for (const name of legacyNames) {
+    assert.equal(await readFile(path.join(codexHome, 'skills', name, 'SKILL.md'), 'utf8'), `# legacy ${name}\n`);
+  }
+  for (const name of new Set(legacyReplacements.values())) {
+    await assert.rejects(() => access(path.join(codexHome, 'skills', name)), /ENOENT/);
+  }
+
+  for (const [retiredName, replacementName] of legacyReplacements) {
+    await assert.rejects(
+      () => run(['install', '--agent', 'codex', '--skill', retiredName], {
+        env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome },
+      }),
+      new RegExp(`${retiredName} was renamed to ${replacementName}`),
+    );
+  }
 });
 
 await withTempDir(async (home) => {

@@ -10,10 +10,25 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { parse as parseYaml } from 'yaml';
-const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
+const retiredPackagedSkills = new Map([
+    ['axis-ali-dashboard', 'axis-ops-ali-dashboard'],
+    ['axis-api-performance-tuning', 'axis-code-api-performance-tuning'],
+    ['axis-arch-optimize', 'axis-code-arch-optimize'],
+    ['axis-benchmark', 'axis-test-benchmark'],
+    ['axis-bugfix', 'axis-code-bugfix'],
+    ['axis-business-domain-doc', 'axis-doc-project-knowledge'],
+    ['axis-coding-capture', 'axis-code-capture'],
+    ['axis-create-skill', 'axis-tools-skill-create'],
+    ['axis-db-design-doc', 'axis-doc-development'],
+    ['axis-development-doc', 'axis-doc-development'],
+    ['axis-doc-dashbord', 'axis-doc-dashboard'],
+    ['axis-skill-create', 'axis-tools-skill-create'],
+    ['axis-skill-update', 'axis-tools-skill-update'],
+]);
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
-const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/outbox/'];
+const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/docs/', '.axis/outbox/'];
 const requiredEnvFields = ['endpoint_env', 'region_env', 'access_key_id_env', 'access_key_secret_env'];
 const skillNames = {
     projectInit: 'axis-doc-project-init',
@@ -107,12 +122,50 @@ function toPosix(relativePath) {
 function relativeToRepo(repo, target) {
     return toPosix(path.relative(repo, target));
 }
+function inlineYamlScalarItems(value) {
+    const items = [];
+    let current = '';
+    let quote = null;
+    for (const character of value) {
+        if (quote !== null) {
+            current += character;
+            if (character === quote)
+                quote = null;
+            continue;
+        }
+        if (character === '"' || character === "'") {
+            quote = character;
+            current += character;
+            continue;
+        }
+        if (character === ',') {
+            items.push(current.trim());
+            current = '';
+            continue;
+        }
+        current += character;
+    }
+    if (quote !== null)
+        throw new Error(`Unsupported unterminated inline YAML string: ${value}`);
+    items.push(current.trim());
+    return items;
+}
 function parseScalar(value) {
     const trimmed = value.trim();
     if (trimmed === 'true')
         return true;
     if (trimmed === 'false')
         return false;
+    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+        const content = trimmed.slice(1, -1).trim();
+        if (!content)
+            return [];
+        const items = inlineYamlScalarItems(content);
+        if (items.some((item) => !item || /^(?:\[|\{|\]|\})/.test(item))) {
+            throw new Error(`Unsupported inline YAML array: ${trimmed}`);
+        }
+        return items.map((item) => parseScalar(item));
+    }
     if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
         return trimmed.slice(1, -1);
     }
@@ -1055,6 +1108,15 @@ function exactVerticalMarkdownTableFields(table, expectedFields, scope) {
     }
     return fields;
 }
+function markdownTableMatchesExactVerticalFields(table, expectedFields) {
+    const fields = verticalMarkdownTableFields(table);
+    if (!fields)
+        return false;
+    const actualFields = table.rows.map((row) => normalizeMarkdownCell(row[0] ?? ''));
+    return actualFields.length === expectedFields.length
+        && new Set(actualFields).size === actualFields.length
+        && actualFields.every((field, index) => field === expectedFields[index]);
+}
 function hasGenericInterfaceLogicPlaceholder(body) {
     return /\{(?:actor|api(?:_id)?|application_service|business_rule|entity_or_table|outcome_or_state)\}/i.test(body)
         || /\b(?:actor|application_service|business_rule|entity_or_table|outcome_or_state)\b/i.test(body)
@@ -1085,6 +1147,357 @@ function hasInterfaceLogicDiagramOrStepTable(body) {
             && headers.some((header) => /^(?:内部处理|处理逻辑|判断或动作|判断\/动作|执行动作)$/.test(header))
             && headers.some((header) => /^(?:代码对象|执行对象|执行对象\/方法|方法)$/.test(header));
     });
+}
+function mermaidDiagramBodies(body) {
+    return [...body.matchAll(/(`{3,}|~{3,})mermaid\s*([\s\S]*?)\1/gi)]
+        .map((match) => match[2]);
+}
+function flowchartNodeLabelMap(diagram) {
+    const labels = new Map();
+    for (const nodeMatch of diagram.matchAll(/\b([A-Za-z][A-Za-z0-9_]*)\s*(?:\["([^"]+)"\]|\[([^\]]+)\]|\("([^"]+)"\)|\(([^)]+)\)|\{"([^"]+)"\}|\{([^}]+)\})/g)) {
+        labels.set(nodeMatch[1], normalizeMarkdownCell(nodeMatch[2] ?? nodeMatch[3] ?? nodeMatch[4] ?? nodeMatch[5] ?? nodeMatch[6] ?? nodeMatch[7] ?? ''));
+    }
+    return labels;
+}
+function flowchartEdgeEndpoints(diagram) {
+    const endpointIds = new Set();
+    let edgeCount = 0;
+    let traceable = true;
+    for (const rawLine of diagram.split(/\r?\n/)) {
+        if (rawLine.trimStart().startsWith('%%'))
+            continue;
+        for (const statement of rawLine.split(';')) {
+            const normalizedLine = statement
+                .replace(/-\.\s*(?:"[^"]*"|'[^']*'|[^\n]*?)\s*\.->/g, ' __AXIS_EDGE__ ')
+                .replace(/-\.->/g, ' __AXIS_EDGE__ ')
+                .replace(/-->|==>/g, ' __AXIS_EDGE__ ');
+            if (!normalizedLine.includes('__AXIS_EDGE__'))
+                continue;
+            const parts = normalizedLine.split('__AXIS_EDGE__');
+            for (let index = 0; index < parts.length - 1; index += 1) {
+                const sourcePart = parts[index]
+                    .replace(/^\s*\|[^|]*\|\s*/, '')
+                    .trim();
+                const targetPart = parts[index + 1]
+                    .replace(/^\s*\|[^|]*\|\s*/, '')
+                    .trim();
+                const sourceId = /^([A-Za-z][A-Za-z0-9_]*)/.exec(sourcePart)?.[1];
+                const targetId = /^([A-Za-z][A-Za-z0-9_]*)/.exec(targetPart)?.[1];
+                edgeCount += 1;
+                if (!sourceId || !targetId) {
+                    traceable = false;
+                    continue;
+                }
+                endpointIds.add(sourceId);
+                endpointIds.add(targetId);
+            }
+        }
+    }
+    return { edgeCount, endpointIds, traceable };
+}
+function assertAtomicInterfaceLogicDiagrams(body, scope) {
+    const diagrams = mermaidDiagramBodies(body)
+        .filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
+    const exactMethodCallPattern = /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*\(\)$/;
+    for (const diagram of diagrams) {
+        const nodeLabels = flowchartNodeLabelMap(diagram);
+        const edges = flowchartEdgeEndpoints(diagram);
+        if (!edges.traceable
+            || edges.edgeCount === 0
+            || [...edges.endpointIds].some((nodeId) => !nodeLabels.has(nodeId))
+            || [...nodeLabels.values()].some((label) => !exactMethodCallPattern.test(label))) {
+            throw new Error(`project knowledge secondary capability interface method node is not atomic: ${scope}`);
+        }
+    }
+}
+function assertCompactPartialMethodDiagrams(body, scope) {
+    const diagrams = mermaidDiagramBodies(body)
+        .filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
+    const exactMethodCallPattern = /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*\(\)$/;
+    if (diagrams.length === 0) {
+        throw new Error(`project knowledge compact partial method diagram missing: ${scope}`);
+    }
+    for (const diagram of diagrams) {
+        const nodeLabels = flowchartNodeLabelMap(diagram);
+        const edges = flowchartEdgeEndpoints(diagram);
+        if (nodeLabels.size < 2 || edges.edgeCount === 0) {
+            throw new Error(`project knowledge compact partial method diagram is empty: ${scope}`);
+        }
+        if (!edges.traceable
+            || [...edges.endpointIds].some((nodeId) => !nodeLabels.has(nodeId))
+            || [...nodeLabels.values()].some((label) => !exactMethodCallPattern.test(label))) {
+            throw new Error(`project knowledge compact partial method diagram contains a non-atomic node: ${scope}`);
+        }
+    }
+}
+function axisDocumentMetadata(body, scope) {
+    const matches = [...body.matchAll(/<!--\s*axis-document-metadata\b([\s\S]*?)-->/gi)];
+    if (matches.length !== 1) {
+        throw new Error(`project knowledge compact partial document requires one metadata block: ${scope}`);
+    }
+    return matches[0][1];
+}
+function metadataScalar(metadata, key) {
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(?:^|\\s)${escapedKey}\\s*=\\s*([^\\s]+)`, 'm').exec(metadata)?.[1] ?? '';
+}
+function metadataIdentifierList(metadata, key) {
+    const raw = metadataScalar(metadata, key).replace(/^\[|\]$/g, '');
+    return raw.split(/[,，、;；]+/).map((value) => value.trim()).filter(Boolean);
+}
+function visibleMarkdownBody(body) {
+    return body.replace(/<!--[\s\S]*?-->/g, '');
+}
+function compactCodeAnchor(raw, filePath, lineStart, lineEnd, symbol) {
+    return {
+        raw,
+        path: filePath,
+        fileName: path.basename(filePath),
+        lineStart: Number(lineStart),
+        lineEnd: Number(lineEnd),
+        symbol,
+    };
+}
+function shortCodeAnchors(body) {
+    return [...body.matchAll(/(?<![A-Za-z0-9_./:@+\-])([A-Za-z0-9_$@+\-][A-Za-z0-9_.$@+\-]*\.[A-Za-z0-9]+):([1-9]\d*)-([1-9]\d*)#([A-Za-z_$][A-Za-z0-9_$<>.\-]*)(?![A-Za-z0-9_$<>.()\/\-])/g)]
+        .filter((match) => Number(match[2]) <= Number(match[3]))
+        .map((match) => compactCodeAnchor(match[0], match[1], match[2], match[3], match[4]));
+}
+function axisEvidenceAnchors(body) {
+    return [...body.matchAll(/<!--\s*axis-evidence:\s*([\s\S]*?)\s*-->/gi)]
+        .flatMap((match) => exactCodeAnchors(match[1]))
+        .map((anchor) => {
+        const parsed = /^(.+):([1-9]\d*)-([1-9]\d*)#([A-Za-z_$][A-Za-z0-9_$<>.\-]*)$/.exec(anchor);
+        return parsed
+            ? compactCodeAnchor(anchor, parsed[1], parsed[2], parsed[3], parsed[4])
+            : null;
+    })
+        .filter((anchor) => anchor !== null);
+}
+function assertCompactEvidenceLocators(body, shortLocatorBodies, scope) {
+    const evidenceAnchors = axisEvidenceAnchors(body);
+    if (evidenceAnchors.length === 0) {
+        throw new Error(`project knowledge compact partial document missing axis-evidence: ${scope}`);
+    }
+    if (shortLocatorBodies.length === 0) {
+        throw new Error(`project knowledge compact partial document missing exact short locator: ${scope}`);
+    }
+    for (const locatorBody of shortLocatorBodies) {
+        const anchors = shortCodeAnchors(locatorBody);
+        if (anchors.length === 0) {
+            throw new Error(`project knowledge compact partial document missing exact short locator: ${scope}`);
+        }
+        for (const anchor of anchors) {
+            const exactMatches = evidenceAnchors.filter((evidence) => (evidence.fileName === anchor.fileName
+                && evidence.lineStart === anchor.lineStart
+                && evidence.lineEnd === anchor.lineEnd
+                && evidence.symbol === anchor.symbol));
+            if (exactMatches.length === 0) {
+                throw new Error(`project knowledge compact partial short locator does not exactly match path evidence: ${scope}`);
+            }
+            if (exactMatches.length > 1) {
+                throw new Error(`project knowledge compact partial short locator is ambiguous: ${scope}`);
+            }
+        }
+    }
+    if (exactCodeAnchors(visibleMarkdownBody(body)).length > 0) {
+        throw new Error(`project knowledge compact partial document exposes a full code path: ${scope}`);
+    }
+}
+function compactTopLevelSections(body, expected, scope) {
+    const headings = [...body.matchAll(/^##(?!#)\s+(\d+)\.?\s+(.+?)\s*$/gm)];
+    if (headings.length !== expected.length
+        || headings.some((heading, index) => (Number(heading[1]) !== index + 1 || heading[2].trim() !== expected[index]))) {
+        throw new Error(`project knowledge compact partial document has invalid six-section structure: ${scope}`);
+    }
+    return new Map(headings.map((heading, index) => {
+        const start = (heading.index ?? 0) + heading[0].length;
+        const end = index + 1 < headings.length ? (headings[index + 1].index ?? body.length) : body.length;
+        return [index + 1, body.slice(start, end)];
+    }));
+}
+function isCompactPartialSecondaryCapabilityDetailedDesign(body) {
+    return /^##\s+1\.?\s+能力定位与边界\s*$/m.test(body)
+        && /^##\s+2\.?\s+调用主体、权限与接口矩阵\s*$/m.test(body)
+        && /^##\s+6\.?\s+覆盖缺口\s*$/m.test(body);
+}
+function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityId, secondary, gapReportBody) {
+    const secondaryId = secondary.secondary_capability_id;
+    const scope = `${capabilityId}/${secondaryId}`;
+    const sections = compactTopLevelSections(body, [
+        '能力定位与边界',
+        '调用主体、权限与接口矩阵',
+        '能力级流程与跨接口关系',
+        '业务对象、状态与规则',
+        '接口详细设计',
+        '覆盖缺口',
+    ], scope);
+    const metadata = axisDocumentMetadata(body, scope);
+    if (metadataScalar(metadata, 'reader_profile') !== 'compact') {
+        throw new Error(`project knowledge compact partial secondary capability requires reader_profile=compact: ${scope}`);
+    }
+    if (metadataScalar(metadata, 'level1_capability_id') !== capabilityId
+        || metadataScalar(metadata, 'secondary_capability_id') !== secondaryId) {
+        throw new Error(`project knowledge compact partial secondary capability metadata identity mismatch: ${scope}`);
+    }
+    const expectedBusinessIds = new Set(secondary.business_ids ?? []);
+    const metadataBusinessIds = metadataIdentifierList(metadata, 'business_ids');
+    if (expectedBusinessIds.size === 0
+        || metadataBusinessIds.length !== expectedBusinessIds.size
+        || new Set(metadataBusinessIds).size !== metadataBusinessIds.length
+        || metadataBusinessIds.some((businessId) => !expectedBusinessIds.has(businessId))) {
+        throw new Error(`project knowledge compact partial secondary capability metadata business_ids mismatch: ${scope}`);
+    }
+    if (metadataScalar(metadata, 'interface_design_status') !== 'detailed'
+        || metadataScalar(metadata, 'interface_coverage') !== 'partial') {
+        throw new Error(`project knowledge compact partial secondary capability requires detailed partial coverage: ${scope}`);
+    }
+    const gapId = metadataScalar(metadata, 'interface_gap_id');
+    if (!projectKnowledgeTraceIdentifierPattern.test(gapId)
+        || invalidProjectKnowledgeTraceIdentifierPattern.test(gapId)) {
+        throw new Error(`project knowledge compact partial secondary capability requires an explicit interface gap: ${scope}`);
+    }
+    const escapedGapId = gapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const gapPattern = new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`);
+    if (!gapPattern.test(sections.get(6) ?? '') || !gapPattern.test(gapReportBody)) {
+        throw new Error(`project knowledge compact partial secondary capability gap is not traced: ${scope}/${gapId}`);
+    }
+    if (normalizeMarkdownCell(sections.get(1) ?? '').length < 10) {
+        throw new Error(`project knowledge compact partial secondary capability boundary is empty: ${scope}`);
+    }
+    const accessTable = markdownTables(sections.get(2) ?? '').find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === 5
+            && headers.every((header, index) => header === ['主体', '策略', '真实入口', '结果', '定位'][index]);
+    });
+    if (!accessTable || accessTable.rows.length === 0
+        || accessTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+        throw new Error(`project knowledge compact partial secondary capability access matrix is empty: ${scope}`);
+    }
+    assertCompactPartialMethodDiagrams(sections.get(3) ?? '', `${scope}/3`);
+    if (normalizeMarkdownCell(sections.get(4) ?? '').length < 10) {
+        throw new Error(`project knowledge compact partial secondary capability rules are empty: ${scope}`);
+    }
+    const interfaceTable = markdownTables(sections.get(5) ?? '').find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === 4
+            && headers.every((header, index) => header === ['入口', '处理方法', '成功结果', '边界'][index]);
+    });
+    if (!interfaceTable || interfaceTable.rows.length === 0
+        || interfaceTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+        throw new Error(`project knowledge compact partial secondary capability interface summary is empty: ${scope}`);
+    }
+    assertCompactEvidenceLocators(body, accessTable.rows.map((row) => row[4] ?? ''), scope);
+}
+function isCompactPartialLevel1CapabilityDetailedDesign(body) {
+    return /^##\s+1\.?\s+能力边界\s*$/m.test(body)
+        && /^##\s+2\.?\s+二级能力\s*$/m.test(body)
+        && /^##\s+6\.?\s+证据与缺口\s*$/m.test(body);
+}
+function assertCompactPartialLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapabilities, gapReportBody) {
+    const sections = compactTopLevelSections(body, [
+        '能力边界',
+        '二级能力',
+        '对外业务入口',
+        '原子流程',
+        '关键规则',
+        '证据与缺口',
+    ], capabilityId);
+    const metadata = axisDocumentMetadata(body, capabilityId);
+    if (metadataScalar(metadata, 'reader_profile') !== 'compact') {
+        throw new Error(`project knowledge compact partial level-1 capability requires reader_profile=compact: ${capabilityId}`);
+    }
+    if (metadataScalar(metadata, 'level1_capability_id') !== capabilityId) {
+        throw new Error(`project knowledge compact partial level-1 metadata identity mismatch: ${capabilityId}`);
+    }
+    const coverageControls = [
+        ['user_journey_design_status', 'detailed'],
+        ['user_journey_coverage', 'partial'],
+        ['table_design_status', 'detailed'],
+        ['table_design_coverage', 'partial'],
+        ['dependency_graph_status', 'pending_level1_completion'],
+        ['dependency_graph_revision', 'not_derived'],
+    ];
+    if (coverageControls.some(([key, expected]) => metadataScalar(metadata, key) !== expected)) {
+        throw new Error(`project knowledge compact partial level-1 metadata coverage is invalid: ${capabilityId}`);
+    }
+    const gapIds = [
+        metadataScalar(metadata, 'user_journey_gap_id'),
+        metadataScalar(metadata, 'table_design_gap_id'),
+        metadataScalar(metadata, 'dependency_graph_gap_id'),
+    ];
+    if (gapIds.some((gapId) => !projectKnowledgeTraceIdentifierPattern.test(gapId)
+        || invalidProjectKnowledgeTraceIdentifierPattern.test(gapId))) {
+        throw new Error(`project knowledge compact partial level-1 requires explicit gaps: ${capabilityId}`);
+    }
+    for (const gapId of gapIds.slice(0, 2)) {
+        const escapedGapId = gapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const gapPattern = new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`);
+        if (!gapPattern.test(gapReportBody)) {
+            throw new Error(`project knowledge compact partial level-1 gap is not traced: ${capabilityId}/${gapId}`);
+        }
+    }
+    if (!/\bpartial\b/.test(sections.get(6) ?? '')
+        || !/(?:缺口|未覆盖|仍需|补齐|补证)/.test(sections.get(6) ?? '')) {
+        throw new Error(`project knowledge compact partial level-1 evidence gap is empty: ${capabilityId}`);
+    }
+    if (normalizeMarkdownCell(sections.get(1) ?? '').length < 10) {
+        throw new Error(`project knowledge compact partial level-1 boundary is empty: ${capabilityId}`);
+    }
+    const navigationTable = markdownTables(sections.get(2) ?? '').find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === 3
+            && headers.every((header, index) => header === ['二级能力', '最小业务结果', '详情'][index]);
+    });
+    if (!navigationTable || navigationTable.rows.length !== secondaryCapabilities.length) {
+        throw new Error(`project knowledge compact partial level-1 secondary capability navigation is incomplete: ${capabilityId}`);
+    }
+    const linkedSecondaryIds = new Set();
+    for (const row of navigationTable.rows) {
+        if (normalizeMarkdownCell(row[0] ?? '').length < 2
+            || normalizeMarkdownCell(row[1] ?? '').length < 2) {
+            throw new Error(`project knowledge compact partial level-1 has an empty minimum business outcome: ${capabilityId}`);
+        }
+        const link = /secondary-capabilities\/([a-z][a-z0-9_]*)\/detailed-design\.md/.exec(row[2] ?? '');
+        if (!link || linkedSecondaryIds.has(link[1])) {
+            throw new Error(`project knowledge compact partial level-1 secondary capability navigation is invalid: ${capabilityId}`);
+        }
+        linkedSecondaryIds.add(link[1]);
+    }
+    for (const secondary of secondaryCapabilities) {
+        const secondaryId = secondary.secondary_capability_id;
+        if (!linkedSecondaryIds.has(secondaryId)) {
+            throw new Error(`project knowledge compact partial level-1 overview omits secondary capability link: ${capabilityId}/${secondaryId}`);
+        }
+    }
+    const entryTable = markdownTables(sections.get(3) ?? '').find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === 4
+            && headers.every((header, index) => header === ['业务', '代表入口', '原子能力', '用户结果'][index]);
+    });
+    if (!entryTable || entryTable.rows.length < secondaryCapabilities.length
+        || entryTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+        throw new Error(`project knowledge compact partial level-1 business entry coverage is incomplete: ${capabilityId}`);
+    }
+    const entryCapabilityNames = new Set(entryTable.rows.map((row) => normalizeMarkdownCell(row[2] ?? '')));
+    for (const secondary of secondaryCapabilities) {
+        const expectedName = secondary.secondary_capability_name ?? secondary.name;
+        if (expectedName && !entryCapabilityNames.has(expectedName)) {
+            throw new Error(`project knowledge compact partial level-1 business entry omits secondary capability: ${capabilityId}/${secondary.secondary_capability_id}`);
+        }
+    }
+    assertCompactPartialMethodDiagrams(sections.get(4) ?? '', `${capabilityId}/4`);
+    if (normalizeMarkdownCell(sections.get(5) ?? '').length < 10) {
+        throw new Error(`project knowledge compact partial level-1 rules are empty: ${capabilityId}`);
+    }
+    const visibleEvidenceLines = (sections.get(6) ?? '')
+        .split(/\r?\n/)
+        .filter((line) => shortCodeAnchors(line).length > 0);
+    assertCompactEvidenceLocators(body, visibleEvidenceLines, capabilityId);
+    return new Map(secondaryCapabilities.map((secondary) => [
+        secondary.secondary_capability_id,
+        [],
+    ]));
 }
 function assertSecondaryAccessMatrix(body, scope, journeyBindings) {
     if (/^##\s+\d+\.?\s+(?:身份、职责与 business_id 映射|参与者、权限与数据范围)\s*$/m.test(body)) {
@@ -1160,7 +1573,7 @@ function assertSecondaryAccessMatrix(body, scope, journeyBindings) {
         }
     }
 }
-function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope) {
+function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope, enforceAtomicMethodDiagrams = false) {
     const groupPattern = /^###(?!#)\s+(\d+)\.(\d+)\s+(.+?)\s*$/gm;
     const groupMatches = [...interfaceSection.matchAll(groupPattern)];
     const legacyGroupTitles = new Set([
@@ -1241,16 +1654,29 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
             subsectionBodies.set(subsectionNumber, groupBody.slice(subsectionStart, subsectionEnd));
         }
         const traceTables = markdownTables(subsectionBodies.get(1) ?? '');
+        const requiredContractFields = [
+            'level1_journey_id',
+            'api_id',
+            '业务目的',
+            '调用方',
+            '请求模型',
+            '响应模型',
+            '状态',
+        ];
         const contractTable = traceTables.find((table) => {
-            const headers = table.headers.map(normalizeMarkdownCell);
-            return headers.length === 2 && headers[0] === '项目' && headers[1] === '内容';
+            const fields = verticalMarkdownTableFields(table);
+            return fields
+                && requiredContractFields.every((field) => normalizeMarkdownCell(fields.get(field) ?? ''))
+                && [...fields.keys()].some((key) => key.startsWith('方法与完整路径'));
         });
         const implementationTable = traceTables.find((table) => {
             const headers = table.headers.map(normalizeMarkdownCell);
+            const entityRow = table.rows.find((row) => normalizeMarkdownCell(row[0] ?? '') === '实体/表');
             return headers.length === 3
                 && headers[0] === '实现层'
                 && headers[1] === '精确定位'
-                && headers[2] === '职责';
+                && headers[2] === '职责'
+                && /\btable_id\s*=/.test(entityRow?.[1] ?? '');
         });
         if (!contractTable || !implementationTable) {
             throw new Error(`project knowledge secondary capability interface group missing compact contract tables: ${scope}/${groupPrefix}`);
@@ -1263,15 +1689,6 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
             }
             contractFields.set(key, row[1] ?? '');
         }
-        const requiredContractFields = [
-            'level1_journey_id',
-            'api_id',
-            '业务目的',
-            '调用方',
-            '请求模型',
-            '响应模型',
-            '状态',
-        ];
         for (const field of requiredContractFields) {
             if (!normalizeMarkdownCell(contractFields.get(field) ?? '')) {
                 throw new Error(`project knowledge secondary capability interface group missing contract field ${field}: ${scope}/${groupPrefix}`);
@@ -1363,6 +1780,9 @@ function secondaryInterfaceTraceBindings(interfaceSection, chapterNumber, scope)
         }
         if (!hasConcreteInterfaceLogicSummary(internalLogic)) {
             throw new Error(`project knowledge secondary capability interface internal logic missing concrete summary: ${scope}/${groupPrefix}`);
+        }
+        if (enforceAtomicMethodDiagrams) {
+            assertAtomicInterfaceLogicDiagrams(internalLogic, `${scope}/${groupPrefix}`);
         }
         if (!hasInterfaceLogicDiagramOrStepTable(internalLogic)) {
             throw new Error(`project knowledge secondary capability interface internal logic missing flow diagram or step table: ${scope}/${groupPrefix}`);
@@ -1878,6 +2298,7 @@ function assertLevel1CapabilityTableDesign(body, capabilityId, secondaryCapabili
     return physicalTableNames;
 }
 function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapabilities, gapReportBody) {
+    const enforceAtomicGraphNodes = /\breader_profile\s*=\s*strict_full\b/.test(body);
     if (/^##\s+\d+\.?\s+(?:用户业务操作全景|跨二级能力用户旅程|跨模块协作|共享业务语义与一级治理)\s*$/m.test(body)) {
         throw new Error(`project knowledge level-1 capability detailed design uses a legacy flat or separate cross-capability section: ${capabilityId}`);
     }
@@ -2006,11 +2427,7 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
             throw new Error(`project knowledge level-1 outward capability has invalid fixed subsection structure: ${capabilityId}/${outwardCapability.index}`);
         }
         const [businessSubsection, graphSubsection, stepsSubsection] = subsubsections;
-        const summaryTables = markdownTables(businessSubsection.body);
-        if (summaryTables.length !== 1) {
-            throw new Error(`project knowledge level-1 outward capability requires one business summary: ${capabilityId}/${outwardCapability.index}`);
-        }
-        const summary = exactVerticalMarkdownTableFields(summaryTables[0], [
+        const summaryFields = [
             'journey_id',
             '用户/角色',
             '提供的业务',
@@ -2019,7 +2436,13 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
             '用户可见结果',
             '参与二级能力',
             '证据',
-        ], `${capabilityId}/3.${outwardCapability.index}.1`);
+        ];
+        const summaryTables = markdownTables(businessSubsection.body)
+            .filter((table) => markdownTableMatchesExactVerticalFields(table, summaryFields));
+        if (summaryTables.length !== 1) {
+            throw new Error(`project knowledge level-1 outward capability requires one business summary: ${capabilityId}/${outwardCapability.index}`);
+        }
+        const summary = exactVerticalMarkdownTableFields(summaryTables[0], summaryFields, `${capabilityId}/3.${outwardCapability.index}.1`);
         const journeyId = normalizeMarkdownCell(summary.get('journey_id') ?? '') || 'unknown';
         if (!projectKnowledgeTraceIdentifierPattern.test(journeyId)
             || invalidProjectKnowledgeTraceIdentifierPattern.test(journeyId)) {
@@ -2038,11 +2461,7 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
         if (exactCodeAnchors(summary.get('证据') ?? '').length < 1) {
             throw new Error(`project knowledge level-1 capability user journey missing exact evidence anchor: ${capabilityId}/${journeyId}`);
         }
-        const implementationStepTables = markdownTables(stepsSubsection.body);
-        if (implementationStepTables.length === 0) {
-            throw new Error(`project knowledge level-1 outward capability has no interface implementation steps: ${capabilityId}/${journeyId}`);
-        }
-        const implementationSteps = implementationStepTables.map((table, index) => (exactVerticalMarkdownTableFields(table, [
+        const implementationStepFields = [
             'step_id',
             'secondary_capability_id',
             'api_id',
@@ -2054,7 +2473,13 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
             '读写 table_id',
             '二级能力详情',
             '证据',
-        ], `${capabilityId}/3.${outwardCapability.index}.3/step-${index + 1}`)));
+        ];
+        const implementationStepTables = markdownTables(stepsSubsection.body)
+            .filter((table) => markdownTableMatchesExactVerticalFields(table, implementationStepFields));
+        if (implementationStepTables.length === 0) {
+            throw new Error(`project knowledge level-1 outward capability has no interface implementation steps: ${capabilityId}/${journeyId}`);
+        }
+        const implementationSteps = implementationStepTables.map((table, index) => (exactVerticalMarkdownTableFields(table, implementationStepFields, `${capabilityId}/3.${outwardCapability.index}.3/step-${index + 1}`)));
         const mermaidBlocks = [...graphSubsection.body.matchAll(/```mermaid\s*([\s\S]*?)```/gi)]
             .map((match) => match[1]);
         const diagrams = mermaidBlocks.filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
@@ -2074,6 +2499,12 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
             }
             nodeLabels.set(nodeId, label);
         }
+        const methodOrTechnicalNodePattern = /(?:\b(?:Controller|Handler|Service|UseCase|Mapper|Repository|DTO|Entity|table_id|api_id)\b|\b(?:GET|POST|PUT|PATCH|DELETE)\s+\/|\b[A-Za-z_$][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*\s*\(\s*\))/;
+        const nodeMatchesIdentifier = (nodeId, label, identifier) => {
+            const escapedIdentifier = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            return new RegExp(`(?:^|[^A-Za-z0-9_])${escapedIdentifier}(?:[^A-Za-z0-9_]|$)`).test(`${nodeId} ${label}`)
+                || nodeId.includes(identifier);
+        };
         const allDiagramEdges = diagram.split(/\r?\n/).flatMap((line, lineIndex) => {
             const edgeMatch = /^\s*([A-Za-z][A-Za-z0-9_]*)\s*(?:\[[^\]]*\]|\([^)]*\)|\{[^}]*\})?\s*(?:-->|==>)\s*(?:\|"?([^|]+?)"?\|\s*)?([A-Za-z][A-Za-z0-9_]*)/.exec(line);
             if (!edgeMatch)
@@ -2189,15 +2620,15 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
             }
             const targetLabel = nodeLabels.get(matchingEdge.targetNodeId) ?? '';
             const sourceLabel = nodeLabels.get(matchingEdge.sourceNodeId) ?? '';
-            const actorOrRole = normalizeMarkdownCell(summary.get('用户/角色') ?? '');
-            const userOperation = normalizeMarkdownCell(summary.get('用户怎么操作') ?? '');
-            if (!new RegExp(`(?:^|[^A-Za-z0-9_])${secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^A-Za-z0-9_]|$)`).test(targetLabel)
+            const legacyJourneyEntryNode = sourceLabel.includes(normalizeMarkdownCell(summary.get('用户/角色') ?? '')) && sourceLabel.includes(normalizeMarkdownCell(summary.get('用户怎么操作') ?? ''));
+            if (!nodeMatchesIdentifier(matchingEdge.targetNodeId, targetLabel, secondaryId)
                 || (previousTargetNodeId === null
-                    && (!sourceLabel.includes(actorOrRole) || !sourceLabel.includes(userOperation)))
+                    && !nodeMatchesIdentifier(matchingEdge.sourceNodeId, sourceLabel, journeyId)
+                    && !legacyJourneyEntryNode)
                 || (previousTargetNodeId !== null && matchingEdge.sourceNodeId !== previousTargetNodeId)
                 || (previousSecondaryId !== null
                     && previousSecondaryId !== secondaryId
-                    && !new RegExp(`(?:^|[^A-Za-z0-9_])${previousSecondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^A-Za-z0-9_]|$)`).test(sourceLabel))
+                    && !nodeMatchesIdentifier(matchingEdge.sourceNodeId, sourceLabel, previousSecondaryId))
                 || matchingEdge.lineIndex <= previousEdgeLineIndex) {
                 throw new Error(`project knowledge level-1 outward capability diagram step order or secondary nodes mismatch: ${capabilityId}/${journeyId}/${stepId}`);
             }
@@ -2223,6 +2654,10 @@ function assertLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapab
                     physicalTableNames: new Map(),
                 },
             ]);
+        }
+        if (enforceAtomicGraphNodes
+            && [...nodeLabels.values()].some((label) => methodOrTechnicalNodePattern.test(label))) {
+            throw new Error(`project knowledge level-1 outward capability diagram mixes business and method nodes: ${capabilityId}/${journeyId}`);
         }
         const visibleResult = normalizeMarkdownCell(summary.get('用户可见结果') ?? '');
         const visibleResultEdge = previousTargetNodeId === null
@@ -2305,8 +2740,20 @@ function level1DependencyProjectionIds(rawValue, capabilityId, direction) {
     }
     return new Set(ids);
 }
-function level1CapabilityDependencyProjection(body, capabilityId) {
+function level1CapabilityDependencyProjection(body, capabilityId, compactPartial = false) {
     const control = dependencyGraphControl(body, `level-1 capability ${capabilityId}`);
+    if (compactPartial) {
+        if (control.status !== 'pending_level1_completion'
+            || control.revision !== 'not_derived'
+            || control.gapId === 'not_applicable') {
+            throw new Error(`project knowledge compact partial level-1 dependency projection is invalid: ${capabilityId}`);
+        }
+        return {
+            ...control,
+            upstream: 'not_derived',
+            downstream: 'not_derived',
+        };
+    }
     const dependencyRows = markdownTables(body)
         .filter((table) => {
         const headers = table.headers.map(normalizeMarkdownCell);
@@ -2598,7 +3045,7 @@ function assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId
         if (/现有入口集合|对应应用服务|以\s*DTO\/BO\s*校验为准|以统一响应和领域异常为准/.test(interfaceSection)) {
             throw new Error(`project knowledge secondary capability detailed design uses generic interface placeholder: ${scope}`);
         }
-        const interfaceBindings = secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope);
+        const interfaceBindings = secondaryInterfaceTraceBindings(interfaceSection, Number(interfaceHeading[1]), scope, /\breader_profile\s*=\s*strict_full\b/.test(body));
         assertSecondaryAccessMatrix(body, scope, interfaceBindings);
         if (interfaceCoverage === 'partial' && !/(?:interface_gap_id\s*=|missing_evidence|缺失证据)/.test(body)) {
             throw new Error(`project knowledge secondary capability partial interface coverage requires an explicit gap: ${scope}`);
@@ -2678,6 +3125,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     const level1JourneysByCapability = new Map();
     const level1JourneyCoverageByCapability = new Map();
     const level1DependencyProjectionsByCapability = new Map();
+    const compactPartialLevel1CapabilityIds = new Set();
     for (const capability of level1Capabilities) {
         const capabilityId = capability.level1_capability_id;
         const capabilityDocument = capabilityDetailedDesigns.find((document) => document.docId === `business_capability_detailed_design_${capabilityId}`);
@@ -2689,8 +3137,13 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
         const capabilityCoverage = /\buser_journey_coverage\s*=\s*(complete|partial)\b/
             .exec(capabilityDocumentBody)?.[1];
         level1JourneyCoverageByCapability.set(capabilityId, capabilityCoverage);
-        level1JourneysByCapability.set(capabilityId, assertLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody));
-        level1DependencyProjectionsByCapability.set(capabilityId, level1CapabilityDependencyProjection(capabilityDocumentBody, capabilityId));
+        const compactPartial = isCompactPartialLevel1CapabilityDetailedDesign(capabilityDocumentBody);
+        if (compactPartial)
+            compactPartialLevel1CapabilityIds.add(capabilityId);
+        level1JourneysByCapability.set(capabilityId, compactPartial
+            ? assertCompactPartialLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody)
+            : assertLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody));
+        level1DependencyProjectionsByCapability.set(capabilityId, level1CapabilityDependencyProjection(capabilityDocumentBody, capabilityId, compactPartial));
         for (const secondary of capability.secondary_capabilities) {
             const secondaryId = secondary.secondary_capability_id;
             const escapedSecondaryId = secondaryId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -2725,7 +3178,16 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             if (!secondaryIdPattern.test(body)) {
                 throw new Error(`project knowledge secondary capability detailed design has wrong identity: ${capabilityId}/${secondaryId}`);
             }
-            assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId);
+            const compactPartial = isCompactPartialSecondaryCapabilityDetailedDesign(body);
+            if (compactPartial !== compactPartialLevel1CapabilityIds.has(capabilityId)) {
+                throw new Error(`project knowledge compact partial document profile mismatch: ${capabilityId}/${secondaryId}`);
+            }
+            if (compactPartial) {
+                assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityId, secondary, gapReportBody);
+            }
+            else {
+                assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId);
+            }
             const secondaryInterfaceCoverage = /\binterface_coverage\s*=\s*(complete|partial|not_applicable)\b/
                 .exec(body)?.[1] ?? 'missing';
             if (secondaryInterfaceCoverage !== 'complete')
@@ -2733,6 +3195,16 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             if (level1JourneyCoverageByCapability.get(capabilityId) === 'complete'
                 && secondaryInterfaceCoverage !== 'complete') {
                 throw new Error(`project knowledge level-1 complete user journey coverage conflicts with ${secondaryInterfaceCoverage} secondary interface coverage: ${capabilityId}/${secondaryId}`);
+            }
+            if (compactPartial) {
+                secondaryCapabilityDetailedDesigns.push({
+                    source: relativePath,
+                    target: `documents/${relativePath}`,
+                    docType: 'secondary_capability_detailed_design',
+                    docId: `secondary_capability_detailed_design_${capabilityId}_${secondaryId}`,
+                    mediaType: 'text/markdown',
+                });
+                continue;
             }
             const expectedJourneys = level1JourneysByCapability.get(capabilityId)?.get(secondaryId) ?? [];
             const expectedJourneyIds = new Set(expectedJourneys.map((journey) => journey.journeyId));
@@ -4026,7 +4498,7 @@ async function packagedSkillNames() {
             continue;
         if (existsSync(path.join(root, entry.name, 'SKILL.md'))) {
             if (!packagedSkillNamePattern.test(entry.name)) {
-                throw new Error(`Packaged skill must use axis-{category}-<action>: ${entry.name}`);
+                throw new Error(`Packaged skill must use an approved axis-{category}-<action> prefix, including axis-tools- for meta-tools: ${entry.name}`);
             }
             names.push(entry.name);
         }
@@ -4130,6 +4602,32 @@ async function inventorySkillBundle(skillName, agent, sourceDir, targetDir, forc
         ...(reason ? { reason } : {}),
     };
 }
+async function inventoryRetiredSkillBundle(retiredName, replacementName, agent, force) {
+    const targetDir = agentSkillDir(agent, retiredName);
+    const targetStats = await lstatIfExists(targetDir);
+    if (!targetStats)
+        return null;
+    const sourceDir = path.join(skillsRoot(), replacementName);
+    const targetSha256 = !targetStats.isSymbolicLink() && targetStats.isDirectory()
+        ? await directoryFingerprint(targetDir)
+        : null;
+    return {
+        skill: retiredName,
+        agent,
+        source: sourceDir,
+        target: targetDir,
+        target_root: agentSkillRoot(agent),
+        exists: true,
+        identical: false,
+        action: force ? 'retire' : 'block',
+        source_sha256: await directoryFingerprint(sourceDir),
+        target_sha256: targetSha256,
+        renamed_to: replacementName,
+        reason: force
+            ? `retired skill will be backed up and removed; use ${replacementName}`
+            : `retired skill exists; re-run with --force to back it up and remove it, then use ${replacementName}`,
+    };
+}
 function timestampForPath(date = new Date()) {
     return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
@@ -4220,7 +4718,7 @@ async function copySkillBundle(skillName, sourceDir, targetDir, inventory, backu
     }
     const tempTarget = path.join(path.dirname(targetDir), `.axis-install-${path.basename(targetDir)}-${randomBytes(4).toString('hex')}`);
     try {
-        if (inventory.action === 'replace') {
+        if (inventory.action === 'copy' || inventory.action === 'replace') {
             await backupExistingTarget(targetDir, backupSession);
             if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === skillName) {
                 throw new Error(`Simulated install failure after backup for ${skillName}`);
@@ -4236,6 +4734,21 @@ async function copySkillBundle(skillName, sourceDir, targetDir, inventory, backu
     }
     return 'copied';
 }
+async function retireSkillBundle(inventory, backupSession) {
+    if (inventory.action === 'block') {
+        throw new Error(`Refusing to remove retired skill directory at ${inventory.target}. ` +
+            `Re-run with --force to back it up and retire it; use ${inventory.renamed_to}.`);
+    }
+    if (inventory.action !== 'retire') {
+        throw new Error(`Invalid retired skill action for ${inventory.skill}: ${inventory.action}`);
+    }
+    await backupExistingTarget(inventory.target, backupSession);
+    if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === inventory.skill) {
+        throw new Error(`Simulated install failure after backup for ${inventory.skill}`);
+    }
+    await rm(inventory.target, { recursive: true, force: true });
+    return 'retired';
+}
 async function buildInstallInventory(agent, force, requestedSkills = []) {
     const packagedNames = await packagedSkillNames();
     if (packagedNames.length === 0) {
@@ -4243,6 +4756,10 @@ async function buildInstallInventory(agent, force, requestedSkills = []) {
     }
     const requestedNames = [...new Set(requestedSkills)];
     for (const requestedName of requestedNames) {
+        const replacement = retiredPackagedSkills.get(requestedName);
+        if (replacement) {
+            throw new Error(`Packaged skill ${requestedName} was renamed to ${replacement}; request the new name explicitly.`);
+        }
         if (!packagedNames.includes(requestedName)) {
             throw new Error(`Unknown packaged skill: ${requestedName}`);
         }
@@ -4256,6 +4773,15 @@ async function buildInstallInventory(agent, force, requestedSkills = []) {
             inventory.push(await inventorySkillBundle(skillName, selectedAgent, source, target, force));
         }
     }
+    for (const [retiredName, replacementName] of retiredPackagedSkills) {
+        if (!names.includes(replacementName))
+            continue;
+        for (const selectedAgent of selectedAgents(agent)) {
+            const retired = await inventoryRetiredSkillBundle(retiredName, replacementName, selectedAgent, force);
+            if (retired)
+                inventory.push(retired);
+        }
+    }
     return inventory;
 }
 function dryRunStatusFor(action) {
@@ -4263,6 +4789,8 @@ function dryRunStatusFor(action) {
         return 'identical';
     if (action === 'replace')
         return 'would_replace';
+    if (action === 'retire')
+        return 'would_retire';
     if (action === 'block')
         return 'blocked';
     return 'would_copy';
@@ -4281,15 +4809,26 @@ async function installPackagedSkills(agent, force, dryRun, requestedSkills = [])
             backup_dir: null,
         };
     }
+    const blocked = inventory.find((item) => item.action === 'block');
+    if (blocked) {
+        if (blocked.renamed_to) {
+            throw new Error(`Refusing to remove retired skill directory at ${blocked.target}. ` +
+                `Re-run with --force to back it up and retire it; use ${blocked.renamed_to}.`);
+        }
+        throw new Error(`Refusing to overwrite modified skill directory at ${blocked.target}. Re-run with --force to replace it.`);
+    }
     const backupSession = createBackupSession();
     const installed = [];
     try {
         for (const item of inventory) {
+            const status = item.action === 'retire'
+                ? await retireSkillBundle(item, backupSession)
+                : await copySkillBundle(item.skill, item.source, item.target, item, backupSession);
             installed.push({
                 skill: item.skill,
                 agent: item.agent,
                 target: item.target,
-                status: await copySkillBundle(item.skill, item.source, item.target, item, backupSession),
+                status,
             });
         }
     }
