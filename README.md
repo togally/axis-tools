@@ -80,6 +80,11 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 文档设计 | `axis-doc-project-init` | 通过一次汇总确认配置或迁移 Axis v0.2 的组织、项目、OSS、发布、目录和语言设置。 |
 | 留档与发布 | `axis-code-capture` | 将编码、重构、缺陷修复或架构工作采集为执行报告和经验卡片。 |
 | 留档与发布 | `axis-ops-oss-publish` | 校验、脱敏、dry-run、同步 v0.2 项目文档或上传项目内不可变包。 |
+| 投资治理 | `axis-trade-system-governance` | 对交易系统和参数变更执行提案、评价、明确审批、版本化、验证与回滚门禁。 |
+| 投资治理 | `axis-trade-portfolio-ledger` | 维护 A 股、加密资产、现金及可扩展资产类别的本地台账、估值和风险敞口。 |
+| 投资治理 | `axis-trade-risk-research` | 使用当前官方来源调研投资候选的基本面、监管、协议、托管与流动性风险。 |
+| 投资治理 | `axis-trade-plan-gate` | 对新增、加仓、减仓、离场和观察计划执行交易系统、调研与组合风险准入。 |
+| 投资治理 | `axis-trade-daily-brief` | 只读监控持仓、有效计划和关注资产，生成带来源、覆盖状态和推送回执的每日简报。 |
 | Skill 生命周期 | `axis-skill-create` | 扫描对话中的可复用技能机会，并判断是否适合创建公开安全的 Axis/Codex skill。 |
 | Skill 生命周期 | `axis-skill-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
 | 代码平台 | `axis-integration-yunxiao-codeup` | 通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。 |
@@ -426,6 +431,11 @@ See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-aud
 | Documentation and design | `axis-doc-project-init` | Configure or migrate Axis v0.2 organization, project, OSS, release, directory, and language settings with one consolidated confirmation. |
 | Deposition and release | `axis-code-capture` | Capture coding, refactor, bugfix, or architecture work as execution reports and experience cards. |
 | Deposition and release | `axis-ops-oss-publish` | Validate, redact, dry-run, synchronize v0.2 project documents, or upload immutable packages inside a project. |
+| Investment governance | `axis-trade-system-governance` | Gate trading-system parameter changes through proposal, evaluation, explicit approval, versioning, verification, and rollback. |
+| Investment governance | `axis-trade-portfolio-ledger` | Maintain a local ledger, valuation view, and risk exposures across A-shares, crypto assets, cash, and extensible asset classes. |
+| Investment governance | `axis-trade-risk-research` | Research fundamental, regulatory, protocol, custody, and liquidity risks with current official sources. |
+| Investment governance | `axis-trade-plan-gate` | Gate open, add, reduce, exit, and watch plans against the approved system, research, and portfolio capacity. |
+| Investment governance | `axis-trade-daily-brief` | Read holdings, active plans, and watched assets to produce a source-backed daily brief with coverage and delivery status. |
 | Skill lifecycle | `axis-skill-create` | Scan conversations for reusable skill opportunities and decide whether to create a public-safe Axis/Codex skill. |
 | Skill lifecycle | `axis-skill-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
 | Code platform | `axis-integration-yunxiao-codeup` | Query Codeup repositories, create merge requests, or support Git review through Yunxiao Codeup OpenAPI. |

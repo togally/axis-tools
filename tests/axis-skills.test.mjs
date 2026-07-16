@@ -302,8 +302,13 @@ const packagedSkillNames = [
   'axis-test-report',
   'axis-test-side-effects',
   'axis-test-tdd',
+  'axis-trade-daily-brief',
+  'axis-trade-plan-gate',
+  'axis-trade-portfolio-ledger',
+  'axis-trade-risk-research',
+  'axis-trade-system-governance',
 ];
-const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*$/;
 const packagedSkillDirs = (await readdir(path.join(repoRoot, 'skills'), { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
@@ -935,6 +940,7 @@ assert.match(createSkillMd, /orbit-xxx/);
 assert.match(createSkillMd, /Naming Taxonomy/);
 assert.match(createSkillMd, /axis-doc-xxx/);
 assert.match(createSkillMd, /axis-code-xxx/);
+assert.match(createSkillMd, /axis-trade-xxx/);
 assert.match(createSkillMd, /axis-doc-project-init/);
 assert.doesNotMatch(createSkillMd, /\| Project \|/);
 assert.match(createSkillMd, /Mandatory Before-Use Experience Application/);

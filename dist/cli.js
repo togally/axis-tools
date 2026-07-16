@@ -10,7 +10,7 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { parse as parseYaml } from 'yaml';
-const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*$/;
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
 const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/outbox/'];

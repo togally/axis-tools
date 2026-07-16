@@ -16,7 +16,7 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 
 ## Rename Guard
 
-- packaged skill directories match `axis-(code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*`;
+- packaged skill directories match `axis-(code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*`;
 - frontmatter `name`, manifest `name/path`, OpenAI `display_name`, and `$skill-name` prompt agree;
 - retired document skills must not reappear in the manifest or packaged directory list;
 - references may describe retirement history only in this audit, not as callable handoffs;
@@ -35,6 +35,8 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 ## Boundaries Kept Separate
 
 `axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, skill lifecycle, platform integrations and operations dashboards also keep their distinct risk and output contracts.
+
+The `axis-trade-*` family also remains split by independently selectable outcome: system-parameter governance, factual portfolio ledger, evidence-producing risk research, investment-plan admission, and read-only daily monitoring. The dependency direction is `system + portfolio + research -> plan -> daily brief`; no trade skill may execute an order or package personal financial data in the public repository.
 
 ## Archive And Dashboard Decision
 

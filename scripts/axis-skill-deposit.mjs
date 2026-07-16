@@ -8,7 +8,7 @@ import process from 'node:process';
 import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
-const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*$/;
 
 function argValue(name) {
   const index = process.argv.indexOf(name);

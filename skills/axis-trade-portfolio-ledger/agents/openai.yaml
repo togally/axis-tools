@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-trade-portfolio-ledger"
+  short_description: "Maintain a cross-asset portfolio ledger / 维护跨资产投资台账"
+  default_prompt: "Use $axis-trade-portfolio-ledger to reconcile and summarize this private cross-asset portfolio without inventing missing values."
+
+policy:
+  allow_implicit_invocation: true
