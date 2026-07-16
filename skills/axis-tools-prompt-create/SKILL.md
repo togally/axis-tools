@@ -5,102 +5,79 @@ description: Use when a prompt must be created, refined, or selected through bli
 
 # Axis Tools Prompt Creation
 
-Create prompts as tested source assets. Optimize for stable behavior across source kinds and model tiers, not for one attractive example or one strong model.
+Create prompts as tested source assets. Prefer stable behavior across sources and exact model IDs over one attractive example or one strong-model result.
 
 ## When to Use
 
-- A user asks to create, compare, refine, or select a non-trivial prompt.
-- A prompt under-splits, over-splits, omits, invents, or mixes business units.
-- Correctness changes materially across source kinds or model tiers.
-- A reusable skill depends on a generative prompt that needs evidence before packaging.
+- Create, compare, refine, or select a non-trivial prompt with a testable output contract.
+- Reproduce and prevent under-splitting, over-splitting, omission, invention, format failure, or another model-dependent defect.
+- Supply prompt evidence to a reusable domain or skill workflow before its prompt is frozen.
 
-Do not use this skill for one-line copy editing without a testable output contract, ordinary API load testing, or executing an already frozen domain prompt. Creating, naming, packaging, installing, and publishing a skill remain the responsibility of `$axis-tools-skill-create`; this skill returns the selected prompt and its evidence and does not hand back recursively.
+## Do Not Use
 
-## Inputs and Evaluation Contract
+- Do not use for one-line copy editing without an oracle, ordinary API load testing, or execution of an already frozen domain prompt.
+- Do not use to name, package, install, commit, publish, or push a Skill; `$axis-tools-skill-create` owns those actions.
+- Do not claim a selected winner when no scorer/reviewer contract exists or no candidate clears its hard gates.
 
-Before creating candidates, obtain or agree on:
+## Inputs
 
-- the task objective, smallest valid output unit, output schema, and forbidden behavior;
-- hard gates and scored dimensions;
-- public-safe diagnostic examples covering known failures and valid counterexamples;
-- the source kinds, available model IDs, model-tier labels, fixed reasoning effort, repeats, timeout, and cost boundary;
-- where temporary model outputs may be stored.
+- Objective, smallest valid output unit, model-visible schema, forbidden behavior, hard gates, and scored dimensions.
+- Public-safe diagnostic cases with separate `model_input` and evaluator-only `oracle`, plus an independently prepared holdout.
+- Baseline, at least two explainable challengers, exact model IDs and tier labels, fixed reasoning effort, repeats, timeout, tools policy, and cost boundary.
+- Task-specific scorer adapter, output schema, thresholds, and an ignored temporary output location.
 
-If there is no scoring oracle or equivalent reviewer contract, run exploration only and do not claim that a best prompt was selected.
+## Outputs
+
+- Selected prompt source or an explicit `no_candidate_passed` result.
+- Candidate, prompt, case-set, schema, and scorer hashes plus exact model IDs and settings.
+- Diagnostic/final cell scores, hard failures, prompt length, estimated cost, residual limits, and raw evidence path outside Git.
+
+## Safety and Boundaries
+
+- Send only public-safe `model_input`; never serialize oracle, gold labels/counts, scores, stage labels, reviewer notes, credentials, private hosts, or customer data.
+- Keep generated requests, outputs, events, stderr, and reports under `/tmp` or another approved ignored location. Do not Git-manage generated reports or project documents.
+- Keep domain gold cases and scorer semantics in the owning domain skill. This skill owns the generic experiment and deterministic selection contract.
+- Fix candidate, data, schema, scorer, model, and inference settings before comparison; do not favor a candidate with extra retries or tools.
 
 ## Three-Step Work Contract
 
-1. Co-create the contract. Preserve the user's literal semantics, reproduce the current failure, freeze acceptance criteria, and separate every case into `model_input` and an evaluator-only `oracle`.
-2. Execute the experiment. Keep the existing prompt as the baseline, create at least two challengers, run the blind diagnostic matrix, and revise only from diagnostic evidence.
-3. Verify and freeze. Select by the Worst-Cell Gate, freeze the candidate and hashes, run the final holdout once, and report exact evidence and remaining limits.
-
-## Candidate Construction
-
-- Start with a baseline; never compare only new variants.
-- Change one coherent mechanism per challenger so results remain explainable.
-- Encode atomicity, merge/split rules, evidence requirements, output schema, and concise presentation separately.
-- Prefer the shortest candidate that clears every hard gate; verbosity is a tiebreaker, not the primary objective.
-- Keep prompts free of answer keys, case IDs that reveal expected behavior, evaluator notes, and private project data.
+1. Co-create the contract: preserve the user's literal semantics, reproduce the failure, freeze acceptance criteria, and separate `model_input` from `oracle`.
+2. Execute the experiment: keep the current prompt as baseline, create at least two challengers, and revise only from the Blind Evaluation diagnostic matrix.
+3. Verify and freeze: apply the Worst-Cell Gate, freeze hashes, run the Frozen Holdout once, and report a passing selection or no winner.
 
 ## Blind Evaluation
 
-The model receives only `model_input`. Never serialize `oracle`, gold labels, expected counts, scores, stage labels, or reviewer notes into the request. Put a unique sentinel in oracle-only fields during validation and prove that the serialized model request does not contain it.
-
-Treat parse errors, schema errors, timeouts, tool failures, and empty output as failed observations. Do not drop them from denominators or hide them behind a mean.
-
-Read [prompt-evaluation-contract.md](references/prompt-evaluation-contract.md) before building a runner or score adapter. Use [rank_prompt_results.mjs](scripts/rank_prompt_results.mjs) to apply the deterministic ranking rule to normalized observations.
+Put a unique sentinel in oracle-only fields and prove the final request excludes it. Parse errors, schema errors, timeouts, tool failures, scorer failures, and empty output are hard failures and remain in the denominator. Read [prompt-evaluation-contract.md](references/prompt-evaluation-contract.md) before building the task-specific runner/scorer.
 
 ## Data Source Matrix
 
-Use multiple public-safe source kinds, not several near-duplicate examples from one file type. For a general robustness claim, include at least four useful kinds: a historical failure, a valid split case, a valid merge case, and a boundary trap. Add code, API, event, database, workflow, or prose sources when the target task depends on them.
-
-The domain skill owns its gold cases and scorer semantics. This skill owns the generic experiment contract and ranking method.
+Use multiple public-safe source kinds rather than near-duplicate examples. A general robustness claim covers at least a historical failure, a valid split, a valid merge, and a boundary trap; add code, API, event, data, workflow, or prose sources when the task depends on them.
 
 ## Model Tier Matrix
 
-Map actual available model IDs to at least `small`, `standard`, and `strong` tiers before claiming cross-tier robustness. Keep reasoning effort, tools, system instructions, schema, retries, and repeats fixed across prompt candidates. Record exact model IDs rather than reporting tier labels alone.
-
-If fewer than three tiers are available, the run may still be diagnostic, but the result must not say that cross-tier validation passed.
+Map actual available IDs to at least small, standard, and strong tiers before claiming cross-tier robustness. Record and score exact `model_id` values; a tier label is reporting metadata and must not average away failure from one model. Keep effort, tools, schema, retries, and repeats fixed.
 
 ## Worst-Cell Gate
 
-For each prompt, aggregate every `model_tier × source_kind` cell. Rank candidates by:
-
-1. zero hard failures;
-2. highest worst-cell mean;
-3. highest overall mean;
-4. lowest cell spread or variance;
-5. shortest prompt or lowest measured cost.
-
-A candidate with a high average but a zero or hard failure in one cell cannot outrank a stable candidate that clears the configured threshold everywhere.
+Normalize every attempt and use [rank_prompt_results.mjs](scripts/rank_prompt_results.mjs) with its schema-v1 input, frozen `candidate_ids`, and explicit `planned_units`. The primary cell is exact `model_id × source_kind`. Sort by zero/fewer hard failures, highest worst-cell mean, highest overall mean, lowest cell spread, then lower `prompt_length`, lower `estimated_cost`, and stable prompt ID. Reject missing candidates or units, duplicates, and incomplete thresholds before accepting a winner.
 
 ## Frozen Holdout
 
-Use the diagnostic set for iteration. After choosing a candidate, record the candidate hash, case-set hash, schema hash, scorer version, models, effort, and thresholds. Only then run an independently prepared final holdout once.
-
-If the holdout fails and the prompt changes, create a new holdout or label the rerun as diagnostic. Never tune repeatedly against the same cases while still calling them unseen holdout evidence.
-
-## Output and Artifact Boundary
-
-Keep raw requests, model outputs, event streams, stderr, diagnostic reports, and final run reports in `/tmp` or another user-approved ignored location. Do not add generated reports or generated project documents to Git.
-
-Source-controlled assets may include the selected prompt, public-safe case source, schemas, deterministic runner/scorer code, and focused regression tests. Report prompt, data, schema, and scorer hashes plus the temporary evidence path.
-
-## Light Adversarial Review
-
-Spend no more than 30% of the interaction challenging weak evidence: detect oracle leakage, duplicate source kinds, favorable model selection, changing inference settings, averages that hide failure cells, or a reused holdout. Once the experiment contract is sound, execute it decisively.
+Use diagnostics for iteration. Before revealing the final holdout, record prompt, case, schema, and scorer hashes plus models, effort, and thresholds. Run it once. If the prompt changes after failure, prepare a new holdout or label all reuse as diagnostic evidence.
 
 ## Checks
 
-- Baseline and at least two challengers exist.
-- Historical failure, split, merge, and boundary cases are represented.
-- Model request serialization is proven oracle-free.
-- Candidate × model × case × repeat invocation counts match the plan.
-- Failure observations count as failures.
-- Worst-cell ranking has a deterministic regression test.
-- Final-holdout claims include frozen hashes and exact model IDs.
+- Baseline and at least two challengers cover the historical failure, split, merge, and boundary controls.
+- Oracle-sentinel isolation passes and invocation count equals candidate × model × case × repeat.
+- Exact model/source cells are complete; failure observations are retained and hard thresholds are applied.
+- Ranking regression covers hidden tier averages plus prompt-length/cost ties.
+- Final claims include frozen hashes, exact model IDs, settings, observation/failure counts, and temporary evidence paths.
 - Generated run artifacts remain outside Git.
+
+## Light Adversarial Review
+
+Keep challenge and critique to no more than 30% of the interaction. Detect oracle leakage, duplicate source kinds, favorable model selection, incomplete matrices, averages hiding exact-model failures, inference drift, or reused holdouts; once sound, execute decisively.
 
 ## After Use Deposition
 
-After using this skill, check whether the run produced reusable prompt mechanisms, leak-prevention checks, ranking rules, or edge cases. If yes, update this bundle, validate it, refresh the local copy, and push to the remote repository when permissions allow. Keep domain gold data and domain scoring logic in the owning domain skill. If no reusable change exists, say that no skill update is needed.
+Check whether the run produced a reusable prompt mechanism, leak-prevention check, ranking rule, or edge case. If yes, update this bundle, validate it, refresh the local copy, and push only when authorized; keep domain gold/scoring in its owner. Otherwise report that no skill update is needed.

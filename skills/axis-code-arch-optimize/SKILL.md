@@ -1,93 +1,86 @@
 ---
 name: axis-code-arch-optimize
-description: Use when implementation work starts as method-level fixes but should become a shared architecture capability or cross-cutting module. / 用于把局部方法修复提升为共享架构能力、中间件组件、适配器或横切模块。
+description: Use when repeated local implementations should become one shared cross-cutting architecture capability. / 用于多处局部实现需要沉淀为统一横切架构能力时。
 ---
 
-# Axis Arch Optimize
+# Architecture Optimization
 
-## Purpose
+Promote behavior into a shared layer only when evidence shows a reusable boundary. Preserve contracts, keep private business rules local, and prove migration with focused tests.
 
-Use this skill when an implementation request starts as a local method-level fix but the shape of the problem says it should become an architecture-level capability. The goal is to move repeated, cross-cutting behavior into the right shared boundary while preserving existing contracts and proving the change with focused checks.
+## When to Use
+
+- The same policy or mechanism appears across services, controllers, jobs, listeners, clients, or modules.
+- Consistency requires one owner for validation, idempotency, retry, cache, permission, telemetry, mapping, lifecycle, or fallback behavior.
+- The user explicitly asks for middleware, an adapter, wrapper, annotation, shared contract, or reusable component.
+
+## Do Not Use
+
+- Do not lift a genuinely isolated defect or one-method cleanup without reuse evidence.
+- Use `$axis-code-bugfix` when the primary result is repairing one observed failure.
+- Use `$axis-code-api-performance-tuning` when the primary result is measured latency improvement.
+- Use `$axis-doc-development` for architecture design only when no implementation is requested.
+- Do not create a parallel framework merely to standardize naming or style.
+
+## Inputs
+
+- Repeated call sites and the duplicated policy or mechanism.
+- Existing module boundaries, dependency direction, public contracts, tests, and repository conventions.
+- Required variation between callers, lifecycle ownership, rollout and rollback needs, and migration scope.
+- Acceptance criteria for shared behavior and for behavior that must remain business-specific.
 
 ## Three-Step Work Contract
 
-1. Co-create the architecture target with the user.
-   Clarify the desired capability, affected call sites, ownership boundary, acceptance criteria, and enough code/schema/runtime context to safely choose the shared layer. Use light adversarial review to challenge boundary leaks, private-business coupling, missing rollback, or unclear migration cost.
-2. Execute the architecture result.
-   Build or refactor the smallest shared capability that fits the repository style, migrate representative call sites, and keep business-specific rules in the business module.
-3. Verify the result.
-   Run focused contract, boundary, migration, and regression tests; report what moved, what stayed local, and any residual rollout risk.
+1. Co-create the architecture target. Confirm ownership, affected call sites, public contract, allowed migration, and rollback boundary.
+2. Execute the result. Add the smallest shared capability, migrate a representative caller first, then migrate only agreed callers.
+3. Verify the result. Run contract tests, boundary tests, migration tests, and adjacent regressions; report what moved and what intentionally stayed local.
 
-Keep light adversarial review under 30% of the interaction. Spend it where architectural ownership or correctness is unclear, then move decisively once the boundary is sufficiently specified.
+## Light Adversarial Review
 
-## Use When
+Keep review at or below 30% of the interaction. Challenge speculative abstraction, reversed dependencies, private-business leakage, hidden lifecycle ownership, unbounded defaults, missing rollback, and migrations with no representative proof. Once the architecture boundary is supported by evidence, implement rather than continuing abstract debate.
 
-- The same pattern appears in multiple services, controllers, jobs, listeners, or clients.
-- A one-method fix would copy policy, validation, retry, cache, permission, idempotency, telemetry, mapping, or error-handling logic.
-- The user asks for a reusable component, middleware module, annotation, SDK wrapper, shared contract, or architecture-level optimization.
-- The current fix would become harder to operate because each call site needs its own switch, limit, metrics, or fallback.
+## Architecture Boundary
 
-Do not use this for a genuinely isolated bug, a tiny local cleanup, or a change whose behavior depends entirely on one private business flow.
+Choose one owning layer before editing:
 
-## Architecture Boundary First
+- Domain or application layer: business orchestration, invariants, request shape, and authorization.
+- Shared middleware: reusable cross-cutting mechanics used by multiple modules.
+- Adapter or client: external protocols, serialization, retries, and fallbacks.
+- Infrastructure or configuration: runtime switches, conservative defaults, metrics, and lifecycle.
 
-Before editing code, identify the architecture boundary:
+Lift only the stable mechanism. Keep product-specific decisions, status rules, and private business policy in the owning business module.
 
-- Domain service: business-specific orchestration and invariants.
-- Application service/controller: request shape, authorization, and user-facing contract.
-- Middleware/shared module: cross-cutting policy used by multiple modules.
-- Adapter/client layer: external systems, serialization, protocol, retries, and fallbacks.
-- Infrastructure/config: runtime switches, environment policy, metrics, and operational defaults.
+## Workflow
 
-Only lift behavior upward when it removes real duplication or centralizes a policy that must be consistent. Keep business rules in the business module; move reusable mechanics into the shared layer.
+1. Describe the duplication or inconsistent policy in one sentence and enumerate evidence-bearing call sites.
+2. Define the smallest shared API and dependency direction that match the repository style.
+3. Write failing contract tests plus a boundary test that prevents private-module dependency.
+4. Add failure-mode checks for disabled switches, invalid inputs, empty results, cleanup, and rollback where relevant.
+5. Implement the shared mechanism and migrate one representative caller.
+6. Verify behavior and operational ownership, then migrate remaining agreed callers incrementally.
 
-## RED Checks
+## Outputs
 
-Write failing checks before implementation:
+- Chosen architecture boundary and the evidence supporting it.
+- Shared API or component, migrated callers, and intentionally local behavior.
+- RED/GREEN contract, boundary, migration, and regression evidence.
+- Runtime switches, limits, metrics, cleanup, rollout, and rollback notes where applicable.
 
-- Contract tests for the new public API, annotation, interface, wrapper, or component.
-- Architecture tests that prove target call sites depend on the shared capability instead of duplicating logic.
-- Boundary tests that prove business-specific behavior did not leak into the shared module.
-- Migration tests for at least one existing call site.
-- Failure-mode tests for disabled switches, fallback paths, invalid inputs, and empty results.
-- Invalidation/cleanup tests when the component owns state, background work, or local resources.
+## Safety and Boundaries
 
-If performance is part of the request, keep baseline and after measurements. Add a same-environment control when possible so architecture gains are not confused with deployment differences.
+- Shared modules must not import private business modules or encode one endpoint, table, tenant, or customer as the abstraction.
+- Preserve existing contracts unless the user explicitly authorizes a change and migration.
+- Defaults must be conservative and bounded; stateful components need lifecycle and cleanup ownership.
+- Do not mix unrelated refactors into the migration or silently migrate unreviewed callers.
+- Keep user-owned local changes intact and stage only the intended architecture scope.
 
-## Implementation Pattern
+## Checks
 
-1. Describe the current duplication or local-only policy in one sentence.
-2. Pick the smallest shared abstraction that fits the existing code style.
-3. Add the shared API in the owning common, middleware, adapter, or infrastructure module.
-4. Implement the mechanism behind that API without importing private business modules.
-5. Migrate one representative call site first.
-6. Add opt-in switches or per-call configuration only where callers truly need different policy.
-7. Wire invalidation, lifecycle, metrics, and logging where the new component owns runtime behavior.
-8. Migrate remaining call sites incrementally after the first path is green.
-
-Prefer configuration objects, annotations, interfaces, decorators, or adapters that match the repository's existing patterns. Avoid creating a parallel framework.
-
-## Review Checklist
-
-- The shared layer has no dependency on private business module classes.
-- The public API names describe the reusable concept, not one endpoint or table.
-- Callers can tune the small set of policy values they actually need.
-- Defaults are conservative and bounded.
-- Existing behavior is preserved unless the user asked to change it.
-- Tests prove both the shared component and at least one migrated call site.
-- Operational behavior is documented in code or a short report: switches, limits, metrics, cleanup, and rollback.
-
-## Output Contract
-
-Report:
-
-- The architecture boundary chosen and why.
-- What moved from method-level logic into shared architecture.
-- Which call sites were migrated.
-- Which tests failed first and passed after.
-- Any performance, reliability, or maintainability evidence.
-- What intentionally stayed local because it is business-specific.
+- Contract tests prove the shared public behavior.
+- Boundary tests prove dependency direction and absence of private-business coupling.
+- Migration tests prove at least one real caller uses the shared capability.
+- Failure, cleanup, disabled, and rollback paths are covered where relevant.
+- The report distinguishes completed migrations from deferred callers and residual rollout risk.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+If the work produced a reusable boundary rule, migration check, lifecycle pattern, or failure case, update this skill bundle, validate it, refresh the local copy, and push when permissions allow. Otherwise report that no skill update is needed.

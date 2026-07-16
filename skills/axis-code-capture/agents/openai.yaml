@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-code-capture"
-  short_description: "Capture v0.2 coding reports / 采集 v0.2 编码报告"
-  default_prompt: "Use $axis-code-capture to write a public-safe Axis v0.2 coding capture package."
+  short_description: "Package completed coding evidence / 打包已完成编码证据"
+  default_prompt: "Use $axis-code-capture to package existing public-safe implementation evidence as one Axis v0.2 coding capture without publishing it."
 
 policy:
-  allow_implicit_invocation: true
+  allow_implicit_invocation: false

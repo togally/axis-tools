@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-ops-oss-publish"
-  short_description: "Sync v0.2 project docs and packages / 同步项目文档与发布包"
-  default_prompt: "Use $axis-ops-oss-publish to validate and publish an Axis v0.2 outbox package using the organization-to-project OSS hierarchy."
+  short_description: "Validate or explicitly publish v0.2 packages / 校验或经确认发布 v0.2 包"
+  default_prompt: "Use $axis-ops-oss-publish to validate or dry-run one Axis v0.2 outbox package, and upload only after approval for the exact run_id and target_prefix."
 
 policy:
   allow_implicit_invocation: true

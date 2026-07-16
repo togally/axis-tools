@@ -5,165 +5,110 @@ description: Use when the user asks to scan, create, review, or refactor a reusa
 
 # Axis Tools Skill Create
 
-Use this skill as the single creation entrypoint for reusable-skill discovery, creation, review, and refactoring. It scans the current work for repeatable behavior and decides whether a workflow is stable enough to become a skill, selects its namespace and target repository, then creates and validates the package.
+Use this skill as the single creation entrypoint for reusable Axis/Orbit skill discovery, trigger-overlap review, packaging, validation, and deposition.
+
+## When to Use
+
+- Scan current work and decide whether a repeated public-safe workflow should become a Skill.
+- Create, review, consolidate, or refactor an Axis or Orbit Skill bundle.
+- Correct naming, triggers, package contents, validation, installation, or deposition behavior in an existing bundle.
+
+## Do Not Use
+
+- Do not create a top-level Skill for a document chapter, internal mode, one-off fix, private customer rule, credential-bearing workflow, or behavior already owned by another front door.
+- Do not use this Skill as the prompt laboratory; use `$axis-tools-prompt-create` for non-trivial prompt R&D.
+- Do not publish private product data or treat local editing permission as commit/push authorization.
+
+## Inputs
+
+- Conversation/task evidence, candidate workflow, trigger wording, expected output, and repeatability evidence.
+- Existing manifest, packaged Skill list, descriptions, handoff/routing evidence, and target repository.
+- Public/private classification, user acceptance criteria, relevant stable/candidate/raw experience, and allowed external actions.
+- For prompt-dependent workflows, the selected prompt and passing evidence returned by `$axis-tools-prompt-create`.
+
+## Outputs
+
+- A retain, merge, refactor, private-only, or no-skill decision with trigger/output/evidence reasoning.
+- A complete bundle containing `SKILL.md`, `agents/openai.yaml`, and only necessary `references/`, `scripts/`, or `assets/`.
+- Updated package metadata/tests when in scope, validation evidence, local-install status, and exact unverified risk.
+- Commit/push results only when those actions were explicitly authorized.
+
+## Safety and Boundaries
+
+- Public bundles exclude credentials, private hosts, account/customer identifiers, closed-repository-only rules, and project-specific secrets.
+- Preserve literal user semantics, but challenge unsafe shortcuts, circular handoffs, duplicate triggers, hidden side effects, and unsupported claims.
+- Deposit, commit, push, publish, and destructive alias retirement are separate actions. Do not infer remote-write authorization from a request to draft or refactor a Skill.
+- Keep generated reports and temporary model output outside Git; intentionally authored Skill source, public-safe tests, and references may be versioned.
 
 ## Unified Skill Creation
 
-Use one creation standard for both repositories; do not configure or invoke a separate Orbit skill creator.
-
-- Cross-project engineering, architecture, testing, API performance, database/schema, deployment, platform operations, meta-tooling, and public-safe investment workflow governance belong in `axis-tools` and use the taxonomy below.
-- Personal AI information-matrix, content lifecycle, article-title, publishing, and resource-delivery skills belong in the Orbit repository and use `orbit-xxx` names.
-- Private, customer-specific, credential-bearing, or closed-repository workflows stay private/local; do not publish them to either repository.
-- Do not recreate `axis-pulse-*` or `axis-article-title` compatibility aliases. Their retained presence would make one request trigger competing workflows.
+- Cross-project engineering, documentation, testing, operations, integration, meta-tooling, and public-safe trade governance belong in `axis-tools`.
+- Personal information-matrix/content lifecycle work belongs in the Orbit repository and uses `orbit-xxx` names.
+- Private or credential-bearing workflows stay private/local.
+- Do not recreate `axis-pulse-*`, `axis-article-title`, or retired pre-taxonomy aliases that compete with canonical owners.
 
 ## Naming Taxonomy
 
-New public Axis skills must use `axis-{category}-{action}`. Choose the category by the primary outcome, not by incidental keywords:
+Choose by primary outcome:
 
-| Category | Name pattern | Use for |
+| Category | Pattern | Outcome |
 | --- | --- | --- |
-| Document | `axis-doc-xxx` | Architecture, design, data/database design, project initialization/migration, knowledge bootstrap, document dashboards, document generation, document drift and traceability. |
-| Code | `axis-code-xxx` | Implementation, bugfix, refactor, performance tuning, and coding-result capture. |
-| Test | `axis-test-xxx` | TDD, real-side-effect testing, benchmarks, and test-result capture. |
-| Tools | `axis-tools-xxx` | Skill lifecycle, prompt creation and evaluation, packaging, installation, and updates. |
-| Operations | `axis-ops-xxx` | Publishing, observability dashboards, delivery, and operational controls. |
-| Integration | `axis-integration-xxx` | Named third-party platform, repository, or service integrations. |
-| Trade | `axis-trade-xxx` | Public-safe trading-system governance, portfolio ledgers, investment risk research, plan gates, and evidence-backed monitoring. Never package personal holdings, account identifiers, credentials, or private financial data. |
+| Document | `axis-doc-xxx` | Architecture, development docs, project initialization/knowledge, document dashboard and drift. |
+| Code | `axis-code-xxx` | Implementation, bugfix, refactor, optimization and code capture. |
+| Test | `axis-test-xxx` | TDD, side-effect testing, benchmark and test capture. |
+| Tools | `axis-tools-xxx` | Skill/prompt lifecycle, packaging, installation and updates. |
+| Operations | `axis-ops-xxx` | Publishing, observability and operational controls. |
+| Integration | `axis-integration-xxx` | Named third-party platform integration. |
+| Trade | `axis-trade-xxx` | Public-safe investment-system governance, never personal holdings or accounts. |
 
-Examples: `axis-doc-project-init`, `axis-doc-project-knowledge`, `axis-code-bugfix`, `axis-test-benchmark`, `axis-tools-skill-create`, `axis-tools-prompt-create`, `axis-ops-oss-publish`, `axis-integration-source-control`, and `axis-trade-plan-gate`.
-
-Every public Axis skill must use this taxonomy; the creation and deposit helpers reject the old generic `axis-xxx` shape and the retired `axis-skill-xxx` prefix. Do not invent a category for an ambiguous workflow: ask the user whether its primary outcome is document, code, test, tools, operations, integration, or public-safe trade governance.
+Examples include `axis-doc-project-init`, `axis-code-bugfix`, `axis-test-benchmark`, `axis-tools-prompt-create`, and `axis-ops-oss-publish`. Ask instead of inventing an ambiguous category.
 
 ## Prompt Creation Handoff
 
-When a reusable skill depends on a non-trivial generative prompt, or correctness varies by source kind or model tier, use `$axis-tools-prompt-create` after the trigger-overlap audit and before freezing the prompt in `SKILL.md` or `references/`.
+This creator explicitly depends on `$axis-tools-prompt-create` whenever a reusable Skill contains a non-trivial generative prompt or correctness varies across source kinds/model IDs. Invoke it after overlap audit and before freezing the prompt.
 
-`axis-tools-prompt-create` owns the prompt contract, candidates, public-safe evaluation corpus, blind model matrix, scoring, holdout integrity, and selection evidence. This skill retains ownership of reusable-workflow discovery, namespace and repository selection, trigger overlap, bundle structure, `agents/openai.yaml`, manifest, installation, commit, and push. The handoff returns evidence here; it must not create a second skill-packaging entrypoint or a circular invocation.
+Prompt-create owns objective/schema, candidates, public-safe cases, oracle isolation, model matrix, scorer, holdout, and selection evidence. This creator retains Skill naming, routing, bundle structure, metadata, validation, installation, commit, and push. The direction is creator to prompt-create only; prompt-create is not a second packaging entrypoint.
+
+## Three-Step Work Contract
+
+1. Co-create the requirement with the user: preserve exact wording, agree on the reusable outcome and acceptance checks, apply relevant experience, and gather the necessary evidence.
+2. Execute the result: classify the candidate, audit overlap/handoffs, use prompt-create when required, and create or refactor only the agreed bundle and metadata.
+3. Verify the result: run focused validators/tests, prove retired aliases and overlaps are absent when applicable, optionally refresh through `$axis-tools-skill-update`, and report exact scope.
 
 ## Workflow
 
-1. Scan the current conversation for reusable behavior, not one-off task details. Good candidates mention repeated workflows, verification rules, dashboard formats, release procedures, or phrases like `沉淀`, `复用`, `以后每次`, or `skill`.
-2. Classify the stable candidate: choose one Axis naming-taxonomy category and use `axis-{category}-{action}` in `axis-tools`, use `orbit-xxx` in the Orbit repository for personal information-matrix/content capabilities, or use a private/local skill for non-public workflows. Reject public candidates that are product-private, customer-specific, credential-bearing, or only useful inside one closed-source repository. When evidence cannot determine the category, ask the user instead of guessing.
-3. If there is no reusable public workflow, say that no skill should be created.
-4. Before creating or refactoring, run a trigger-overlap audit against existing packaged skills. A top-level skill should represent an independently selectable user outcome, not merely a document chapter, internal mode, template, or lifecycle step already owned by another skill. When two candidates share trigger wording, evidence, and output, prefer one front door with internal modes and on-demand `references/`.
-5. For non-trivial skill content, use the writing-skills process: write a failing validation or concrete acceptance check first.
-6. Classify the candidate before creation. Coding, architecture, API performance, bugfix, testing, database, schema, and design-document skills must include the three-step work contract: co-create the requirement with the user, execute the agreed result, then verify and report the result.
-7. Coding/design-type skills must include a light adversarial review rule capped at no more than 30% of the interaction: verify claims against evidence, surface hidden assumptions, name risk/correctness trade-offs, and challenge unsafe shortcuts while still respecting the user's explicit business wording.
-8. Write the skill frontmatter `description` in bilingual English and Chinese. It must still start with `Use when`, then include a concise Chinese explanation in the same line.
-9. If the candidate is stable and public-safe, create it with the same helper. For Axis skills, create and deposit into `axis-tools`:
-
-```bash
-node scripts/axis-skill-create.mjs \
-  --repo <axis-tools> \
-  --source-root ~/.codex/skills \
-  --name axis-code-example-skill \
-  --description "Use when ... / 用于..." \
-  --body-file /tmp/axis-tools-skill-example.md \
-  --deposit --commit --push --branch main
-```
-
-The helper injects an `After Use Deposition` section into generated skills so each skill reminds future agents to update, validate, and push its own reusable improvements when permissions allow. For coding/design-type skills, it also injects `Three-Step Work Contract` and `Light Adversarial Review` so the generated skill does not become a passive transcription or implementation shortcut.
-
-When passing prompts that contain a `$skill-name`, wrap that argument in single quotes so the shell does not expand `$skill` as an environment variable. For example, use `--default-prompt 'Use $axis-code-example-skill to ...'`, or omit `--default-prompt` and let the helper generate the default.
-
-10. Keep the skill bundle complete. At minimum include `SKILL.md` and `agents/openai.yaml`; include `references/`, `scripts/`, or `assets/` when the workflow needs them.
-11. Install or refresh local packaged skills after pushing when the user expects immediate local use:
-
-```bash
-node scripts/axis-skill-update.mjs --repo <axis-tools> --agent codex --json
-```
-
-For Orbit skills, use the same helper but write directly into the Orbit repository's `skills/` directory, then run that repository's validator. Do not pass `--deposit`, `--commit`, or `--push` to the Axis helper for Orbit; Orbit owns its own repository history.
-
-```bash
-node <axis-tools>/scripts/axis-skill-create.mjs \
-  --source-root <orbit-repo>/skills \
-  --name orbit-example-skill \
-  --description "Use when ... / 用于..." \
-  --body-file /tmp/orbit-example-skill.md
-```
-
-## Candidate Scan
-
-For a quick candidate scan from a saved conversation transcript:
-
-```bash
-node scripts/axis-skill-create.mjs --scan-conversation <conversation.txt> --json
-```
-
-Only create a skill when the candidate has a stable trigger, a repeatable workflow, clear validation steps, and no private product-specific content.
-
-## Package, Reasoning, and Experience Rules
-
-Keep `SKILL.md` concise: put only triggers, workflow, boundaries, and validation in it. Add `scripts/` only for deterministic repeated operations, `references/` for detailed material that should load on demand, and `assets/` for output resources. Do not create auxiliary README, installation, or changelog files inside a skill bundle.
-
-Every generated Codex skill must have `SKILL.md` and `agents/openai.yaml`, clear use/non-use boundaries, inputs, outputs, safety rules, validation, and `After Use Deposition`. For Orbit content skills, also include `Mandatory Before-Use Experience Application`, `Mandatory After-Use Deposition`, and a `Model Reasoning Level` section.
-
-Choose the default reasoning level by actual task difficulty: `light -> low`, `standard -> medium`, `complex -> high`, and `critical -> max`. Let simple, low-risk, easily verified tasks downgrade; require explicit safety, stopping, and verification rules before upgrading.
-
-Before creating or refactoring a skill, apply relevant `stable` experience directly, treat `candidate` experience as a constraint to test, and keep `raw` experience as reference only. Report `Experience used: none`, `Experience used: <path>`, or `Experience used: skipped <reason>`. After use, report `Deposition: none`, `Deposition: updated <path>`, or `Deposition: proposed <change>`.
+1. Scan the current conversation for repeated behavior and decide whether it has a stable trigger, independent outcome, clear checks, and public-safe content.
+2. Compare trigger, output, evidence, and handoffs with every existing packaged Skill. Prefer one front door with internal modes/references when outcomes overlap.
+3. Write a failing validation or concrete acceptance check before non-trivial authoring.
+4. Create the bundle with `scripts/axis-skill-create.mjs`; keep `SKILL.md` concise and put deep material on-demand in references.
+5. Validate with `quick_validate.py` and repository tests; reconcile manifest/catalog/routing only when the task permits those files.
+6. Deposit source changes, then commit/push only if authorized. Refresh the local installation through `$axis-tools-skill-update` when immediate use is requested.
 
 ## Bilingual Description Rule
 
-Every public Axis or Orbit skill description must be bilingual:
+Descriptions start with `Use when`, contain concise English and Chinese on the same frontmatter line, and remain public-safe. `agents/openai.yaml` uses the exact Skill name as `display_name`, a bilingual `short_description`, and a default prompt containing `$skill-name`.
 
-```text
-description: Use when <English trigger>. / 用于<中文触发场景或用途>。
-```
+## Package, Reasoning, and Experience Rules
 
-Rules:
-
-- The line must start with `Use when` so Codex trigger semantics remain predictable.
-- The same line must contain Chinese text; do not put the Chinese explanation only in the body.
-- Keep `agents/openai.yaml` `short_description` bilingual too.
-- For packaged skills, `agents/openai.yaml` `display_name` must equal the skill name, such as `axis-tools-skill-example`; do not use a marketing label or custom title there.
-- Keep both languages concise and public-safe.
-- The create and deposit helper scripts reject skills whose description is English-only or Chinese-only.
-
-## Three-Step Work Contract for Coding and Design Skills
-
-For coding/design-type skill candidates, encode the workflow as three steps:
-
-1. Co-create with the user.
-   Clarify what the user wants, preserve their literal business wording, agree on acceptance criteria, and gather the code, schema, logs, docs, credentials, endpoints, environment details, or decisions needed to execute.
-2. Execute the result.
-   Implement the code change, write the design, or produce the artifact within the agreed boundary and using the existing repo style.
-3. Verify the result.
-   Run focused tests, validators, benchmarks, document checks, or review passes, then report exact results and any unverified risk.
-
-This structure should guide the skill without making every tiny task feel bureaucratic. If the next step is already fully specified, keep step 1 brief and move into execution.
-
-## Light Adversarial Review for Coding and Design Skills
-
-For coding/design-type skill candidates, add a constructive review stance to the skill body. The point is not to be obstructive; it is to prevent reusable skills from encoding unverified assumptions.
-
-The generated or updated skill should tell future agents to:
-
-- verify the user's goal against code, schema, logs, benchmarks, official docs, or other task evidence;
-- call out missing preconditions, boundary leaks, unclear ownership, consistency risks, scalability risks, and rollback gaps;
-- challenge unsafe shortcuts such as skipping tests, hiding external failures, putting private business rules in public shared modules, or documenting an old implementation as the final design;
-- preserve literal business semantics once the user has corrected or clarified them;
-- become decisive after enough evidence exists and execute rather than staying in endless critique.
-
-Keep this light adversarial behavior to no more than 30% of the interaction. Use more of it when the task is risky or underspecified, and less when the user has already supplied enough information to execute safely.
-
-## After Use Deposition
-
-After using this skill, check whether this scan found a reusable improvement to the skill-creation process itself. If yes, update `axis-tools-skill-create`, validate it, refresh the local install, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+- Every bundle states use/non-use, inputs, outputs, safety, checks, and After Use Deposition.
+- Coding/design-type skills should include `Three-Step Work Contract` and `Light Adversarial Review` capped at 30%.
+- Orbit content Skills also include `Mandatory Before-Use Experience Application`, `Mandatory After-Use Deposition`, and `Model Reasoning Level`.
+- Choose reasoning from task difficulty: light/low, standard/medium, complex/high, critical/max; require safety/stopping/verification rules before upgrading.
+- Report `Experience used: ...` and `Deposition: ...`; stable experience is applied, candidate experience is tested, and raw experience is reference only.
 
 ## Checks
 
-- Skill frontmatter must include `name` and a `description` beginning with `Use when`.
-- Skill `description` must be bilingual English and Chinese.
-- The generated `agents/openai.yaml` should include a `$skill-name` default prompt.
-- The generated `agents/openai.yaml` `display_name` must equal the exact skill name.
-- The generated `agents/openai.yaml` `short_description` must be bilingual English and Chinese.
-- Coding/design-type skills should include `Three-Step Work Contract`.
-- Coding/design-type skills should include `Light Adversarial Review`.
-- Validate with `quick_validate.py` unless running a fake-home unit test.
-- After deposit, run the repo's available test suite when present (for example `npm test`) and update any packaged-skill manifest or explicit skill-list tests that must include the new skill.
-- Commit and push only the skill bundle, manifest, docs, and tests related to the skill change.
-- Public skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
-- Select the target repository and prefix before creating a skill: `axis-{category}-xxx` for outcome skills, `axis-tools-xxx` for meta-tools, `orbit-xxx` for Orbit, never `axis-pulse-*` compatibility aliases. Use only `doc`, `code`, `test`, `tools`, `ops`, `integration`, or `trade` as the Axis category. Project initialization, migration, knowledge bootstrap, and document dashboards belong to `doc`; reusable investment-system governance belongs to `trade`, while personal holdings and account data remain outside public bundles.
-- A refactor must prove retired top-level skills are absent from the manifest, packaged directory list, public inventory, and installed refresh result.
-- Review trigger overlap, evidence overlap, output overlap, and circular handoffs before retaining multiple top-level skills; move deep internal guidance to `references/` when one front door is sufficient.
+- Frontmatter, directory, manifest entry, `display_name`, and `$skill-name` prompt agree; descriptions are bilingual and begin with `Use when`.
+- Trigger/output/evidence overlap and handoff cycles are audited; every top-level Skill owns one independently selectable outcome.
+- Complete bundles contain only declared files, remain concise, and pass `quick_validate.py` plus focused repo tests.
+- Coding/design-type skills should include the required work/review contracts and the user's literal semantics.
+- A refactor proves retired names are absent from packaged directories, manifest, public inventory, routing, and refreshed local installation.
+- Commit/push scope contains only authorized Skill source, metadata, docs, and tests.
+
+## Light Adversarial Review
+
+Keep challenge and critique to no more than 30% of the interaction. Verify repeatability, public safety, ownership, trigger/output overlap, circular handoffs, rollback, and validation; once evidence is sufficient, create or refactor decisively.
+
+## After Use Deposition
+
+Check whether this run improved the creation standard itself. If yes, update `axis-tools-skill-create`, validate it, refresh the local copy, and push only when authorized. Otherwise report that no creator update is needed.

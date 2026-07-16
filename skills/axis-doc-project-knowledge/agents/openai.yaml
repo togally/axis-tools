@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-doc-project-knowledge"
-  short_description: "Maintain level-1 capability project knowledge / 维护一级能力项目知识"
-  default_prompt: "Use $axis-doc-project-knowledge to bootstrap or reconcile global architecture, capability inventory, one overview per level-1 capability, one detailed design per secondary capability, navigation, metadata, and document gaps."
+  short_description: "Build or reconcile canonical project knowledge / 建立或梳理正式项目知识"
+  default_prompt: "Use $axis-doc-project-knowledge to bootstrap or reconcile the canonical Axis v0.2 knowledge set, lock atomic secondary capabilities, keep compact reader output concise, and ask before any exact-run OSS upload."
 
 policy:
   allow_implicit_invocation: true

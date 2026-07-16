@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-integration-yunxiao-codeup"
-  short_description: "Yunxiao Codeup OpenAPI / 云效代码库 MR"
-  default_prompt: "Use $axis-integration-yunxiao-codeup to safely inspect Yunxiao repositories or create a merge request."
+  short_description: "Query Codeup or create an MR / 查询云效代码库或创建 MR"
+  default_prompt: "Use $axis-integration-yunxiao-codeup to query a Yunxiao Codeup repository or create one authorized merge request through the trusted HTTPS OpenAPI helper."
 
 policy:
   allow_implicit_invocation: true

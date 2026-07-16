@@ -1,92 +1,74 @@
 ---
 name: axis-code-bugfix
-description: Use when a user reports a bug, production error, failed benchmark, flaky behavior, or pasted logs and wants a root-cause fix. / 用于排查并修复缺陷、生产错误、压测失败、偶发问题或日志截图中的根因问题。
+description: Use when an observed software failure needs evidence-based diagnosis and, when authorized, a root-cause fix. / 用于对已观测的软件故障进行证据化诊断，并在获准时完成根因修复。
 ---
 
-# Axis Bugfix
+# Evidence First Bugfix
 
-## Overview
+Tie the reported symptom to a concrete code path or external dependency before changing behavior. A fix is complete only when a regression check catches the original failure and verification addresses the same symptom.
 
-Evidence first, fix second. A bugfix is not done until the failing symptom is tied to a concrete code path or external dependency, a regression check exists, and the verification result matches the original failure mode.
+## When to Use
+
+- The user reports an exception, wrong result, regression, flaky behavior, production error, failed check, screenshot, or logs.
+- Application code, configuration, runtime profile, external dependency, and test harness are competing explanations.
+- The request asks for diagnosis, repair, or both.
+
+## Do Not Use
+
+- Use `$axis-test-benchmark` when the requested result is capacity or latency measurement only.
+- Use `$axis-code-api-performance-tuning` when a valid benchmark has isolated a slow read path and the primary result is optimization.
+- Use `$axis-code-arch-optimize` when the proven fix must become a shared cross-cutting capability.
+- Do not implement when the user requested diagnosis or explanation only.
+
+## Inputs
+
+- Exact symptom, expected behavior, environment, timestamp or request window, and reproducible inputs when available.
+- Stack traces, logs, screenshots, business codes, traces, failing commands, or monitoring evidence without summarizing away nested causes.
+- Current checkout, active profile, relevant code path, configuration, dependency state, and nearby tests.
+- Authorization boundary: diagnosis only, local fix, schema change, deployment, external action, or data repair.
 
 ## Three-Step Work Contract
 
-1. Co-create the fix target with the user.
-   Preserve the pasted evidence, clarify the environment and expected behavior, map enough code or dependency context to separate likely causes, and ask only for missing information that blocks a safe next step.
-2. Execute the fix result.
-   Write or define the reproducing RED check, implement the smallest safe fix, and avoid unrelated cleanup.
-3. Verify the result.
-   Run the focused GREEN check, adjacent regression or smoke commands, and reread the original evidence to confirm the same symptom is addressed.
+1. Co-create the target. Preserve the reported evidence, clarify expected behavior and environment, and ask only for information that blocks a safe next step.
+2. Execute the agreed result. Prove the likely cause; when a fix is authorized, create a focused RED regression and implement the smallest safe change.
+3. Verify the result. Confirm GREEN, run adjacent checks, and reread the original evidence to verify the same endpoint, frame, error class, or visible symptom is addressed.
 
-Keep light adversarial review under 30% of the interaction. Use it to challenge unproven root causes, retry-heavy shortcuts, and infrastructure guesses; once evidence points to a fix, execute.
+## Light Adversarial Review
 
-## When To Use
+Keep review at or below 30% of the interaction. Challenge guessed root causes, exception-wrapper conclusions, broad retries, environment mismatch, hidden external failures, and tests written only after the fix. Once evidence distinguishes the cause, act decisively within the authorized mode.
 
-Use for:
-- Pasted stack traces, screenshots, production logs, benchmark errors, or "it broke" reports.
-- Bugs where infrastructure, dependency limits, retries, timeouts, and application code could all be plausible.
-- Regressions that need a safe code change, not only an explanation.
+## Workflow
 
-Do not use for pure feature planning, design docs, or one-line operational questions.
+1. Preserve the exact failure and map the real path from entrypoint through service, repository or client, external calls, configuration, and tests.
+2. Classify external dependency failure separately from application code: also consider profile/config mismatch and benchmark or test-harness artifacts.
+3. Run the smallest inspection or command that distinguishes competing explanations. Do not fix by theory alone.
+4. In diagnosis-only mode, report the proven cause, confidence, and next safe action without editing.
+5. In fix mode, use `$axis-test-tdd` as the implementation method: observe RED, make the narrow correction, and confirm GREEN.
+6. Run adjacent regressions or smoke checks required by the changed layer and state anything blocked by deployment or access.
 
-## Method
+## Outputs
 
-1. Preserve the evidence.
-   Capture the exact error, timestamp, endpoint, request shape, environment, benchmark step, and business failure code. Do not summarize away stack frames, retry spans, or slow operations.
+- Root cause in one sentence tied to concrete evidence.
+- Mode used: diagnosis-only or fix.
+- Changed behavior and files when a fix was authorized.
+- Exact RED/GREEN and adjacent verification commands with results.
+- Residual deployment, data, dependency, or observability risk.
 
-2. Map the real path.
-   Trace from entrypoint to service, repository/client, external call, configuration, and tests. Use current checkout evidence, not route names or memory.
+## Safety and Boundaries
 
-3. Classify before fixing.
-   Classify external dependency failures separately from application code bugs before choosing a fix.
-   Separate the failing layer:
-   - application code bug;
-   - configuration or active profile mismatch;
-   - external dependency capacity, timeout, retry, routing, authentication, quota, or unsupported command;
-   - benchmark or test harness artifact.
+- Preserve user-owned changes and unrelated dirty-worktree content.
+- Never hide dependency, auth, quota, routing, or capacity failure behind retries or fabricated fallback success.
+- Do not mutate production data, deploy, restart services, or call external write paths without matching authority.
+- A remote environment that lacks the local change cannot prove the fix.
+- If evidence remains ambiguous, report the competing causes and the smallest next discriminator rather than guessing.
 
-4. Prove the most likely cause.
-   Run the smallest command or code inspection that distinguishes competing explanations. Do not fix by theory alone.
+## Checks
 
-5. Write RED before changing behavior.
-   Add a focused regression check that fails for the observed problem or asserts the new safety boundary. For process-only fixes, write a concrete acceptance check.
-
-6. Implement the smallest safe change.
-   Prefer removing the dangerous hot path, narrowing the retry/scope, adding fallback, correcting configuration, or making lifecycle work explicit. Avoid unrelated refactors.
-
-7. Verify GREEN and residual risk.
-   Rerun the focused test, then any adjacent tests or smoke commands needed for the changed layer. State what was not verified if deployment or access is unavailable.
-
-8. Re-read the original evidence.
-   Confirm the fix addresses the same endpoint, stack frame, retry span, error class, or user-visible symptom that started the investigation.
-
-## Quick Reference
-
-| Symptom | First Move |
-| --- | --- |
-| Stack trace | Follow the top application frame to the real dependency call. |
-| Slow benchmark | Sort by failing endpoint and p95/p99, then inspect the slow operation span. |
-| External client error | Verify from the same runtime context before blaming code. |
-| Retry storm | Find the hot path that schedules retries or repeated probes. |
-| "Works normally" | Compare normal path with load, container, profile, and dependency capacity. |
-
-## Common Mistakes
-
-- Treating the exception wrapper as the root cause instead of reading nested causes.
-- Fixing the infrastructure symptom while leaving a code hot path that can recreate it under load.
-- Adding broad retries when the real issue is repeated probes, no fallback, or bad lifecycle ownership.
-- Reporting success from a remote environment that does not contain the local change.
-- Writing tests after the fix and never proving they catch the original failure.
-
-## Report Shape
-
-Use this compact final report:
-
-- Root cause: one sentence tied to evidence.
-- Change: files or behavior changed.
-- Verification: exact commands and results.
-- Remaining risk: deploy, data, external dependency, or benchmark caveat.
+- The root cause explains the original evidence and failing layer.
+- The regression check failed for the intended reason before the authorized fix and passes after it.
+- Adjacent tests cover configuration, fallback, lifecycle, or dependency behavior affected by the change.
+- The final report separates verified facts, inference, and unverified external state.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+If the work produced a reusable diagnostic rule, regression pattern, command, or edge case, update this skill bundle, validate it, refresh the local copy, and push when permissions allow. Otherwise report that no skill update is needed.

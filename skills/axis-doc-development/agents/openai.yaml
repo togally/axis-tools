@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-doc-development"
-  short_description: "Create and evolve traceable development docs / 创建并演进可追溯开发文档"
-  default_prompt: "Use $axis-doc-development to resolve my feature, create or revise its master draft and document set, update affected project knowledge, and archive every document before modification."
+  short_description: "Create one feature's traceable document set / 创建单功能可追溯开发文档集"
+  default_prompt: "Use $axis-doc-development to resolve one feature, create or revise its approved development-document set, and return a separate project-knowledge change set without editing canonical knowledge or uploading to OSS."
 
 policy:
   allow_implicit_invocation: true

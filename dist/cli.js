@@ -12,7 +12,17 @@ import { promisify } from 'node:util';
 import { parse as parseYaml } from 'yaml';
 const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
 const retiredPackagedSkills = new Map([
+    ['axis-ali-dashboard', 'axis-ops-ali-dashboard'],
+    ['axis-api-performance-tuning', 'axis-code-api-performance-tuning'],
+    ['axis-arch-optimize', 'axis-code-arch-optimize'],
+    ['axis-benchmark', 'axis-test-benchmark'],
+    ['axis-bugfix', 'axis-code-bugfix'],
+    ['axis-business-domain-doc', 'axis-doc-project-knowledge'],
+    ['axis-coding-capture', 'axis-code-capture'],
     ['axis-create-skill', 'axis-tools-skill-create'],
+    ['axis-db-design-doc', 'axis-doc-development'],
+    ['axis-development-doc', 'axis-doc-development'],
+    ['axis-doc-dashbord', 'axis-doc-dashboard'],
     ['axis-skill-create', 'axis-tools-skill-create'],
     ['axis-skill-update', 'axis-tools-skill-update'],
 ]);
@@ -4488,7 +4498,7 @@ async function packagedSkillNames() {
             continue;
         if (existsSync(path.join(root, entry.name, 'SKILL.md'))) {
             if (!packagedSkillNamePattern.test(entry.name)) {
-                throw new Error(`Packaged skill must use axis-{category}-<action>: ${entry.name}`);
+                throw new Error(`Packaged skill must use an approved axis-{category}-<action> prefix, including axis-tools- for meta-tools: ${entry.name}`);
             }
             names.push(entry.name);
         }

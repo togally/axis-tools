@@ -10,98 +10,40 @@ from pathlib import Path
 
 
 REQUIRED_TERMS = {
-    "axis-doc-drift-capture": [
-        "Three-Step Work Contract",
-        "task_execution_record",
-        "version_iteration_record",
-        "affected_docs",
-        "doc_update_authorization",
-        "No Silent Approved-Doc Rewrite",
-        "After Use Deposition",
-    ],
     "axis-doc-project-knowledge": [
+        "When to Use",
+        "Do Not Use",
+        "Inputs",
+        "Outputs",
+        "Safety and Boundaries",
         "Three-Step Work Contract",
+        "Light Adversarial Review",
         "bootstrap",
         "scan_and_reconcile",
-        "requirement_design",
         "level1_capability_id",
-        "secondary_capabilities",
         "business_id",
         "business_inventory",
         "project_technical_architecture",
         "project_business_architecture",
-        "business_capability_detailed_design",
-        "secondary_capability_detailed_design",
-        "business/capabilities/{level1_capability_id}/detailed-design.md",
-        "business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md",
-        "doc_gap_report",
-        "missing_evidence",
-        "对外业务能力与接口实现",
-        "user_journey_design_status",
-        "user_journey_coverage",
-        "user_journey_gap_id",
-        "table_design_status",
-        "table_design_coverage",
-        "table_design_gap_id",
-        "表结构设计",
-        "table_id",
-        "ER diagram",
-        "level1_capability_dependency_graph",
-        "business/level1-capability-dependency-graph.yaml",
-        "dependency_graph_status",
-        "dependency_graph_revision",
-        "dependency_graph_gap_id",
-        "pending_level1_completion",
-        "not_derived",
-        "项目级统一模型梳理",
-        "直接入边",
-        "直接出边",
-        "Controller/Handler",
-        "Service/UseCase",
-        "读取数据",
-        "写入/产生数据",
-        "读写 `table_id`",
-        "ER 关系证据",
-        "用户可见结果",
-        "level1_journey_id",
-        "flow_id",
-        "api_id",
-        "interface_design_status",
-        "interface_coverage",
-        "调用主体、权限与接口矩阵",
-        "所需权限/策略",
-        "可调用接口/能力",
-        "授权证据",
-        "Section 5 is grouped by contract",
-        "Secondary Capability Granularity Contract",
+        "level-1 dependency graph",
+        "secondary_granularity_gate",
         "one independently reviewable business outcome",
+        "reader_profile=compact",
+        "strict_full",
+        "does **not** require `3.N`",
+        "FileName:begin-end#symbol",
         "secondary-capability-boundary-matrix-v3.1.md",
-        "Run the project-wide inventory granularity gate before selecting affected documents",
-        "Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked",
-        "secondary_granularity_gate=locked",
-        "secondary_granularity_prompt=boundary_matrix_v3_1",
-        "must_split",
-        "must_merge",
-        "hidden authoring metadata",
-        "file basename, line range and symbol",
-        "One diagram uses one semantic layer",
-        "接口清单与代码追溯",
-        "内部处理逻辑",
-        "认证与授权执行",
-        "事务、并发、性能与容错",
-        "安全、测试与验收",
-        "5.2.8",
-        "not_applicable",
+        "$axis-tools-prompt-create",
+        "domain bundle retains its public-safe gold cases",
         "OSS Upload Confirmation Gate",
         "oss_upload_readiness=unavailable|ready",
         "oss_upload_decision=pending|approved|declined",
         "axis validate-config --repo <repo>",
-        "axis project-knowledge-capture --repo <repo>",
-        "axis oss-publish --repo <repo> --run-id <run_id> --dry-run",
-        "axis-ops-oss-publish",
-        "Do not upload in the same turn that asks for confirmation",
-        "Silence, timeout, ambiguity, or authorization from an older run is not consent",
-        "Never test write permission by creating, overwriting or deleting an OSS object before confirmation",
+        "axis oss-publish --run-id <run_id> --dry-run",
+        "exact `run_id`, `target_prefix`",
+        "End the turn and wait",
+        "$axis-ops-oss-publish",
+        "Checks",
         "After Use Deposition",
     ],
 }
@@ -500,6 +442,22 @@ def validate(skill_dir: Path) -> int:
     for term in REQUIRED_TERMS[skill_name]:
         if term not in skill_md:
             return fail(f"missing required term in SKILL.md: {term}")
+
+    if skill_name == "axis-doc-project-knowledge":
+        if re.search(r"(?m)^\s*\|\s*`requirement_design`\s*\|", skill_md):
+            return fail("retired requirement_design mode must not return")
+        if re.search(r"(?m)^##\s+requirement_design\s*$", skill_md):
+            return fail("retired requirement_design section must not return")
+        if "archive them through `$axis-doc-development`" in skill_md:
+            return fail("project knowledge must not call development for archival")
+        for reference in [
+            skill_dir / "references" / "project-knowledge-contracts.md",
+            skill_dir
+            / "references"
+            / "secondary-capability-boundary-matrix-v3.1.md",
+        ]:
+            if not reference.exists():
+                return fail(f"required reference not found: {reference.name}")
 
     if "$" + skill_name not in agent_yaml:
         return fail(f"agents/openai.yaml must mention ${skill_name}")

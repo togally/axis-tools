@@ -287,7 +287,7 @@ const packagedSkillNames = [
   'axis-code-arch-optimize',
   'axis-code-bugfix',
   'axis-code-capture',
-  'axis-doc-dashbord',
+  'axis-doc-dashboard',
   'axis-doc-development',
   'axis-doc-drift-capture',
   'axis-doc-project-init',
@@ -341,7 +341,6 @@ assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /Pet
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
 
 const v01CaptureSkills = [
-  'axis-doc-project-init',
   'axis-code-capture',
   'axis-test-report',
   'axis-ops-oss-publish',
@@ -363,10 +362,16 @@ for (const skillName of v01CaptureSkills) {
   assert.match(body, /After Use Deposition/);
 
   const openAiYaml = await readFile(path.join(repoRoot, 'skills', skillName, 'agents', 'openai.yaml'), 'utf8');
-  assert.match(openAiYaml, /allow_implicit_invocation: true/);
+  if (skillName === 'axis-ops-oss-publish') assert.match(openAiYaml, /allow_implicit_invocation: true/);
+  else assert.match(openAiYaml, /allow_implicit_invocation: false/);
 }
 
 const projectInitBody = await readFile(path.join(repoRoot, 'skills', 'axis-doc-project-init', 'SKILL.md'), 'utf8');
+const projectInitConfirmationBundle = await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-project-init', 'references', 'confirmation-bundle.md'),
+  'utf8',
+);
+const projectInitContract = `${projectInitBody}\n${projectInitConfirmationBundle}`;
 assert.match(projectInitBody, /axis project-init/);
 assert.match(projectInitBody, /\.axis\/config\.yml/);
 const projectInitSkill = manifest.skills.find((skill) => skill.name === 'axis-doc-project-init');
@@ -374,144 +379,92 @@ assert.ok(projectInitSkill);
 assert.match(projectInitSkill.description, /v0\.2/);
 assert.match(projectInitSkill.description, /[\u3400-\u9FFF]/);
 for (const requiredText of [
-  'Batch Configuration Confirmation Gate',
+  'Confirmation Workflow',
   'confirmation_bundle',
   'single_confirmation',
   'max_confirmation_rounds: 1',
   'final_confirmation: true',
-  'Do not ask one field at a time',
+  'rather than one field per turn',
   'one compact batch',
   'organization.id',
-  'organization.registry',
+  'organization ID/registry',
   'project.slug',
-  'project.display_name',
+  'display_name',
   'oss.profile',
   'release.channel',
-  'release.gate',
+  'release channel/gate',
   'package.outbox_dir',
   'document_language',
   'required_env',
-  'present: true|false',
+  'presence booleans',
 ]) {
-  assert.match(projectInitBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(projectInitContract, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 assert.doesNotMatch(projectInitBody, /Show every `fields\[\]` entry in order, one at a time/i);
 
 const projectKnowledge = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge');
 assert.ok(projectKnowledge);
-assert.deepEqual(projectKnowledge.files.sort(), [
+for (const requiredFile of [
   'SKILL.md',
   'agents/openai.yaml',
   'quick_validate.py',
+  'references/project-knowledge-contracts.md',
   'references/business-capability-detailed-design-template.md',
-  'references/level1-capability-dependency-graph-template.yaml',
-  'references/project-business-architecture-template.md',
-  'references/project-technical-architecture-template.md',
   'references/secondary-capability-boundary-matrix-v3.1.md',
-  'references/secondary-capability-decomposition-prompt.md',
   'references/secondary-capability-detailed-design-template.md',
   'references/secondary-capability-eval-cases.json',
-  'references/secondary-capability-prompt-algorithmic.md',
-  'references/secondary-capability-prompt-baseline.md',
-  'references/secondary-capability-prompt-candidates.json',
-  'references/secondary-capability-prompt-v2.3.md',
-  'references/secondary-capability-prompt-v2.4.md',
   'scripts/evaluate_secondary_capability_prompts.mjs',
-]);
+]) assert.ok(projectKnowledge.files.includes(requiredFile), `missing project-knowledge bundle file: ${requiredFile}`);
 assert.match(projectKnowledge.description, /^Use when/);
 assert.match(projectKnowledge.description, /[\u3400-\u9FFF]/);
 const projectKnowledgeBody = await readFile(
   path.join(repoRoot, 'skills', 'axis-doc-project-knowledge', 'SKILL.md'),
   'utf8',
 );
+const projectKnowledgeContracts = await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-project-knowledge', 'references', 'project-knowledge-contracts.md'),
+  'utf8',
+);
+const projectKnowledgeCore = `${projectKnowledgeBody}\n${projectKnowledgeContracts}`;
 for (const requiredText of [
   'Three-Step Work Contract',
-  'Evidence Collection Rules',
   'bootstrap',
   'scan_and_reconcile',
-  'requirement_design',
-  'routes',
-  'controllers',
-  'pages',
-  'menus',
-  'services',
-  'entities',
-  'migrations',
-  'tests',
-  'config',
-  'docs',
   'project_technical_architecture',
   'project_business_architecture',
-  'business_capability_detailed_design',
   'business_inventory',
-  'doc_gap_report',
   'level1_capability_id',
-  'secondary_capabilities',
+  'secondary_capability_id',
   'business_id',
-  'actors',
-  'missing_evidence',
-  'low_confidence',
   'approved',
-  'superseded',
+  'supersedes',
   'architecture/technical.md',
   'architecture/business.md',
   'business/capabilities/{level1_capability_id}/detailed-design.md',
   'business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md',
-  'secondary_capability_detailed_design',
-  'one canonical overview per level1_capability_id',
-  'every secondary capability',
-  '对外业务能力与接口实现',
-  'user_journey_design_status',
-  'user_journey_coverage',
-  'user_journey_gap_id',
-  'dependency_graph_status',
-  'dependency_graph_revision',
-  'dependency_graph_gap_id',
   'business/level1-capability-dependency-graph.yaml',
-  'not_derived',
-  '项目级统一模型梳理',
-  '直接入边',
-  '直接出边',
-  'Controller/Handler',
-  'Service/UseCase',
-  '读取数据',
-  '写入/产生数据',
-  '用户可见结果',
-  'level1_journey_id',
-  'flow_id',
-  'api_id',
-  'Section 5 is grouped by contract',
-  'Secondary Capability Granularity Contract',
   'one independently reviewable business outcome',
   'secondary-capability-boundary-matrix-v3.1.md',
   'Run the project-wide inventory granularity gate before selecting affected documents',
   'Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked',
-  'secondary_granularity_gate=locked',
-  'secondary_granularity_prompt=boundary_matrix_v3_1',
-  'must_split',
-  'must_merge',
-  'hidden authoring metadata',
-  'file basename, line range and symbol',
-  'One diagram uses one semantic layer',
-  '接口清单与代码追溯',
-  '内部处理逻辑',
-  '5.2.8',
+  '$axis-tools-prompt-create',
+  'reader_profile=compact',
+  'does **not** require `3.N`',
+  'FileName:begin-end#symbol',
+  'one semantic layer',
   'gaps/doc-gap-report.md',
   'axis-doc-development',
   'OSS Upload Confirmation Gate',
   'oss_upload_readiness=unavailable|ready',
   'oss_upload_decision=pending|approved|declined',
   'axis validate-config --repo <repo>',
-  'axis project-knowledge-capture --repo <repo>',
-  'axis oss-publish --repo <repo> --run-id <run_id> --dry-run',
   'axis-ops-oss-publish',
-  'Do not upload in the same turn that asks for confirmation',
-  'Silence, timeout, ambiguity, or authorization from an older run is not consent',
-  'Never test write permission by creating, overwriting or deleting an OSS object before confirmation',
+  'exact pair',
   '_archive',
 ]) {
-  assert.match(projectKnowledgeBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(projectKnowledgeCore, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
+assert.doesNotMatch(projectKnowledgeBody, /requirement_design/);
 assert.doesNotMatch(projectKnowledgeBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(projectKnowledgeBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 assert.doesNotMatch(projectKnowledgeBody, /project_business_detailed_design|architecture\/business-detailed-design\.md/);
@@ -731,15 +684,28 @@ assert.doesNotMatch(businessCapabilityDetailedDesignTemplate, /TODO|TBD|待补|�
 
 const docDriftCapture = manifest.skills.find((skill) => skill.name === 'axis-doc-drift-capture');
 assert.ok(docDriftCapture);
-assert.deepEqual(docDriftCapture.files.sort(), ['SKILL.md', 'agents/openai.yaml', 'quick_validate.py']);
+for (const requiredFile of [
+  'SKILL.md',
+  'agents/openai.yaml',
+  'quick_validate.py',
+  'references/drift-classification.md',
+  'references/record-schemas.md',
+]) assert.ok(docDriftCapture.files.includes(requiredFile), `missing drift-capture bundle file: ${requiredFile}`);
 assert.match(docDriftCapture.description, /^Use when/);
 assert.match(docDriftCapture.description, /[\u3400-\u9FFF]/);
 const docDriftCaptureBody = await readFile(
   path.join(repoRoot, 'skills', 'axis-doc-drift-capture', 'SKILL.md'),
   'utf8',
 );
+const docDriftCaptureContracts = `${await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-drift-capture', 'references', 'record-schemas.md'),
+  'utf8',
+)}\n${await readFile(
+  path.join(repoRoot, 'skills', 'axis-doc-drift-capture', 'references', 'drift-classification.md'),
+  'utf8',
+)}`;
+const docDriftCaptureBundle = `${docDriftCaptureBody}\n${docDriftCaptureContracts}`;
 for (const requiredText of [
-  'Three-Step Work Contract',
   'task_execution_record',
   'version_iteration_record',
   'affected_docs',
@@ -762,40 +728,43 @@ for (const requiredText of [
   'stale',
   'missing',
   'conflict',
-  'No Silent Approved-Doc Rewrite',
+  'Never mutate an `approved` document in place',
   'doc_update_authorization',
   'raw logs',
   'credentials',
   'connection strings',
-  'customer data',
+  'customer/account data',
 ]) {
-  assert.match(docDriftCaptureBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(docDriftCaptureBundle, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 assert.doesNotMatch(docDriftCaptureBody, /TODO|TBD|待补|待定|xxx|XXX|\.\.\./);
 assert.doesNotMatch(docDriftCaptureBody, /\b(PetMall|petmall|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup)\b/i);
 
 const codingCaptureBody = await readFile(path.join(repoRoot, 'skills', 'axis-code-capture', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
-  '需求理解摘要',
-  '实现摘要',
-  '文件改动摘要',
-  'API/数据模型变化',
-  '验证命令',
-  '风险和后续事项',
-  '可复用经验卡片',
+  'requirement',
+  'implementation',
+  'changed scope',
+  'API/data/config impact',
+  'verification',
+  'risk',
+  'reusable lessons',
+  'manifest.json',
+  'experience.md',
 ]) {
-  assert.match(codingCaptureBody, new RegExp(requiredSection));
+  assert.match(codingCaptureBody, new RegExp(requiredSection, 'i'));
 }
 
 const testReportBody = await readFile(path.join(repoRoot, 'skills', 'axis-test-report', 'SKILL.md'), 'utf8');
 for (const requiredSection of [
-  'build/lint/test',
-  '压测输入和结果摘要',
-  '原始日志附件',
-  '失败原因分析',
-  '复测建议',
+  'build, lint, test, benchmark',
+  'workload or inputs',
+  'results',
+  'failures',
+  'skipped checks',
+  'retest guidance',
 ]) {
-  assert.match(testReportBody, new RegExp(requiredSection));
+  assert.match(testReportBody, new RegExp(requiredSection, 'i'));
 }
 
 const ossPublishBody = await readFile(path.join(repoRoot, 'skills', 'axis-ops-oss-publish', 'SKILL.md'), 'utf8');
@@ -909,10 +878,11 @@ assert.match(axisTestingBody, /cleanup/i);
 
 const allSkillFiles = await readTreeFiles(path.join(repoRoot, 'skills'));
 const manifestPath = path.join(repoRoot, 'skills', 'manifest.json');
+const routingPath = path.join(repoRoot, 'skills', 'routing.json');
 const yunxiaoCodeupFiles = allSkillFiles.filter((filePath) => filePath.includes(`${path.sep}axis-integration-yunxiao-codeup${path.sep}`));
 const publicSkillText = (await Promise.all(
   allSkillFiles
-    .filter((filePath) => filePath !== manifestPath && !yunxiaoCodeupFiles.includes(filePath))
+    .filter((filePath) => ![manifestPath, routingPath].includes(filePath) && !yunxiaoCodeupFiles.includes(filePath))
     .map(async (filePath) => `${path.relative(repoRoot, filePath)}\n${await readFile(filePath, 'utf8')}`),
 )).join('\n');
 assert.doesNotMatch(publicSkillText, /PetMall|petmall|PETMALL|owh-test|whalecloud|jiazhiwei|aliyuncs|codeup/);
@@ -966,16 +936,15 @@ assert.match(createSkillMd, /Model Reasoning Level/);
 assert.doesNotMatch(createSkillMd.split('\n').find((line) => line.startsWith('description:')) ?? '', /create a new/i);
 
 const developmentDocMd = await readFile(path.join(repoRoot, 'skills', 'axis-doc-development', 'SKILL.md'), 'utf8');
-assert.match(developmentDocMd, /概要设计/);
-assert.match(developmentDocMd, /详细设计/);
-assert.match(developmentDocMd, /Document Selection and Expansion/);
+assert.match(developmentDocMd, /development_document_set/);
+assert.match(developmentDocMd, /project_knowledge_change_set/);
+assert.match(developmentDocMd, /Document Production/);
 assert.match(developmentDocMd, /master_draft/);
 assert.match(developmentDocMd, /database_design/);
-assert.match(developmentDocMd, /Mandatory Pre-Change Archive/);
-assert.match(developmentDocMd, /Mandatory OSS Synchronization Gate/);
-assert.match(developmentDocMd, /project-knowledge-capture/);
-assert.match(developmentDocMd, /oss-publish/);
-assert.match(developmentDocMd, /OSS-first/);
+assert.match(developmentDocMd, /archive_document\.py/);
+assert.match(developmentDocMd, /Never call a real OSS upload/);
+assert.match(developmentDocMd, /\$axis-doc-project-knowledge/);
+assert.doesNotMatch(developmentDocMd, /Mandatory OSS Synchronization Gate|OSS-first|axis project-knowledge-capture|axis oss-publish/);
 assert.match(developmentDocMd, /Three-Step Work Contract/);
 assert.match(developmentDocMd, /light adversarial review/i);
 
@@ -986,7 +955,6 @@ for (const skillName of [
   'axis-code-bugfix',
   'axis-tools-skill-create',
   'axis-doc-development',
-  'axis-doc-drift-capture',
   'axis-doc-project-knowledge',
   'axis-test-tdd',
 ]) {

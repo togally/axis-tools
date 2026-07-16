@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-tools-prompt-create"
   short_description: "Create and blind-test robust prompts / 创建并盲测稳健提示词"
-  default_prompt: "Use $axis-tools-prompt-create to create or refine one prompt through public-safe blind evaluation across multiple data sources and model tiers, then report the selected candidate and evidence."
+  default_prompt: "Use $axis-tools-prompt-create to create or refine one prompt through public-safe blind evaluation across multiple source kinds and exact model IDs, then report a passing candidate or no winner."
 
 policy:
   allow_implicit_invocation: true

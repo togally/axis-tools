@@ -1,7 +1,7 @@
 interface:
   display_name: "axis-code-arch-optimize"
-  short_description: "Lift fixes into shared architecture / 提炼共享架构能力"
-  default_prompt: "Use $axis-code-arch-optimize to guide this architecture-level code optimization."
+  short_description: "Build proven shared architecture / 构建经证据支持的共享架构"
+  default_prompt: "Use $axis-code-arch-optimize to prove the shared boundary, implement the smallest cross-cutting capability, and verify migration."
 
 policy:
   allow_implicit_invocation: true

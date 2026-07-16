@@ -1,0 +1,139 @@
+{
+  "version": 1,
+  "description": "One primary user outcome per packaged Axis skill. Handoffs are one-way execution dependencies, not trigger aliases. / 每个 Axis 技能只对应一个主要用户结果；handoff 是单向执行依赖，不是重复触发入口。",
+  "skills": [
+    {
+      "name": "axis-code-api-performance-tuning",
+      "primary_outcome": "Optimize measured API read latency without changing business semantics",
+      "use_when": "Use after a slow read path is identified and code or query optimization is requested. / 用于已定位慢读链路并要求优化代码或查询时。",
+      "do_not_use_when": "Do not use for measurement-only capacity work or generic defect repair. / 不用于只测容量或通用缺陷修复。",
+      "handoffs": ["axis-test-benchmark"]
+    },
+    {
+      "name": "axis-code-arch-optimize",
+      "primary_outcome": "Promote repeated local fixes into one shared architecture capability",
+      "use_when": "Use when several local implementations reveal one reusable cross-cutting boundary. / 用于多处局部实现暴露出同一可复用横切边界时。",
+      "do_not_use_when": "Do not use for a one-method defect with no demonstrated reuse boundary. / 不用于尚无复用证据的单方法缺陷。",
+      "handoffs": ["axis-test-tdd"]
+    },
+    {
+      "name": "axis-code-bugfix",
+      "primary_outcome": "Find and repair the root cause of an observed software failure",
+      "use_when": "Use for reported bugs, errors, regressions, flaky behavior, or failing evidence. / 用于已报告缺陷、报错、回归、偶发行为或失败证据。",
+      "do_not_use_when": "Do not use for a behavior change with no failure to diagnose or for capacity measurement. / 不用于无故障待诊断的行为变更或容量测量。",
+      "handoffs": ["axis-test-tdd"]
+    },
+    {
+      "name": "axis-code-capture",
+      "primary_outcome": "Package completed code-change evidence as an Axis execution record",
+      "use_when": "Use after coding work needs an execution report and reusable experience card. / 用于编码工作完成后生成执行报告与经验卡片。",
+      "do_not_use_when": "Do not use to implement or diagnose the code change itself. / 不用于实现或诊断代码变更本身。",
+      "handoffs": ["axis-doc-drift-capture"]
+    },
+    {
+      "name": "axis-doc-dashboard",
+      "primary_outcome": "Start and open the correct local Axis document dashboard",
+      "use_when": "Use when the user wants to view the local Axis document catalog or history. / 用于用户要查看本地 Axis 文档目录或历史。",
+      "do_not_use_when": "Do not use to generate, reconcile, or publish documents. / 不用于生成、梳理或发布文档。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-doc-development",
+      "primary_outcome": "Create or revise one feature's development design documents",
+      "use_when": "Use for feature discovery, master-draft expansion, detailed design, correction, or iteration. / 用于功能问询、原始稿扩写、详细设计、修正或迭代。",
+      "do_not_use_when": "Do not use for project-wide knowledge bootstrap or post-task audit records. / 不用于项目级知识初始化或任务后审计记录。",
+      "handoffs": ["axis-doc-project-knowledge"]
+    },
+    {
+      "name": "axis-doc-drift-capture",
+      "primary_outcome": "Record completed-task document drift and version impact",
+      "use_when": "Use after a task or PR is complete and audit records are required. / 用于任务或 PR 完成后需要审计记录时。",
+      "do_not_use_when": "Do not use to author the feature design or silently rewrite canonical documents. / 不用于编写功能设计或静默改写正式文档。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-doc-project-init",
+      "primary_outcome": "Inspect and apply one Axis v0.2 project configuration",
+      "use_when": "Use to initialize or migrate repository-level Axis organization, project, OSS, release, and local settings. / 用于初始化或迁移仓库级 Axis 组织、项目、OSS、发布与本地配置。",
+      "do_not_use_when": "Do not use to generate project knowledge or upload content. / 不用于生成项目知识或上传内容。",
+      "handoffs": ["axis-doc-project-knowledge"]
+    },
+    {
+      "name": "axis-doc-project-knowledge",
+      "primary_outcome": "Build or reconcile the canonical project-wide Axis knowledge set",
+      "use_when": "Use for global architecture, capability inventory, secondary designs, navigation, and gap reconciliation. / 用于全局架构、能力清单、二级设计、导航与缺口梳理。",
+      "do_not_use_when": "Do not use for one feature draft, dashboard startup, or unconfirmed OSS upload. / 不用于单功能草稿、看板启动或未经确认的 OSS 上传。",
+      "handoffs": ["axis-tools-prompt-create", "axis-ops-oss-publish"]
+    },
+    {
+      "name": "axis-integration-yunxiao-codeup",
+      "primary_outcome": "Query a Yunxiao Codeup repository or create one explicitly requested merge request",
+      "use_when": "Use for bounded repository lookup or an explicitly requested merge-request creation through Codeup OpenAPI. / 用于通过 Codeup OpenAPI 执行有边界的仓库查询或明确请求的合并请求创建。",
+      "do_not_use_when": "Do not use for local Git-only work or another source-control provider. / 不用于纯本地 Git 操作或其他代码平台。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-ops-ali-dashboard",
+      "primary_outcome": "Create or validate Alibaba Cloud dashboard JSON and drilldowns",
+      "use_when": "Use for CloudMonitor or SLS dashboard structure, queries, panels, and drilldowns. / 用于 CloudMonitor 或 SLS 看板结构、查询、面板与下钻。",
+      "do_not_use_when": "Do not use for general observability diagnosis without a dashboard artifact. / 不用于没有看板产物的通用可观测性排查。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-ops-oss-publish",
+      "primary_outcome": "Validate and publish an authorized Axis outbox package to OSS",
+      "use_when": "Use for redaction, dry-run, document sync, or immutable upload after explicit confirmation. / 用于明确确认后的脱敏、预演、文档同步或不可变上传。",
+      "do_not_use_when": "Do not use to create source documents or infer upload consent. / 不用于创建源文档或推断上传同意。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-test-benchmark",
+      "primary_outcome": "Measure latency, throughput, concurrency, or capacity with reproducible evidence",
+      "use_when": "Use when the requested result is a benchmark or capacity measurement. / 用于目标结果是基准测试或容量测量时。",
+      "do_not_use_when": "Do not use when the requested result is code optimization rather than measurement. / 不用于目标结果是代码优化而非测量时。",
+      "handoffs": ["axis-test-report"]
+    },
+    {
+      "name": "axis-test-report",
+      "primary_outcome": "Package completed verification evidence as an Axis test report",
+      "use_when": "Use after build, lint, test, benchmark, or pressure-test evidence exists. / 用于已有构建、lint、测试、基准或压测证据后。",
+      "do_not_use_when": "Do not use to execute the underlying test or benchmark. / 不用于执行底层测试或压测。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-test-side-effects",
+      "primary_outcome": "Verify a real state-changing action with explicit safety and cleanup controls",
+      "use_when": "Use for tests that mutate external state, publish messages, or require cleanup. / 用于会修改外部状态、投递消息或需要清理的测试。",
+      "do_not_use_when": "Do not use for pure unit tests with no real side effect. / 不用于没有真实副作用的纯单元测试。",
+      "handoffs": ["axis-test-report"]
+    },
+    {
+      "name": "axis-test-tdd",
+      "primary_outcome": "Drive a behavior change from a failing test to verified implementation",
+      "use_when": "Use when the user explicitly requests TDD/RED-GREEN-REFACTOR, or when an owning code skill conditionally hands off implementation method. / 用于用户明确要求 TDD/红绿重构，或主代码技能有条件交接实现方法时。",
+      "do_not_use_when": "Do not compete with the owning bugfix, architecture, or performance outcome; do not use for diagnosis-only work or report packaging. / 不与缺陷修复、架构或性能主结果竞争，也不用于只诊断或报告打包。",
+      "handoffs": ["axis-test-side-effects"]
+    },
+    {
+      "name": "axis-tools-prompt-create",
+      "primary_outcome": "Select a robust prompt through blind cross-source and cross-tier evaluation",
+      "use_when": "Use to create, refine, compare, or select a non-trivial prompt with an evaluation oracle. / 用于在有评测口径时创建、改进、比较或选择非平凡提示词。",
+      "do_not_use_when": "Do not use to package a skill or execute a frozen domain prompt. / 不用于打包技能或执行已冻结的领域提示词。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-tools-skill-create",
+      "primary_outcome": "Create or refactor one reusable public-safe skill package",
+      "use_when": "Use as the single entrypoint for skill discovery, creation, review, and refactoring. / 用作技能发现、创建、审查和重构的唯一入口。",
+      "do_not_use_when": "Do not use for prompt-only R&D or local installation-only work. / 不用于只做提示词研发或只做本地安装。",
+      "handoffs": ["axis-tools-prompt-create", "axis-tools-skill-update"]
+    },
+    {
+      "name": "axis-tools-skill-update",
+      "primary_outcome": "Install or refresh packaged Axis skills with backup and parity verification",
+      "use_when": "Use when local Codex or Claude skill bundles must be updated from axis-tools. / 用于从 axis-tools 更新本地 Codex 或 Claude 技能包。",
+      "do_not_use_when": "Do not use to author or refactor skill content. / 不用于编写或重构技能内容。",
+      "handoffs": []
+    }
+  ]
+}

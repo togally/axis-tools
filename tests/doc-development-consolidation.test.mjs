@@ -209,25 +209,19 @@ for (const requiredText of [
   'market',
   'master_draft',
   'Expansion Gate',
-  'project_technical_architecture',
-  'project_business_architecture',
-  'business_capability_detailed_design',
-  'secondary_capability_detailed_design',
+  'development_document_set',
+  'project_knowledge_change_set',
   'level1_capability_id',
-  'secondary_capabilities',
-  'one overview document per level-1 capability',
+  'secondary_capability_id',
+  '$axis-doc-project-knowledge',
   'approved',
-  'supersedes',
-  '_archive',
-  'Mandatory OSS Synchronization Gate',
-  'project-knowledge-capture',
-  'oss-publish',
-  '--dry-run',
-  'published',
-  'OSS-first',
+  'archive',
+  'Never call a real OSS upload',
+  'FileName:begin-end#symbol',
 ]) {
   assert.match(developmentBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
+assert.doesNotMatch(developmentBody, /Mandatory OSS Synchronization Gate|OSS-first|axis project-knowledge-capture|axis oss-publish/);
 
 const technicalAndDatabaseDesign = await readFile(
   path.join(repoRoot, development.path, 'references', 'technical-and-database-design.md'),
@@ -250,46 +244,36 @@ for (const requiredText of [
 
 const projectKnowledge = manifest.skills.find((skill) => skill.name === 'axis-doc-project-knowledge');
 assert.ok(projectKnowledge, 'axis-doc-project-knowledge should merge bootstrap and business-domain maintenance');
-assert.deepEqual(projectKnowledge.files.sort(), [
+for (const requiredFile of [
   'SKILL.md',
   'agents/openai.yaml',
   'quick_validate.py',
-  'references/business-capability-detailed-design-template.md',
-  'references/level1-capability-dependency-graph-template.yaml',
-  'references/project-business-architecture-template.md',
-  'references/project-technical-architecture-template.md',
+  'references/project-knowledge-contracts.md',
   'references/secondary-capability-boundary-matrix-v3.1.md',
-  'references/secondary-capability-decomposition-prompt.md',
   'references/secondary-capability-detailed-design-template.md',
   'references/secondary-capability-eval-cases.json',
-  'references/secondary-capability-prompt-algorithmic.md',
-  'references/secondary-capability-prompt-baseline.md',
-  'references/secondary-capability-prompt-candidates.json',
-  'references/secondary-capability-prompt-v2.3.md',
-  'references/secondary-capability-prompt-v2.4.md',
   'scripts/evaluate_secondary_capability_prompts.mjs',
-]);
+]) assert.ok(projectKnowledge.files.includes(requiredFile), `missing project-knowledge bundle file: ${requiredFile}`);
 const projectKnowledgeBody = await readFile(path.join(repoRoot, projectKnowledge.path, 'SKILL.md'), 'utf8');
 for (const requiredText of [
   'bootstrap',
   'scan_and_reconcile',
-  'requirement_design',
   'project_technical_architecture',
   'project_business_architecture',
   'business_inventory',
-  'business_capability_detailed_design',
   'level1_capability_id',
-  'level1_capability_name',
-  'secondary_capabilities',
-  'business/capabilities/{level1_capability_id}/detailed-design.md',
-  'business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md',
-  'one canonical overview per level1_capability_id',
-  'every secondary capability',
-  'secondary_capability_detailed_design',
-  'doc_gap_report',
+  'secondary_capability_id',
+  'one independently reviewable business outcome',
+  'reader_profile=compact',
+  'six useful sections',
+  'does **not** require `3.N`',
+  '$axis-tools-prompt-create',
+  'OSS Upload Confirmation Gate',
+  'exact pair',
 ]) {
-  assert.match(projectKnowledgeBody, new RegExp(requiredText));
+  assert.match(projectKnowledgeBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
+assert.doesNotMatch(projectKnowledgeBody, /requirement_design/);
 assert.doesNotMatch(projectKnowledgeBody, /one canonical (?:domain )?detailed design per `?business_id`?/i);
 
 const capabilityTemplate = await readFile(
@@ -3663,7 +3647,7 @@ try {
 const dashboardWork = await mkdtemp(path.join(tmpdir(), 'axis-doc-dashboard-archive-'));
 await rm(dashboardWork, { recursive: true, force: true });
 try {
-  const dashboardScript = path.join(repoRoot, 'skills', 'axis-doc-dashbord', 'scripts', 'axis_doc_dashbord.py');
+  const dashboardScript = path.join(repoRoot, 'skills', 'axis-doc-dashboard', 'scripts', 'axis_doc_dashboard.py');
   await execFileAsync('python3', [dashboardScript, 'scaffold', '--target', dashboardWork]);
   const core = await readFile(path.join(dashboardWork, 'src', 'core.mjs'), 'utf8');
   const browser = await readFile(path.join(dashboardWork, 'src', 'browser.mjs'), 'utf8');

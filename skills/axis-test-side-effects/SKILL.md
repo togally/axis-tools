@@ -1,57 +1,90 @@
 ---
 name: axis-test-side-effects
-description: Use when testing backend actions with real external side effects, state changes, broker messages, async progress, or cleanup-sensitive operations. / 用于测试会触发真实外部副作用、状态变更、消息投递、异步进度或清理敏感操作的后端行为。
+description: Use when an explicitly authorized test must verify a real external state change, message, asynchronous effect, and cleanup. / 用于在明确授权后验证真实外部状态变更、消息投递、异步效果及清理结果。
 ---
 
-# Axis Testing
+# Side-Effect Testing
 
-## Overview
+Verify real side effects from precondition through effect and cleanup. Dispatch acknowledgement is not success, stale status is not current-run evidence, and permission from an older run is not authorization.
 
-Use this skill to test commands that cause real side effects in external systems. The core principle is to prove the current action, observe the state it creates, and leave the system in a known condition.
+## When to Use
 
-## When To Use
+- A backend action mutates remote state, publishes a message, calls a third party, controls hardware, starts a job, or triggers callbacks.
+- The user explicitly asks for a real integration path rather than a mock.
+- The effect has observable state, progress, terminal status, or cleanup behavior.
 
-- A backend endpoint publishes to a broker, calls a third-party API, controls hardware, starts a job, or mutates remote state.
-- The user asks for a real integration test instead of a mock or simulated path.
-- The feature exposes asynchronous status, progress, callbacks, or cached action results.
-- The operation needs a specific precondition before the action is meaningful.
+## Do Not Use
 
-Do not use this for pure unit tests, read-only endpoints, or actions whose real side effects are unsafe without explicit user approval.
+- Do not use for unit tests, read-only endpoints, or mocks with no real external effect.
+- Use `$axis-test-benchmark` when the primary result is sustained throughput or capacity measurement.
+- Do not execute production, payment, notification, hardware, account, destructive, or cost-bearing actions without exact current-run authorization.
+- Do not proceed when the effect cannot be bounded, observed, stopped, or safely reconciled.
+
+## Inputs
+
+- Exact environment, tenant or account, actor, target resource, action, payload class, and semantic precondition.
+- Maximum affected objects/messages/devices, maximum cost or duration, allowed time window, and prohibited outcomes.
+- Observation path: API, database row, cache key, broker topic, event stream, callback, job status, or device state.
+- Cleanup or compensation command, expected final state, abort signal, timeout, and responsible owner if cleanup fails.
+- Explicit current-run user authorization covering the exact environment and impact envelope.
+
+## Three-Step Work Contract
+
+1. Co-create the safe test envelope. State the action, environment, identity, maximum impact, observation, cleanup, timeout, and stop conditions; obtain explicit approval for that exact envelope.
+2. Execute the agreed test. Establish the precondition and status boundary, trigger one bounded action, observe the real signal path, and stop at the approved terminal condition.
+3. Verify and reconcile. Prove acceptance and effect separately, run cleanup or compensation, and verify the final state through the same observation path.
+
+## Light Adversarial Review
+
+Keep review at or below 30% of the interaction. Challenge stale status, ambiguous identity, broad production scope, fake callbacks, “sent means success,” missing cost limits, irreversible actions, and cleanup that cannot be observed. After the safety envelope is explicit and approved, execute only that envelope.
+
+## Authorization and Impact Gate
+
+Before the first real write, show one compact gate containing:
+
+- environment and authenticated actor;
+- exact action and target resource;
+- maximum records, messages, devices, money, duration, and concurrency;
+- expected effect and observation path;
+- cleanup or compensation and final-state proof;
+- timeout, abort signal, and stop conditions.
+
+Silence, a timeout, ambiguous approval, or authorization from an older run is not consent. Any change to environment, actor, action, payload, impact cap, cost, or cleanup invalidates the gate and requires new approval.
 
 ## Test Pattern
 
-1. Identify the semantic precondition. Put the system into that state before testing the target action.
-2. Capture a before snapshot from the same interface the product uses: API response, cache key, event stream, broker topic, database row, or device status.
-3. Establish a status boundary for the new attempt. Clear stale cached status, add a request timestamp, action id, or correlation id, then trigger the action.
-4. Observe the real signal path. Prefer production code and the configured external endpoint over hand-published fake messages.
-5. Poll for state and progress until a terminal condition, timeout, or user-safe stop point.
-6. Verify both command acceptance and effect. A `"sent"` response alone is not success.
-7. Run cleanup that restores the original state, then verify cleanup through the same observation path.
-8. Record exact evidence: command, time window, before/after state, progress events, and any missing callback.
+1. Prepare the real semantic precondition and capture a before snapshot.
+2. Establish a current-attempt status boundary with timestamp, action id, correlation id, or stale-cache reset.
+3. Trigger one bounded action through production code and the configured integration path.
+4. Observe dispatch, downstream effect, progress, and terminal status separately.
+5. Stop immediately on unexpected fan-out, cost, identity, target, error growth, or missing control.
+6. Run cleanup or compensation and capture the verified final state.
+7. Record command, time window, correlation evidence, before/after state, progress, cleanup, and anything not observed.
 
-## Quick Reference
+## Outputs
 
-| Question | Required Evidence |
-| --- | --- |
-| Is this result from the current attempt? | Timestamp, action id, correlation id, or cache reset before send |
-| Did the command really go out? | API response plus broker/client/service log or observed downstream state |
-| Did progress work? | Intermediate progress payloads or proof that no progress arrived before timeout |
-| Is the environment safe now? | Cleanup command plus final state snapshot |
+- Approved action envelope and execution environment.
+- Before state, dispatch evidence, downstream effect, progress samples, terminal state, and correlation identifiers.
+- Cleanup or compensation command and verified final state.
+- Exact timeout, stop reason, unexpected side effects, and unverified gaps.
 
-## Common Mistakes
+## Safety and Boundaries
 
-| Mistake | Fix |
-| --- | --- |
-| Testing the action without preparing the real precondition | Drive the prerequisite state first, then test the target action |
-| Treating `sent` as success | Separate dispatch acknowledgement from effect, progress, and terminal status |
-| Reusing stale cache/status | Reset old action fields or compare `updatedAt` with the current request time |
-| Simulating the external callback when the user asked for real testing | Use the configured integration path and mark only blocked parts as unverified |
-| Forgetting cleanup | Restore state and verify the restoration before finishing |
+- Never exceed the approved environment, actor, target set, concurrency, duration, cost, or payload class.
+- Treat messages, callbacks, notifications, payments, device commands, and external API calls as real effects even in test environments.
+- Prefer one action before any repeated action. Use idempotency or a unique correlation boundary when supported.
+- Do not fabricate downstream success or manually publish a callback when the user requested the configured real path.
+- If cleanup fails or cannot be verified, stop further testing, preserve evidence, and report the unreconciled state immediately.
+- Package a report with `$axis-test-report` only when the user asks; do not upload or publish automatically.
 
-## Report Format
+## Checks
 
-Report the tested action, environment, observation path, before state, sent time, progress/status samples, final state, cleanup result, and anything that was not observed.
+- Explicit approval matches the actual environment, actor, action, target, and impact cap.
+- Evidence belongs to the current attempt, not stale cache or an earlier callback.
+- Command acceptance, real effect, progress, and terminal status are evaluated separately.
+- Cleanup restores the intended state and is verified through the same observation path.
+- No unapproved fan-out, cost, notification, message, device, or data mutation occurred.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+If the run produced a reusable approval gate, correlation rule, cleanup pattern, stop condition, or edge case, update this skill bundle, validate it, refresh the local copy, and push when permissions allow. Otherwise report that no skill update is needed.

@@ -1,62 +1,79 @@
 ---
 name: axis-integration-yunxiao-codeup
-description: Use when accessing Yunxiao Codeup repositories or merge requests through OpenAPI with an environment token. / 用于通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。
+description: Use when Yunxiao Codeup repositories must be queried or a merge request must be created through OpenAPI with an environment token. / 用于通过环境变量令牌调用云效 Codeup OpenAPI 查询代码库或创建合并请求。
 ---
 
-# Yunxiao Codeup OpenAPI
+# Axis Integration Yunxiao Codeup
 
-Use this skill to work with Yunxiao Codeup repositories and merge requests through the official OpenAPI when normal git commands or GitHub-specific tooling cannot create or inspect review objects.
+Use the bundled helper for the repository lookup and merge-request creation operations it actually supports.
 
-## Safety Rules
+## When to Use
 
-- Never print, echo, log, commit, or comment with the API token value.
-- Read tokens from environment variables. Use `CODE_UP_API_TOKEN` by default, or pass `--token-env NAME` to select another variable name.
-- Do not pass raw tokens as command-line arguments because shells, process lists, and CI logs can expose them.
-- Run `--dry-run` before creating a merge request when organization ID, repository ID, source branch, target branch, or API mode is uncertain.
-- Keep tenant IDs, repository IDs, branch names, and merge-request URLs task-local. Do not hard-code customer or project identifiers into this public skill.
+- List/search Codeup repositories or fetch one repository through Yunxiao OpenAPI.
+- Create one Codeup merge request when ordinary git commands cannot create the review object.
+- Dry-run one of those supported requests to verify its endpoint and body shape.
 
-## Workflow
+## Do Not Use
 
-1. Confirm the token variable exists by listing environment variable names only.
-2. Determine whether the Yunxiao deployment uses the center-version organization-scoped API or a region-version instance domain.
-3. Search or fetch the repository and prefer a numeric repository ID for merge-request creation.
-4. Create the merge request with source branch, target branch, title, and optional description.
-5. Report the returned review URL, status, and merge-readiness fields. Do not report token values or private request headers.
+- Do not use to list, inspect, approve, merge, close, or comment on existing merge requests; the bundled helper does not implement those operations.
+- Do not use for GitHub/GitLab review objects or normal local git operations.
+- Do not send a request to an arbitrary domain or create a merge request when the user requested only repository inspection.
 
-## Script
+## Inputs
 
-Use the bundled helper for deterministic OpenAPI calls:
+- Operation: `repos`, `repo`, or `create-mr`.
+- Center/region API mode, official domain or explicitly allowed self-hosted HTTPS hostname, organization ID, and repository ID/path.
+- For creation: source branch, target branch, title, optional description/project IDs, and explicit write intent.
+- Name of the token environment variable; `CODE_UP_API_TOKEN` is the default.
 
-```bash
-python3 scripts/yunxiao_codeup.py repos --organization-id <org-id> --search <repo-name>
-python3 scripts/yunxiao_codeup.py repo --organization-id <org-id> --repo <repo-id-or-path>
-python3 scripts/yunxiao_codeup.py create-mr --organization-id <org-id> --repo <repo-id> --source <branch> --target <branch> --title "..."
-```
+## Outputs
 
-Use dry-run mode to inspect a request shape without reading the token or sending the request:
+- Repository search/detail JSON, or a created merge-request response with URL, status, source, target, and readiness fields.
+- A dry-run request shape that contains no token value.
+- A precise validation, authorization, host, transport, or API error without private request headers.
 
-```bash
-python3 scripts/yunxiao_codeup.py create-mr --dry-run --organization-id <org-id> --repo <repo-id> --source feature/x --target main --title "Example"
-```
+## Safety and Boundaries
 
-## References
-
-Read `references/yunxiao-openapi.md` when you need the official endpoint shapes, required body fields, and token header name.
+- Never print, echo, log, commit, comment, or pass the token as a command-line value. Read only the named environment variable and do not enumerate environment variables.
+- Require HTTPS. Trust the exact official `openapi-rdc.aliyuncs.com` hostname by default; suffix lookalikes are not trusted.
+- A self-hosted hostname is allowed only when it is passed exactly with `--allowed-host`; redirects are blocked so `x-yunxiao-token` is never forwarded across hosts.
+- Keep organization/repository IDs, branch names, URLs, reviewers, and other task-specific identifiers out of the public bundle.
+- Creating a merge request is an external write. Dry-run first when any repository, branch, title, project ID, API mode, or write intent is uncertain.
 
 ## Three-Step Work Contract
 
-For coding and design work, run the workflow in three steps:
+1. Co-create the request: confirm read versus write, API mode, trusted host, repository, branch pair, title, and exact success evidence.
+2. Execute safely: resolve a numeric repository ID when possible, run dry-run for creation, then issue only the requested supported OpenAPI call.
+3. Verify the result: check repository identity or returned MR URL/status/source/target and report any unverified merge-readiness field without exposing secrets.
 
-1. Co-create with the user: clarify what they want, preserve their exact business wording, identify acceptance criteria, and gather the code, schema, logs, docs, credentials, endpoints, or environment details needed to execute the next step.
-2. Execute the result: implement the code change, write the design, or produce the requested artifact using the agreed scope and the repository's existing patterns.
-3. Verify the result: run focused tests, validators, benchmarks, document checks, or review passes that prove the result matches the request, then report what passed and what remains unverified.
+## Workflow
 
-Keep light adversarial review to no more than 30% of the interaction. Calibrate it to the risk: challenge missing evidence, unsafe shortcuts, or unclear ownership, but do not let critique replace execution once the next step is sufficiently specified.
+```bash
+python3 skills/axis-integration-yunxiao-codeup/scripts/yunxiao_codeup.py \
+  repos --organization-id <org-id> --search <repo-name>
+
+python3 skills/axis-integration-yunxiao-codeup/scripts/yunxiao_codeup.py \
+  repo --organization-id <org-id> --repo <repo-id-or-path>
+
+python3 skills/axis-integration-yunxiao-codeup/scripts/yunxiao_codeup.py \
+  create-mr --dry-run --organization-id <org-id> --repo <repo-id> \
+  --source <branch> --target <branch> --title "<title>"
+```
+
+After a correct dry-run, omit `--dry-run` only when creation is authorized. For a controlled self-hosted instance, add `--domain https://<host> --allowed-host <host>`. Read [yunxiao-openapi.md](references/yunxiao-openapi.md) for the supported endpoint/body contract.
+
+## Checks
+
+- The named token variable exists without printing its value or enumerating the environment.
+- HTTP, user-info URLs, paths/query fragments, unofficial hosts, suffix lookalikes, non-443 ports, and redirects are rejected before token-bearing traffic.
+- Dry-run reads no token and prints no private header.
+- Creation body uses the resolved source/target project IDs and the exact branch/title values approved by the user.
+- Returned repository or MR identity matches the request; unsupported MR inspection is not claimed.
 
 ## Light Adversarial Review
 
-For coding, architecture, optimization, testing, database, or design-document workflows, use a lightly adversarial stance: verify the user's goal against code or evidence, surface hidden assumptions, name correctness and risk trade-offs, and challenge unsafe shortcuts before implementing or finalizing. Keep it constructive and below 30% of the interaction: preserve the user's explicit business wording, avoid debate for its own sake, and become decisive once evidence is sufficient.
+Keep challenge and critique to no more than 30% of the interaction. Verify host trust, API mode, IDs, branch direction, and write intent; after those are sound, execute only the supported operation and report concrete evidence.
 
 ## After Use Deposition
 
-After using this skill, check whether the session produced reusable corrections, examples, validation commands, or edge cases. If yes, update the skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+Check whether the call exposed a reusable endpoint, host-validation, request-shape, response, or safety correction. If yes, update this public-safe bundle, validate it, refresh the local copy, and push only when authorized. Otherwise report that no skill update is needed.

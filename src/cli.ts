@@ -25,7 +25,17 @@ type ContractVersion = '0.2';
 
 const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
 const retiredPackagedSkills = new Map<string, string>([
+  ['axis-ali-dashboard', 'axis-ops-ali-dashboard'],
+  ['axis-api-performance-tuning', 'axis-code-api-performance-tuning'],
+  ['axis-arch-optimize', 'axis-code-arch-optimize'],
+  ['axis-benchmark', 'axis-test-benchmark'],
+  ['axis-bugfix', 'axis-code-bugfix'],
+  ['axis-business-domain-doc', 'axis-doc-project-knowledge'],
+  ['axis-coding-capture', 'axis-code-capture'],
   ['axis-create-skill', 'axis-tools-skill-create'],
+  ['axis-db-design-doc', 'axis-doc-development'],
+  ['axis-development-doc', 'axis-doc-development'],
+  ['axis-doc-dashbord', 'axis-doc-dashboard'],
   ['axis-skill-create', 'axis-tools-skill-create'],
   ['axis-skill-update', 'axis-tools-skill-update'],
 ]);

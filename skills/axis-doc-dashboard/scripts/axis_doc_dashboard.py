@@ -20,12 +20,12 @@ import webbrowser
 DEFAULT_REPOSITORY = "https://github.com/togally/axis-document-review.git"
 DEFAULT_TARGET = Path(
     os.environ.get(
-        "AXIS_DOC_DASHBORD_DIR",
+        "AXIS_DOC_DASHBOARD_DIR",
         "~/Documents/axis/axis-document-review",
     )
 ).expanduser()
 SKILL_ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = SKILL_ROOT / "assets" / "axis-doc-dashbord-template.tgz"
+TEMPLATE = SKILL_ROOT / "assets" / "axis-doc-dashboard-template.tgz"
 
 
 def emit(**payload: object) -> None:

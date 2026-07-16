@@ -18,6 +18,7 @@ from typing import Any
 
 DEFAULT_DOMAIN = "openapi-rdc.aliyuncs.com"
 DEFAULT_TOKEN_ENV = "CODE_UP_API_TOKEN"
+OFFICIAL_HOSTS = frozenset({DEFAULT_DOMAIN})
 
 
 def env_first(*names: str) -> str | None:
@@ -28,11 +29,36 @@ def env_first(*names: str) -> str | None:
     return None
 
 
-def normalize_domain(domain: str) -> str:
-    domain = domain.strip().rstrip("/")
-    if domain.startswith("http://") or domain.startswith("https://"):
-        return domain
-    return f"https://{domain}"
+def normalized_allowed_host(value: str) -> str:
+    candidate = value.strip().lower().rstrip(".")
+    if not candidate or any(character in candidate for character in "/?#@"):
+        raise SystemExit(f"error: invalid allowed host {value!r}")
+    return candidate
+
+
+def normalize_domain(domain: str, extra_allowed_hosts: list[str]) -> str:
+    candidate = domain.strip().rstrip("/")
+    if "://" not in candidate:
+        candidate = f"https://{candidate}"
+    parsed = urllib.parse.urlsplit(candidate)
+    if parsed.scheme.lower() != "https":
+        raise SystemExit("error: Yunxiao domain must use HTTPS")
+    if parsed.username or parsed.password:
+        raise SystemExit("error: Yunxiao domain must not contain credentials")
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        raise SystemExit("error: Yunxiao domain must contain only an allowed host")
+    host = (parsed.hostname or "").lower().rstrip(".")
+    allowed_hosts = OFFICIAL_HOSTS | {
+        normalized_allowed_host(value) for value in extra_allowed_hosts
+    }
+    if host not in allowed_hosts:
+        raise SystemExit(
+            f"error: Yunxiao host {host!r} is not in the allowed host list; "
+            "pass an exact self-hosted name with --allowed-host"
+        )
+    if parsed.port not in (None, 443):
+        raise SystemExit("error: Yunxiao HTTPS domain must use port 443")
+    return f"https://{host}"
 
 
 def encode_repo(repository_id: str) -> str:
@@ -40,7 +66,7 @@ def encode_repo(repository_id: str) -> str:
 
 
 def common_prefix(args: argparse.Namespace) -> str:
-    base = normalize_domain(args.domain)
+    base = normalize_domain(args.domain, args.allowed_host)
     if args.region:
         return f"{base}/oapi/v1/codeup"
     if not args.organization_id:
@@ -54,6 +80,19 @@ def token_from_env(args: argparse.Namespace) -> str:
     if not token:
         raise SystemExit(f"error: token env var {args.token_env!r} is not set")
     return token
+
+
+class NoCrossHostRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects so the Yunxiao token is never forwarded to another host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise urllib.error.HTTPError(
+            req.full_url,
+            code,
+            "Yunxiao API redirect blocked to protect the API token",
+            headers,
+            fp,
+        )
 
 
 def request_json(
@@ -73,8 +112,9 @@ def request_json(
         headers["Content-Type"] = "application/json"
 
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    opener = urllib.request.build_opener(NoCrossHostRedirectHandler())
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with opener.open(request, timeout=timeout) as response:
             raw = response.read().decode("utf-8")
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")[:2000]
@@ -174,6 +214,12 @@ def command_create_mr(args: argparse.Namespace) -> int:
 
 def add_common_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--domain", default=env_first("YUNXIAO_DOMAIN", "CODE_UP_DOMAIN") or DEFAULT_DOMAIN)
+    parser.add_argument(
+        "--allowed-host",
+        action="append",
+        default=[],
+        help="Explicitly trust one exact self-hosted HTTPS hostname. Repeat for multiple hosts.",
+    )
     parser.add_argument("--organization-id", default=env_first("YUNXIAO_ORGANIZATION_ID", "CODE_UP_ORGANIZATION_ID"))
     parser.add_argument("--region", action="store_true", help="Use region-version API paths instead of organization-scoped center-version paths.")
     parser.add_argument("--token-env", default=DEFAULT_TOKEN_ENV, help="Environment variable containing the Yunxiao API token.")

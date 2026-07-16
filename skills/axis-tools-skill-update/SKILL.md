@@ -1,45 +1,72 @@
 ---
 name: axis-tools-skill-update
-description: Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装或修复本地 Axis/Codex 打包技能。
+description: Use when the user asks to update, refresh, reinstall, migrate, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装、迁移或修复本地 Axis/Codex 打包技能。
 ---
 
 # Axis Tools Skill Update
 
-Use this skill to refresh local Axis packaged skills from the `axis-tools` repository into the user's local agent skill directories.
+Refresh complete packaged Skill bundles from the `axis-tools` source into local agent Skill directories with inventory, backup, validation, and rollback evidence.
+
+## When to Use
+
+- Update all or selected packaged Axis Skills for Codex, Claude Code, or both.
+- Repair a missing/stale local bundle or verify source-to-install hash parity.
+- Migrate retired pre-taxonomy aliases to their canonical owners with backup and rollback.
+
+## Do Not Use
+
+- Do not install arbitrary curated/GitHub Skills, application dependencies, or product-repository files.
+- Do not hand-copy partial bundles or overwrite a locally modified target without explicit replacement intent.
+- Do not use a dirty source checkout for a remote-refresh claim; a focused development install is local evidence only.
+
+## Inputs
+
+- Verified `axis-tools` repository, target agent, selected Skill names or all-Skill scope, and pull/no-pull mode.
+- Inventory hashes/actions, source cleanliness, validator availability, and any retired-alias mapping.
+- For replacement/retirement: dry-run result, explicit `--force` intent, backup directory, and rollback expectations.
+
+## Outputs
+
+- Per-Skill source/target path, hash, action, and installed/identical/replaced/retired status.
+- Validation results, backup manifest/directory when state changed, and rollback result when requested.
+- Explicit residual drift, blocked local customization, dirty-source failure, or unknown-name failure.
+
+## Safety and Boundaries
+
+- Run inventory/dry-run first. `--force` may replace local customization or retire an alias and requires explicit user intent for the shown targets.
+- Back up every changed/retired target before mutation; rollback restores old entries and removes newly copied replacements atomically.
+- Validate intentionally changed source bundles before a focused install from a dirty development checkout.
+- Leave unselected Skills, unrelated repositories, credentials, and product data untouched.
+- Old names are migration inputs, never callable compatibility aliases.
 
 ## Workflow
 
-1. Confirm the target repository is the `axis-tools` checkout, not a product repository.
-2. Prefer the helper script instead of hand-copying files:
+For a clean repository, prefer:
 
 ```bash
 node scripts/axis-skill-update.mjs --repo <axis-tools> --agent codex --json
 ```
 
-When developing uncommitted skill changes in the current `axis-tools` checkout, the helper correctly refuses the dirty repository. Refresh only the intentionally changed bundles through the CLI, which creates backups before forced replacement:
+For intentional uncommitted bundle development, validate selected bundles, preview, then install only those bundles:
 
 ```bash
+node dist/cli.js install --agent codex --dry-run --skill <skill-name> --force
 node dist/cli.js install --agent codex --skill <skill-name> --force
 ```
 
-Repeat `--skill <skill-name>` to update multiple named bundles in one atomic backup session. Run `--dry-run` first. Do not force-install every skill merely to refresh a few changed bundles, because unrelated local skill customizations may differ.
+Repeat `--skill` for one atomic multi-bundle backup session. Use `--agent all` only when both agent installations are requested. Reserve `--no-pull` for tests, offline work, or explicit no-remote-refresh requests; reserve `--no-validate` for fake-home tests.
 
-When the inventory finds retired `axis-create-skill`, `axis-skill-create`, or `axis-skill-update` directories, it blocks removal by default. Preview the named replacements with `--dry-run --force`, then use `--force` to back up and retire the old directories atomically. Request `axis-tools-skill-create` or `axis-tools-skill-update` explicitly; old names are rejected instead of acting as callable aliases.
-
-3. Use `--agent all` when the user wants both Codex and Claude Code skill directories updated.
-4. Use `--no-pull` only for tests, offline work, or when the user explicitly does not want a remote refresh. The helper still refuses a dirty git `--repo` before install when `--no-pull` is set.
-5. Use `--no-validate` only in tests with fake homes. Normal updates should run `quick_validate.py` against the installed skill bundles.
-6. Read the JSON result and report the installed skill names, target directories, and any validation failure.
+The inventory may report pre-taxonomy aliases such as old generic Axis names and the former dashboard/skill-tool names. Without `--force`, removal is blocked. With explicit force, the installer backs them up, retires them, installs their canonical owners, and keeps rollback evidence. Consult inventory rather than duplicating the full alias map here.
 
 ## Checks
 
-- The update must install the full skill bundle, including `agents/`, `references/`, and `scripts/`.
-- A focused `--skill` update must reject unknown names and leave every unselected installed skill untouched.
-- The command should leave unrelated product repos untouched.
-- Dirty git source repos must be rejected before install, including `--repo <dirty> --no-pull --no-validate --json`.
-- A rename migration must leave no retired tool-skill directory installed, and rollback must restore the old directories while removing newly copied replacements.
-- If `git pull --ff-only` fails because of local changes, stop and report the dirty checkout instead of overwriting it.
+- Full bundles include declared `SKILL.md`, `agents/`, `references/`, `scripts/`, and `assets/` files.
+- Focused install rejects unknown/retired requested names and leaves every unselected target unchanged.
+- Dirty remote-refresh sources fail before install; focused dirty-development sources are explicitly scoped and validated first.
+- Modified target or retired alias blocks without force; forced migration records a backup and removes every retired directory.
+- Rollback restores previous directories/symlinks/files and removes newly installed replacements.
+- Final inventory proves source/target hash parity for each requested canonical Skill.
 
 ## After Use Deposition
 
-After using this skill, check whether the update exposed reusable installer, validation, or refresh behavior that should be captured. If yes, update this skill bundle, validate it, install or refresh the local copy, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+Check whether the update exposed a reusable inventory, validation, alias-migration, backup, or rollback correction. If yes, update this bundle, validate it, refresh the local copy, and push only when authorized. Otherwise report that no skill update is needed.

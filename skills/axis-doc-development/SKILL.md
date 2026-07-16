@@ -1,279 +1,99 @@
 ---
 name: axis-doc-development
-description: Use when a user needs to export, create, correct, or iterate development documents for an existing or planned feature, including discovery, master-draft expansion, design impact updates, and traceable archival. / 用于为已有或规划功能输出、生成、修正或迭代开发文档，并完成需求问询、原始稿扩写、设计影响更新与可追溯归档。
+description: Use when one existing or planned feature needs discovery, a master draft, or a traceable development-document set. / 用于单个已有或规划功能需要需求问询、主草稿或可追溯开发文档集时。
 ---
 
-# Unified Development Documentation
+# Feature Development Documentation
 
-Use this skill as the single front door for feature and development-document work. It owns feature resolution, discovery for code-changing work, `master_draft` creation, document-set expansion, technical design depth, the mandatory level-1 table/ER design, explicitly requested deeper standalone database design, affected project-knowledge updates, and pre-change archival.
+Use this skill as the single front door for one feature's development documents. It produces feature-scoped artifacts and a project-knowledge impact change set; it does not directly rewrite canonical project knowledge or publish to OSS.
 
-Do not use retired top-level document generators. Their durable rules now live in this bundle's `references/` directory. Keep project facts in generated documents, never in this reusable public skill.
+## When to Use
 
-## Four Operating Modes
+Choose exactly one mode:
 
-Classify every request as exactly one mode before writing:
+| Mode | Use when |
+| --- | --- |
+| `existing_feature_export` | Confirmed current or approved target behavior needs a feature-scoped document export. |
+| `planned_feature_generation` | A new feature needs discovery, an approved `master_draft`, and design documents before implementation. |
+| `implemented_feature_correction` | Feature documents are missing or factually stale while intended product behavior is unchanged. |
+| `implemented_feature_iteration` | Approved behavior will change and needs an iteration design before code changes. |
 
-| Mode | Use when | Required result |
-| --- | --- | --- |
-| `existing_feature_export` | The feature already exists and the user wants one or more documents describing the confirmed current or approved target behavior. | Resolve the feature, gather evidence, and output the requested document set. Do not change code or canonical documents unless requested. |
-| `planned_feature_generation` | The feature is not implemented and its future implementation will add or modify code. | Run discovery, produce and confirm one `master_draft`, then expand the approved draft into the selected design documents. |
-| `implemented_feature_correction` | The feature exists, but its retained document is missing, stale, or factually wrong while product behavior is not intentionally changing. | Resolve against code, archive every canonical document before modification, and correct the documents from evidence. If intended behavior or code must change, switch to `implemented_feature_iteration`. |
-| `implemented_feature_iteration` | An implemented feature must change behavior and therefore needs code additions or modifications plus updated documents. | Run discovery, produce and confirm one `master_draft`, archive affected canonical documents, then generate iteration documents and reviewed revisions. |
+## Do Not Use
 
-If wording fits more than one mode, show the inferred mode and the evidence that determined it. Ask only when choosing the wrong mode would change code scope, archival behavior, or the deliverable.
+- Do not bootstrap or reconcile the project-wide capability inventory, global architecture, level-1 overviews, or secondary-capability canonical documents; hand those changes to `$axis-doc-project-knowledge`.
+- Do not create task/version audit records; use `$axis-doc-drift-capture` after implementation or PR completion.
+- Do not implement code, approve documents, or publish/upload documents unless the user separately authorizes the owning workflow.
 
-## Inputs and Source Priority
+## Inputs
 
-Prefer, in order:
+- target repository and one feature, route, page, API, event, job, symbol, table, screenshot, or approved requirement;
+- latest confirmed business wording, scope, non-goals, actors, outcomes, constraints, and acceptance;
+- existing canonical project knowledge and repository evidence from entrypoint through tests;
+- desired document types and output format;
+- authorization to create or modify feature-scoped documents.
 
-1. the user's latest confirmed requirement and literal business wording;
-2. approved requirements and current canonical Axis project knowledge;
-3. connected repository evidence from routes through tests;
-4. existing draft/review documents;
-5. explicit assumptions and recommendations.
+## Outputs
 
-Never present an assumption or market inference as confirmed product or repository behavior.
+- `development_document_set`: one approved `master_draft` when required plus the smallest coherent feature-scoped requirements, overview, technical, detailed, API, database, test, deployment, or iteration documents requested;
+- `project_knowledge_change_set`: affected `level1_capability_id`, `secondary_capability_id`, `business_ids`, evidence, impact category, reason, and recommended canonical action for `$axis-doc-project-knowledge`;
+- feature-document archive records, checks, assumptions, unresolved decisions, and implementation work still awaiting authorization.
+
+## Safety and Boundaries
+
+- Preserve the user's literal business semantics. Never present assumptions, market inference, or missing code evidence as confirmed behavior.
+- Resolve one owning level-1 capability and at least one secondary capability before retaining feature documents; stop on zero or ambiguous matches.
+- Modify only feature-scoped development documents authorized for this run. Never directly edit canonical global, inventory, dependency-graph, level-1, or secondary-capability documents.
+- Never call a real OSS upload from this skill. Canonical changes and their exact-run upload confirmation belong to `$axis-doc-project-knowledge` and `$axis-ops-oss-publish`.
+- Archive every existing feature document before its first modification. Stop when archive creation or hash verification fails.
+- Do not expose credentials, private URLs, raw production payloads, customer identifiers, or unsupported implementation claims.
 
 ## Three-Step Work Contract
 
-1. Co-create and resolve the target.
-   Select the operating mode, run the Feature Resolution Confirmation Gate where applicable, and gather only the decisions needed for the mode. For `planned_feature_generation` and `implemented_feature_iteration`, run the structured discovery interview and obtain explicit approval of the `master_draft` before expansion.
-2. Execute the document lifecycle.
-   Archive each canonical document before its first modification, write the requested documents, update affected detailed/global project knowledge at the correct level, preserve canonical paths for current reading, and complete the configured OSS synchronization gate. This skill designs the change; implementation code starts only when the user separately authorizes execution.
-3. Verify and report.
-   Validate evidence, document structure, cross-document consistency, archive metadata and hashes, lifecycle status, links, diagrams, affected knowledge revisions, and the published OSS checksum/status. For a secondary detailed design, validate every material flow's traceability through API/entrypoint, code objects, entities/tables and tests with repository-relative `path:begin-end#symbol` anchors. For its level-1 overview, validate the model-derived `3.N` external-business-capability groups, secondary-node/interface-edge logic graphs, per-hop vertical trace tables, mandatory business terminology and table/ER design, and same-ID linkage into every participating secondary document. Report current paths, archive paths, OSS run ID, assumptions, verification results, and any code work still awaiting authorization.
-
-Keep light adversarial review below 30% of the interaction. Challenge guessed scope, hidden product decisions, unsafe architecture, unmeasured performance claims, broken business flows, weak schema choices, unjustified market assumptions, or silent overwrites. Once decisions are sufficient, become decisive and produce the artifacts.
-
-## Markdown Table Readability Contract
-
-Reader-facing Markdown horizontal tables have at most six columns. Use them only for compact, atomic comparisons. When one record contains long repository paths, evidence anchors, links, code contracts, business explanations or several prose-heavy fields, render that record as its own `项目 / 内容` vertical table, or split it into compact tables joined by the same stable ID. Never drop identity, semantics, evidence or traceability merely to reduce column count. Escape literal pipe characters inside cells. Dashboard horizontal scrolling is a fallback for unusual content, not permission to generate a wide table.
+1. Co-create and resolve. Select one mode, confirm the feature and capability ownership, gather evidence, and obtain approval of the `master_draft` before expansion in code-changing modes.
+2. Execute. Archive affected feature documents, create the smallest requested development-document set, and emit a separate project-knowledge change set without applying it.
+3. Verify and report. Validate evidence, decisions, links, archives, formats, acceptance and cross-document consistency; then hand canonical impacts to `$axis-doc-project-knowledge` and report any code work awaiting authorization.
 
 ## Feature Resolution Confirmation Gate
 
-Read [feature-resolution-and-lifecycle.md](references/feature-resolution-and-lifecycle.md) before resolving an existing feature.
+Read [feature-resolution-and-lifecycle.md](references/feature-resolution-and-lifecycle.md) before resolving an existing feature:
 
-- `zero_matches`: do not invent an existing feature. Ask for a route, page, menu, symbol, API, table, event, job, screenshot, source path, or approved wording.
-- `multiple_matches`: present two to five evidence-backed candidates and ask the user to select one.
-- `confirmed_feature`: require a connected entrypoint-to-implementation match plus explicit user confirmation of the resolved target, its `level1_capability_id`, its `secondary_capability_id`, and associated `business_ids`.
-- A planned feature may use `confirmed_planned_feature` only after the user confirms its name, owning level-1 capability, owning secondary capability, goal, non-goals, and acceptance boundary. Absence from code is expected in this mode.
+- `zero_matches`: request one concrete locator; do not invent a feature.
+- `multiple_matches`: show two to five evidence-backed candidates and ask the user to select.
+- `confirmed_feature`: require connected entrypoint-to-implementation evidence plus confirmed capability ownership.
 
-The gate runs before creating or modifying a feature document.
-
-## Detailed-Design Aggregation Contract
-
-The retained detailed-design hierarchy uses a level-1 overview plus independently reviewable secondary-capability documents:
-
-- use `business_capability_detailed_design` for the level-1 overview and `secondary_capability_detailed_design` for each child;
-- create one overview document per level-1 capability and one detailed-design document per declared secondary capability;
-- use `level1_capability_id` as the canonical document key and `level1_capability_name` as its reader-facing title;
-- read the complete `secondary_capabilities` array from `business/inventory.yaml` before drafting;
-- treat `business/level1-capability-dependency-graph.yaml` as the only source for level-1 upstream/downstream; never infer or hand-edit those relationships inside one feature or one overview;
-- include every secondary capability in the level-1 overview as a summary and canonical link, even when only one secondary capability changed;
-- give each atomic `secondary_capability_id` an independent document containing its complete business and interface-local code design;
-- keep `business_ids` inside the owning secondary-capability entry as traceability to business/implementation evidence; a `business_id` never creates another level-1 detailed-design document;
-- when multiple inventory rows or evidence groups share the same level-1 capability, merge them into one overview and preserve every distinct secondary document;
-- do not mark the hierarchy complete while any declared secondary capability, parent/child link, or adjacent-document navigation is missing, duplicated, or unresolved.
-
-One secondary capability owns one independently reviewable business outcome with a coherent main actor, permission/data boundary, authoritative state and lifecycle. Split enumeration-style aggregates when they contain separate user-visible results, state machines, governance authorities or independently evolving transaction boundaries. A shared Controller, Service, directory, `business_id`, method or table is evidence, not a reason to merge or mechanically split capabilities.
-
-Default canonical path:
-
-```text
-.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/detailed-design.md
-.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md
-```
-
-Feature and requirement documents live beneath that level-1 capability and identify the secondary capabilities they affect. Updating one feature revises every participating secondary document; the overview changes when its owning `3.N` external-business-capability group, implementation steps, journey/table coverage state or gap, terminology, table/ER design, summary, boundary or navigation changes.
-
-Level-1 dependency projection is a project-wide exception to local document editing. Each overview records `dependency_graph_status`, `dependency_graph_revision` and `dependency_graph_gap_id`; its upstream/downstream fields are only the canonical graph's direct incoming/outgoing sets. If any level-1 or child document is incomplete, both values remain `not_derived`. If this task changes a level-1 boundary or relationship evidence, invoke `$axis-doc-project-knowledge`: archive the current graph and affected overviews, return the graph/projections to pending, wait until all level-1 `user_journey_coverage` and child `interface_coverage` values are complete, run one 项目级统一模型梳理, then batch-update every affected overview. Do not mistake “上一个/下一个能力” navigation for dependency direction.
-
-### Mandatory Level-1 Interface-Detail Contract
-
-The level-1 `business_capability_detailed_design` is the complete `对外业务能力与接口实现` panorama. It records document identity, source baseline, journey/table authoring controls and dependency projection once in a hidden `axis-document-metadata` block before the numbered sections:
-
-- `user_journey_design_status=detailed` as the only valid journey-design status;
-- `user_journey_coverage=complete|partial` and `user_journey_gap_id=not_applicable|<stable_gap_id>`;
-- `table_design_status=detailed|not_applicable`;
-- `table_design_coverage=complete|partial|not_applicable` and `table_design_gap_id=not_applicable|<stable_gap_id>`.
-
-Keep these controls hidden and keep actionable journey gap detail in Section 6 and the gap report; never generate a reader-facing status panel or `用户旅程覆盖契约` chapter. The retained level-1 structure is fixed: 1 设计结论与能力边界, 2 二级能力完整性与导航, 3 对外业务能力与接口实现, 4 业务语义, 5 表结构设计, 6 缺口与覆盖说明, 7 文档完整性校验 and 8 文档导航与证据索引. Section 2 visibly uses only `二级能力 | 业务摘要 | 详情`; its hidden machine table retains IDs, `business_ids`, status and the canonical child link. Do not generate separate `跨二级能力用户旅程`, `共享业务语义与一级治理` or navigation glossary chapters.
-
-For Section 3, the model scans actual inventory, UI/menu, routes, APIs, events, jobs, commands, code and test evidence, then identifies each externally provided business capability by user goal and visible result. It creates one sequential `3.N` group for every capability rather than a fixed list, one row per secondary capability or a representative-interface table. Each group contains exactly one `3.N.1 业务说明`, `3.N.2 二级能力与接口实现逻辑` and `3.N.3 实现步骤` in that fixed order. `3.N.1` visibly shows only 用户/角色, 提供的业务, 用户目标, 用户怎么操作 and 用户可见结果; its hidden machine table retains `journey_id`, participating IDs and full evidence. `3.N.2` is a business-only Mermaid graph whose node IDs bind the journey and secondary IDs while every label is one atomic business action, decision, state or visible result. It never mixes method nodes into the business graph; each real `api_id` plus complete HTTP/event/job/command contract is one edge label. `3.N.3` visibly shows interface, short Controller/Handler and Service/UseCase method locations, business data effect, child link and short evidence; its hidden machine table retains the complete `step_id`, `secondary_capability_id`, `api_id`, data and parent `table_id` trace. Reader-facing evidence uses `FileName:begin-end#symbol`, and adjacent `axis-evidence` comments retain full repository-relative anchors. Only exact no-persistence evidence permits `not_applicable`.
-
-One `journey_id` may have multiple ordered `step_id` values and cross multiple secondary capabilities. Cross-secondary handoff belongs in that journey's graph and steps rather than an independent chapter. Every participating secondary document repeats the same value as `level1_journey_id`, binds its own hop to the corresponding `flow_id` and/or `api_id`, and expands entry-to-code/data-touchpoint trace in `5.N.1` plus test/acceptance evidence in `5.N.8`. A child may not add an unpaired journey, and a parent must name every participating child. If level-1 journey coverage is `complete`, every child declares `interface_coverage=complete`.
-
-Section 4 `业务语义` is a professional-term dictionary with exactly 专业术语, 定义, 适用场景与边界, 易混淆术语及区别, 关联二级能力 and 权威来源/证据. It is not a general security, release, quality or operational-governance catalog.
-
-Section 5 `表结构设计` is mandatory and fixed as `5.1 表清单`, `5.2 ER 图`, `5.2.1 ER 关系证据`, then continuous per-table subsections from `5.3` whose titles are the actual physical table names. For `table_design_status=detailed`, the table-inventory `table_id` set equals exactly the deduplicated union of every non-`not_applicable` Section 3 step “读写 `table_id`” value. It has the fixed table inventory `table_id | 物理表名 | 业务实体/用途 | 所属二级能力 | 读写 api_id | 证据`, an evidence-backed ER diagram whose entity names are the actual physical table names rather than `table_id`, and one `table_id`-controlled subsection per table with the fixed six-column fields `字段 | 类型/可空/默认值 | 键/约束 | 业务语义 | 读写 api_id | 证据`. The combined type cell keeps all three values explicitly. For two or more tables, add the fixed six-column `ER 关系证据` table `relation_id | 表关系（主 -> 从） | 关系/基数 | 关联键 | 业务语义 | 证据`; its relation cell contains both stable table IDs, covers every table as a main or dependent table and gives every row an exact code anchor. For one table, state `ER 关系证据：not_applicable（单表，无需跨表关系）`. Every inventory, relationship and field evidence cell contains an exact DDL/migration/ORM/Mapper/query `path:begin-end#symbol` anchor. `complete` uses `table_design_gap_id=not_applicable`; `partial` uses a stable table gap. Only exact evidence that none of the level-1 external capabilities reads or writes persisted data permits `table_design_status=not_applicable`, with coverage and gap ID also `not_applicable`; Section 5 still records the reason and exact evidence in a vertical `项目 / 内容` table.
-
-The level-1 document does not copy request/response field dictionaries, the full call chain, Mapper/Repository implementation, per-interface transaction/concurrency/performance/fault-tolerance detail or security/test/acceptance matrices. Each participating `secondary_capability_detailed_design` expands those concerns inside its interface group and references the same parent `table_id` for every persisted-data touchpoint. The level-1 table inventory, ER and physical-column dictionary remain the authoritative cross-secondary data view.
-
-In each secondary document, Section 1 is the concise `能力定位与边界`; document status, revision, identity, `business_ids`, coverage and source commit stay in hidden `axis-document-metadata`. Section 2 is the single authoritative reader view of `调用主体、权限与接口矩阵`, showing only 主体/角色, 所需权限/策略, 可调用接口/能力 and 数据范围. A hidden machine table retains `api_id` and authorization evidence. One row represents one subject-to-interface authorization relation. Every Section 5 `api_id` appears in at least one matrix row, every matrix interface exactly matches its Section 5 contract, and no matrix row may cite an absent interface. Permissions use actual permission codes, `authenticated`, `public`, a trusted boundary or an evidence-backed ownership rule; data scope names the tenant, organization, shop, resource or public-data boundary. Generic phrases such as “执行已授权流程” or “当前租户及业务归属” are invalid. Missing authorization or scope evidence remains an explicit stable gap rather than an inferred role.
-
-Section 5 is organized by callable contract. Every HTTP interface, EVENT/TOPIC, JOB or COMMAND receives one direct `### 5.N` group with exactly `#### 5.N.1 接口清单与代码追溯`, `5.N.2 内部处理逻辑`, `5.N.3 请求字段`, `5.N.4 响应字段`, `5.N.5 错误码与异常映射`, `5.N.6 认证与授权执行`, `5.N.7 事务、并发、性能与容错`, and `5.N.8 安全、测试与验收`. Numbering follows the parent (`5.2` owns `5.2.1` through `5.2.8`). `5.N.1` uses a concise visible contract table, a hidden complete machine table and a separate short-location implementation trace. Request/response tables keep only business-relevant fields affecting validation, permission/data scope, state, amount/quantity/time, sensitive handling, visible results or failure semantics; generic wrappers, pagination, tracing and infrastructure DTO fields are summarized by model name. Each `5.N.2` chooses one semantic view: a business diagram has one atomic action, decision, state or result per node; a method diagram has exactly one concrete method call per node and places business meaning or data changes on edges or in prose. Never combine method and action prose in one node or mix business and method nodes in one graph. `5.N.6`, `5.N.7` and `5.N.8` retain their authorization, transaction/quality and security/test/acceptance ownership. Section 3 describes only capability-level relationships among contracts. A genuinely fieldless, one-way or inapplicable item remains explicit with its reason and full hidden evidence instead of an empty table.
-
-For every persisted-data read or write, `5.N.1` and `5.N.2` keep the interface-local Mapper/Repository, entity/physical table, parent level-1 `table_id`, key, data change and governing constraint trace. Every `5.N.1` “实体/表” row contains the same parent `table_id` value or values as the owning level-1 step; only exact no-persistence evidence permits `not_applicable`. The `table_id`, physical table and `api_id` must agree with the parent level-1 Section 3 step and Section 5 table inventory and ER design.
-
-The default secondary document must not contain top-level `## 代码对象与关系`, `## 实体、表与对象关系`, `## 表结构设计`, `## 事务、并发、性能与容错`, `## 安全、测试与验收`, or `## 端到端追溯矩阵` sections. Do not move shared contract concerns into replacement global chapters: method/data relationships stay in `5.N.1` and `5.N.2`, transaction/performance/fault-tolerance in `5.N.7`, and security/test/acceptance in `5.N.8`. The complete table inventory, ER and per-table fields remain mandatory in the parent level-1 document. A separately reviewable, deeper database-design deliverable remains optional and requires an explicit request.
-
-## Discovery Interview for Code-Changing Work
-
-For `planned_feature_generation` and `implemented_feature_iteration`, read [discovery-and-master-draft.md](references/discovery-and-master-draft.md) and ask one compact, prioritized batch covering these decision dimensions:
-
-- `product`: target users, problem, value, scope, non-goals, visible behavior, success criteria;
-- `architecture`: ownership, boundaries, dependencies, reuse, integration, consistency, rollout and rollback;
-- `performance`: load shape, latency/throughput goals, data volume, hot paths, capacity, degradation and observability;
-- `business_flow`: actors, main path, branches, states, permissions, failure, recovery and compensation;
-- `database_design`: ownership, persisted/derived data, tables, fields, relationships, constraints, indexes, lifecycle and migration;
-- `market`: alternatives, differentiation, pricing/compliance/channel constraints, only when they can materially change product scope or acceptance.
-
-Do not demand that the user already knows technical answers. For every unresolved material decision:
-
-1. explain why it matters in plain language;
-2. offer a recommended option first;
-3. give one or two alternatives with trade-offs;
-4. record the user's choice, accepted recommendation, or unresolved status.
-
-Skip irrelevant dimensions with a recorded reason. Market research that depends on current external facts requires current sources and citations; do not browse merely to decorate a design.
-
-## master_draft and Expansion Gate
-
-The `master_draft` is the single approved source for downstream documents in code-changing modes. It is not a loose brainstorming transcript.
-
-Default path:
-
-```text
-.axis/docs/orgs/{organization_id}/projects/{project_slug}/business/capabilities/{level1_capability_id}/requirements/{requirement_id}/master-draft.md
-```
-
-It must contain the final requirement framing, product conclusions, market conclusions when used, actors and business flow, architecture direction, performance targets, data/database direction, security and operations, acceptance criteria, non-goals, decision log, recommendations accepted by the user, assumptions, and unresolved items.
+For `planned_feature_generation` and `implemented_feature_iteration`, read [discovery-and-master-draft.md](references/discovery-and-master-draft.md). Ask one compact batch covering the material `product`, `architecture`, `performance`, `business_flow`, `database_design`, and `market` dimensions plus security, rollout, rollback and acceptance. Recommend an option before alternatives and record accepted, skipped, assumed or unresolved decisions.
 
 ### Expansion Gate
 
-1. Produce the complete `master_draft` first.
-2. Show the user its design conclusion, decisions, recommendations, assumptions, and intended expansion set.
-3. Ask for explicit approval or corrections.
-4. Do not expand it into retained design documents until approval is present.
-5. After approval, downstream documents must trace their claims to the approved `master_draft` plus repository evidence.
+The `master_draft` is the single approved source for downstream feature documents. Show its conclusions, decisions, assumptions and expansion set, then wait for explicit approval. Revise the draft before downstream documents when the user corrects it.
 
-If the user corrects the draft, revise the draft first and repeat the gate once as a consolidated confirmation. Do not patch downstream documents independently from an outdated draft.
+## Document Production
 
-## Document Selection and Expansion
+Select the smallest coherent set. Read [technical-and-database-design.md](references/technical-and-database-design.md) for technical and data depth and [feature-detailed-design-template.md](references/feature-detailed-design-template.md) for the feature-level detailed-design structure. Canonical level-1/secondary templates remain owned by `$axis-doc-project-knowledge`.
 
-Select the smallest coherent set:
+Use one Markdown file per independently reviewable artifact by default. A requested DOCX must be a real rendered Word document, not renamed Markdown; PDF is generated only when requested. Reader-facing horizontal tables have at most six columns. Show only business-relevant fields and short `FileName:begin-end#symbol` evidence; retain full repository-relative anchors in machine metadata when traceability requires them.
 
-| Request or need | Output |
-| --- | --- |
-| Requirements or product boundary | `master_draft` and, when separately needed, requirements specification |
-| 概要设计 / Overview / HLD | Overview design |
-| Technical solution | Decision-oriented technical design |
-| 详细设计 / Detailed design / LLD | One level-1 interface-detail panorama with model-derived external-business-capability groups, business terminology, mandatory table inventory/ER/per-table fields and links to all declared secondary capabilities, plus one implementation-oriented detailed design per secondary capability |
-| Database design | A deeper standalone database release/review deliverable only when the user explicitly requests DBDD or equivalent scope; the parent level-1 table inventory, ER and per-table fields remain mandatory regardless |
-| API contract | API document |
-| Material behavior or integration risk | Test plan |
-| Release/operations need | Deployment or runbook document |
-| Implemented feature iteration | Iteration design describing approved target, affected current contracts, compatibility, rollout, rollback, and required canonical revisions |
-
-Read [technical-and-database-design.md](references/technical-and-database-design.md) for level-1 table/ER depth, interface-local data tracing and the explicit-request-only deeper standalone database-design contract. Read [feature-detailed-design-template.md](references/feature-detailed-design-template.md) for one-feature detailed-design structure.
-
-## Output Formats
-
-Default to one Markdown file per independently reviewable document. When the user requests Word/DOCX, create a real `.docx` with a cover, revision table, consistent heading levels, readable tables, page numbering and a table of contents when feasible; never rename Markdown to DOCX. Parse the generated file and render or visually inspect representative pages before delivery. Generate PDF or another retained format only when requested, while keeping the canonical Markdown/project-knowledge source when the repository requires it.
-
-Before delivery, scan every generated Markdown table for the six-column limit and visually inspect representative tables containing long paths, evidence or CJK prose. Convert any compressed record to a vertical form instead of relying on the renderer to make it readable.
-
-## Project-Knowledge Impact Updates
-
-Generating a target document is not enough. Classify and apply its knowledge impact:
-
-| Change impact | Required update |
-| --- | --- |
-| Formatting, wording, or evidence correction only | Target feature/requirement document only |
-| Feature behavior, validation, API, state, transaction, or schema detail | Feature/requirement document plus the matching interface groups in every participating `secondary_capability_detailed_design`; also update the owning level-1 `3.N` logic/steps, journey coverage and mandatory table inventory/ER/field design when affected. Add a deeper standalone database-design document only when explicitly requested |
-| Secondary-capability actor, permission, state ownership, internal business flow or persisted-data touchpoint | Owning secondary design, affected level-1 `3.N` groups/coverage gaps, terminology and table design, summary/link, `business_inventory`, and affected feature/requirement documents |
-| Level-1 capability boundary, value stream, shared business object, governance rule, or upstream/downstream evidence | Reviewed revision of `project_business_architecture` plus affected level-1 documents; invalidate `level1_capability_dependency_graph`, then let `$axis-doc-project-knowledge` globally re-derive and batch-project direct edges |
-| System boundary, shared technical capability, deployment topology, cross-cutting consistency, security, or performance principle | Reviewed revision of `project_technical_architecture` plus affected capability/feature documents |
-
-Do not rewrite global documents when the impact is local. Update `metadata.yaml`, document refs, revision links, `doc_gap_report`, and traceability when the repository uses Axis v0.2 project knowledge. Use `$axis-doc-project-knowledge` for whole-project bootstrap or multi-capability reconciliation, not as a second feature-document generator.
-
-## Mandatory Pre-Change Archive
-
-Read [document-archive-contract.md](references/document-archive-contract.md). Before modifying any existing canonical document:
-
-1. run `scripts/archive_document.py` with the reason, request summary, source revision, and target revision;
-2. verify the archived content hash matches the current file;
-3. keep the current canonical path unchanged for normal readers;
-4. place history only under `.axis/docs/_archive/`;
-5. never mutate an `approved` document in place: archive it, create a new `review` revision, and record `supersedes`;
-6. update current content only after archive verification succeeds.
-
-If archival fails, stop the modification. A missing or failed archive is a blocking error, not a warning.
-
-## Mandatory OSS Synchronization Gate
-
-Axis Dashboard is OSS-first because one OSS catalog aggregates N organizations and projects, while a local repository represents only one working copy. Do not solve cross-project review by discovering or hard-coding every local repository.
-
-For every Axis v0.2 repository where canonical project knowledge changed:
-
-1. inherit an explicit project/user authorization for publish-on-change, or obtain it before the first external write;
-2. validate configuration and create a fresh project-knowledge snapshot after the final local document write;
-3. run `oss-publish --dry-run` and require zero public-safety, manifest, path, or credential errors;
-4. upload the same immutable run and require `publish.status: published`;
-5. refresh the Dashboard catalog and verify the OSS object size or checksum matches the snapshot before claiming completion.
+Before modifying a current feature document, apply [document-archive-contract.md](references/document-archive-contract.md):
 
 ```bash
-axis validate-config --repo <repo>
-axis project-knowledge-capture --repo <repo>
-axis oss-publish --repo <repo> --run-id <run_id> --dry-run
-axis oss-publish --repo <repo> --run-id <run_id>
+python3 <skill-dir>/scripts/archive_document.py --help
 ```
 
-The current local files remain the authoring source, but OSS is the default cross-organization review source. A local-only document change is incomplete after publish-on-change has been authorized. If OSS configuration, credentials, dry-run, upload, or checksum verification fails, retain the local snapshot, report the exact blocker, and do not describe Dashboard data as current. Never log credentials or expose them to the browser.
+## Light Adversarial Review
 
-## Code-Change Boundary
+Spend no more than 30% of the interaction challenging an invented feature match, hidden product decision, unsafe architecture, unmeasured performance claim, weak schema, broken business flow, silent overwrite, or premature implementation. Once evidence and decisions are sufficient, produce the documents decisively.
 
-This skill may establish that code must be added or modified, but document approval is not implementation authorization. After the expanded document set is approved, summarize the implementation slices, tests, migration, rollout, and rollback, then ask whether to execute. If authorized, hand off to the appropriate code/TDD workflow and later use `$axis-doc-drift-capture` for task/version evidence and residual document drift.
+## Checks
 
-## Verification Checklist
-
-- Exactly one operating mode is recorded.
-- Existing-feature resolution is confirmed, or planned-feature ownership and boundary are explicitly confirmed with one `level1_capability_id` and at least one `secondary_capability_id`.
-- Code-changing modes have a user-approved `master_draft` before expansion.
-- Product, architecture, performance, business_flow, database_design, and applicable market decisions are answered, recommended-and-accepted, skipped with reason, or visibly unresolved.
-- Every modified canonical document has a verified archive record created before modification.
-- Every reader-facing horizontal Markdown table has at most six columns; records containing long paths, evidence or several prose-heavy fields use vertical or stable-ID-split presentation without losing traceability.
-- Every changed v0.2 project-knowledge set with publish-on-change authorization has a fresh snapshot, passing dry-run, `published` OSS status, and verified Dashboard OSS checksum/size.
-- Current paths remain stable and archive paths stay under `_archive`.
-- `approved` content is superseded by a new `review` revision rather than overwritten.
-- There is exactly one current overview for the owning level-1 capability and one current detailed design per declared secondary capability; parent/child and adjacent-document navigation is complete.
-- No feature-local edit invents upstream/downstream. The current dependency graph is either pending with `not_derived` projections and a tracked gap, or globally derived with every overview equal to its direct incoming/outgoing projection.
-- Every level-1 overview records `user_journey_design_status=detailed`, `user_journey_coverage=complete|partial`, and the correct `user_journey_gap_id`; complete coverage uses `not_applicable`, while partial coverage records unlisted journeys under a stable gap ID.
-- Every level-1 overview records `table_design_status=detailed|not_applicable`, a compatible `table_design_coverage=complete|partial|not_applicable`, and the correct `table_design_gap_id`; a not-applicable design keeps Section 5 with an evidence-backed reason.
-- Level-1 journey controls appear only in the overview header and gap evidence, while the table-design control line appears once at the start of Section 5; no reader-facing `用户旅程覆盖契约` chapter is generated.
-- Every actual external business capability has an independent sequential `3.N` group with exactly one `3.N.1`, `3.N.2` and `3.N.3` in that order, the fixed vertical business-description fields, a real secondary-capability-node/interface-edge Mermaid graph and one fixed eleven-row vertical implementation table per ordered step; each `api_id` plus complete interface is an edge label and multi-secondary nodes connect in step order; the legacy fourteen-column panorama table and independent cross-secondary-journey chapter are absent.
-- Every declared secondary capability participates in at least one listed business capability; each listed step binds one secondary and API, has exact Controller/Handler and Service/UseCase `path:begin-end#symbol` anchors, data summaries, one or more stable parent `table_id` values or exact-evidence `not_applicable`, evidence and a canonical child link, and neither code anchor uses `missing_evidence` or `not_applicable`.
-- A level-1 `journey_id` may span multiple children; every participating child repeats it as `level1_journey_id` and binds its local hop to a matching `flow_id` and/or `api_id`, no child adds an unpaired ID, and complete level-1 coverage requires complete child interface coverage.
-- Section 4 is the fixed professional `业务语义` dictionary and does not retain `共享业务语义与一级治理`.
-- Detailed level-1 table design contains the fixed table inventory whose ID set equals the Section 3 step-ID union, an evidence-backed ER using actual physical table names and a `table_id`-controlled field dictionary for every table; multi-table designs contain the fixed evidence-backed `ER 关系证据` table and cover every table, while single-table designs explicitly state no cross-table relationship. Level-1 overviews do not copy request/response field dictionaries, full call chains, Mapper/Repository implementation, per-interface transaction/concurrency/performance/fault-tolerance detail or security/test/acceptance matrices.
-- Detailed, capability, global business, and global technical documents are updated only at their justified impact level.
-- The level-1 table inventory, ER and per-table fields are mandatory; only a deeper separately reviewable standalone database-design deliverable remains optional and requires an explicit user request.
-- Every secondary detailed design has one concise capability boundary and one authoritative caller-permission-interface matrix. Each Section 5 `api_id` is covered by at least one concrete subject, permission or policy, exact callable interface, data scope and authorization evidence row; the matrix cannot cite absent interfaces or use generic authorization/scope prose.
-- Every secondary detailed design makes capability-level cross-contract relationships explicit where they exist and colocates each contract's internal processing logic in its own `5.N.2`; interface-to-code/test trace is carried by `5.N.1` and `5.N.8`, while implemented hops use repository-relative `path:begin-end#symbol` anchors and target or unverifiable hops are explicitly labelled. Every Section 5 interface/event/job/command is an independent sequential `5.N` group and owns all eight same-prefix contract subsections; no document uses one wide interface table plus global logic/request/response/error/governance/quality/test sections.
-- No default secondary document contains top-level `实体、表与对象关系`, `表结构设计`, `事务、并发、性能与容错`, `安全、测试与验收`, or `端到端追溯矩阵` chapters. Each persisted-data interface still records Mapper/Repository, entity/table, the same parent `table_id`, keys and changes in `5.N.1`/`5.N.2`; every `5.N.1` entity/table row contains matching parent IDs or exact-evidence `not_applicable`, consistent with the parent step and ER. If the user explicitly requested deeper standalone database design, verify and link it independently.
-- Cross-document terminology, states, APIs, data ownership, performance targets, acceptance, rollout, and rollback agree.
-- Claims are backed by the approved `master_draft`, repository evidence, cited current market sources, or explicit assumptions.
-- No unresolved filler, credentials, private URLs, raw production payloads, or customer identifiers leak into reusable or public material.
-
-Useful checks:
-
-```bash
-python3 scripts/archive_document.py --help
-rg -n "TODO|TBD|待补|待定|placeholder|dummy|filler" .axis/docs
-```
-
-For this bundle, run its focused acceptance test, the packaged-skill validator, repository tests, and local refresh before claiming installation.
+- Exactly one operating mode and one resolved feature are recorded.
+- Code-changing modes have an explicitly approved `master_draft` before expansion.
+- Every claim traces to confirmed wording, the approved draft, repository evidence, or a visible assumption/gap.
+- The output contains `development_document_set` and a separate `project_knowledge_change_set`; no canonical project-knowledge file was directly modified.
+- Every modified feature document has a pre-change archive and matching SHA-256 metadata.
+- Tables, diagrams, evidence labels, terminology, states, API/data behavior, acceptance, rollout and rollback are concise and consistent.
+- No code execution or OSS upload is inferred from document approval.
+- Generated files parse/render correctly and contain no filler, secrets, private hosts, raw payloads, or customer data.
 
 ## After Use Deposition
 
-After use, check whether the session produced reusable discovery questions, recommendations, archive edge cases, expansion rules, or impact-classification corrections. Update only public-safe reusable material, validate the bundle, refresh the local installation, and push when authorized. Otherwise report that no skill update is needed.
+Check whether the run produced reusable discovery questions, master-draft gates, archive edge cases, output-selection rules, or impact-classification corrections. If yes, update only public-safe bundle material, validate it, refresh the local install, and push when authorized. Otherwise report that no skill update is needed.

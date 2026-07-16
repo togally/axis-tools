@@ -60,11 +60,14 @@ const { rankPromptResults } = await import(
   new URL('../skills/axis-tools-prompt-create/scripts/rank_prompt_results.mjs', import.meta.url)
 );
 const ranking = rankPromptResults([
-  { prompt_id: 'high-average-unstable', model_tier: 'small', source_kind: 'code', score: 1, hard_fail: false },
-  { prompt_id: 'high-average-unstable', model_tier: 'standard', source_kind: 'workflow', score: 0, hard_fail: false },
-  { prompt_id: 'stable', model_tier: 'small', source_kind: 'code', score: 0.7, hard_fail: false },
-  { prompt_id: 'stable', model_tier: 'standard', source_kind: 'workflow', score: 0.7, hard_fail: false },
-]);
+  { prompt_id: 'high-average-unstable', model_id: 'small-a', model_tier: 'small', source_kind: 'code', case_id: 'case-code', repeat: 1, score: 1, hard_fail: false, prompt_length: 100, estimated_cost: 1 },
+  { prompt_id: 'high-average-unstable', model_id: 'standard-a', model_tier: 'standard', source_kind: 'workflow', case_id: 'case-flow', repeat: 1, score: 0, hard_fail: false, prompt_length: 100, estimated_cost: 1 },
+  { prompt_id: 'stable', model_id: 'small-a', model_tier: 'small', source_kind: 'code', case_id: 'case-code', repeat: 1, score: 0.7, hard_fail: false, prompt_length: 100, estimated_cost: 1 },
+  { prompt_id: 'stable', model_id: 'standard-a', model_tier: 'standard', source_kind: 'workflow', case_id: 'case-flow', repeat: 1, score: 0.7, hard_fail: false, prompt_length: 100, estimated_cost: 1 },
+], [
+  { model_id: 'small-a', model_tier: 'small', source_kind: 'code', case_id: 'case-code', repeat: 1 },
+  { model_id: 'standard-a', model_tier: 'standard', source_kind: 'workflow', case_id: 'case-flow', repeat: 1 },
+], ['high-average-unstable', 'stable']);
 assert.equal(ranking[0].prompt_id, 'stable', 'worst-cell stability must outrank a higher but brittle maximum');
 
 const tempRoot = await mkdtemp(path.join(tmpdir(), 'axis-tools-name-guard-'));

@@ -8,16 +8,16 @@ import { promisify } from 'node:util';
 
 const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve('.');
-const skillRoot = path.join(repoRoot, 'skills', 'axis-doc-dashbord');
+const skillRoot = path.join(repoRoot, 'skills', 'axis-doc-dashboard');
 const manifest = JSON.parse(await readFile(path.join(repoRoot, 'skills', 'manifest.json'), 'utf8'));
-const entry = manifest.skills.find((skill) => skill.name === 'axis-doc-dashbord');
+const entry = manifest.skills.find((skill) => skill.name === 'axis-doc-dashboard');
 
-assert.ok(entry, 'axis-doc-dashbord should be packaged');
+assert.ok(entry, 'axis-doc-dashboard should be packaged');
 assert.deepEqual(entry.files.sort(), [
   'SKILL.md',
   'agents/openai.yaml',
-  'assets/axis-doc-dashbord-template.tgz',
-  'scripts/axis_doc_dashbord.py',
+  'assets/axis-doc-dashboard-template.tgz',
+  'scripts/axis_doc_dashboard.py',
 ]);
 
 const body = await readFile(path.join(skillRoot, 'SKILL.md'), 'utf8');
@@ -41,21 +41,21 @@ for (const requiredText of [
   '.axis/docs/_archive/orgs/',
   'archive_count',
   '_sync/manifest.json',
-  'AXIS_DOC_DASHBORD_DIR',
+  'AXIS_DOC_DASHBOARD_DIR',
   'After Use Deposition',
 ]) {
   assert.match(body, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 }
 
 const openAiYaml = await readFile(path.join(skillRoot, 'agents', 'openai.yaml'), 'utf8');
-assert.match(openAiYaml, /^\s*display_name: "axis-doc-dashbord"$/m);
-assert.match(openAiYaml, /\$axis-doc-dashbord/);
+assert.match(openAiYaml, /^\s*display_name: "axis-doc-dashboard"$/m);
+assert.match(openAiYaml, /\$axis-doc-dashboard/);
 assert.doesNotMatch(openAiYaml, /\$axis-document-review/);
 
-const script = path.join(skillRoot, 'scripts', 'axis_doc_dashbord.py');
+const script = path.join(skillRoot, 'scripts', 'axis_doc_dashboard.py');
 const scriptBody = await readFile(script, 'utf8');
 assert.match(scriptBody, /~\/Documents\/axis\/axis-document-review/);
-const missingTarget = await mkdtemp(path.join(tmpdir(), 'axis-doc-dashbord-status-'));
+const missingTarget = await mkdtemp(path.join(tmpdir(), 'axis-doc-dashboard-status-'));
 await rm(missingTarget, { recursive: true, force: true });
 const scaffoldTarget = `${missingTarget}-scaffold`;
 try {

@@ -1,7 +1,0 @@
-interface:
-  display_name: "axis-doc-dashbord"
-  short_description: "Open Axis document dashboard / 打开 Axis 文档看板"
-  default_prompt: "Use $axis-doc-dashbord to inspect the local app, ask once before pulling when it is missing, then start and open the document dashboard."
-
-policy:
-  allow_implicit_invocation: true
