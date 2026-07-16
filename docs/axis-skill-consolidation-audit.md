@@ -16,9 +16,9 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 
 ## Whole-Inventory Refactor
 
-The current packaged inventory contains 19 canonical skills. All 19 remain because each owns a distinct primary result; no additional merge is justified after comparing trigger, output, evidence and risk boundaries.
+The current packaged inventory contains 25 canonical skills: the 19 outcome owners established by the whole-inventory refactor plus six non-overlapping additions from `origin/main` (`axis-doc-contract-review` and five `axis-trade-*` skills). All 25 remain because each owns a distinct primary result; no additional merge is justified after comparing trigger, output, evidence and risk boundaries.
 
-Every packaged skill now has explicit `When to Use`, `Do Not Use`, `Inputs`, `Outputs`, `Safety and Boundaries`, `Checks`, and `After Use Deposition` sections. Coding, design and external-action workflows also retain a task-specific three-step contract and light adversarial review capped at 30%. Deep schemas, templates and playbooks live in `references/`; each front door stays below 180 lines.
+The original 19-skill refactor cohort has explicit `When to Use`, `Do Not Use`, `Inputs`, `Outputs`, `Safety and Boundaries`, `Checks`, and `After Use Deposition` sections. Coding, design and external-action workflows also retain a task-specific three-step contract and light adversarial review capped at 30%. Deep schemas, templates and playbooks live in `references/`; each front door stays below 180 lines. The six newer skills keep their own domain-specific gates while participating in the same canonical naming, manifest and routing inventory.
 
 `skills/routing.json` is the executable overlap registry. It assigns one unique primary outcome to every skill and permits only acyclic one-way handoffs. Important boundaries are:
 
@@ -55,7 +55,9 @@ Runtime safety was tightened with the same refactor: benchmark defaults to publi
 
 ## Boundaries Kept Separate
 
-`axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, meta-tooling, platform integrations and operations dashboards also keep their distinct risk and output contracts.
+`axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Contract review remains separate because it owns legal-source, clause-adjudication and DOCX delivery gates rather than software design generation. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, meta-tooling, platform integrations and operations dashboards also keep their distinct risk and output contracts.
+
+The `axis-trade-*` family also remains split by independently selectable outcome: system-parameter governance, factual portfolio ledger, evidence-producing risk research, investment-plan admission, and read-only daily monitoring. The dependency direction is `system + portfolio + research -> plan -> daily brief`; no trade skill may execute an order or package personal financial data in the public repository.
 
 ## Archive And Dashboard Decision
 
@@ -63,6 +65,7 @@ Every modification of an existing canonical design requires a pre-change immutab
 
 ## Current Packaged Document Inventory
 
+- `axis-doc-contract-review`
 - `axis-doc-dashboard`
 - `axis-doc-development`
 - `axis-doc-drift-capture`

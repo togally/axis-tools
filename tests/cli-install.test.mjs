@@ -332,7 +332,7 @@ await withTempDir(async (home) => {
   const dashboard = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard');
   await execFileAsync('git', ['clone', repoRoot, cleanRepo], { maxBuffer: 10 * 1024 * 1024 });
   await symlink(path.join(repoRoot, 'node_modules'), path.join(cleanRepo, 'node_modules'), 'dir');
-  await execFileAsync('git', ['config', 'status.showUntrackedFiles', 'no'], { cwd: cleanRepo });
+  await writeFile(path.join(cleanRepo, '.git', 'info', 'exclude'), 'node_modules\n', 'utf8');
   await mkdir(dashboard, { recursive: true });
   await writeFile(path.join(dashboard, 'SKILL.md'), '# local edit\n', 'utf8');
 

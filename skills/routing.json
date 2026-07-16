@@ -31,6 +31,13 @@
       "handoffs": ["axis-doc-drift-capture"]
     },
     {
+      "name": "axis-doc-contract-review",
+      "primary_outcome": "Review one contract and deliver separate annotated and publication-clean DOCX files",
+      "use_when": "Use for comment-by-comment contract or agreement review with current legal grounds and verified DOCX outputs. / 用于逐条评审合同或协议，并依据现行法律交付经验证的批注回应版与发布清洁版。",
+      "do_not_use_when": "Do not use for software design documents, legal representation, or guaranteed compliance conclusions. / 不用于软件设计文档、法律代理或保证合规的结论。",
+      "handoffs": []
+    },
+    {
       "name": "axis-doc-dashboard",
       "primary_outcome": "Start and open the correct local Axis document dashboard",
       "use_when": "Use when the user wants to view the local Axis document catalog or history. / 用于用户要查看本地 Axis 文档目录或历史。",
@@ -113,6 +120,41 @@
       "use_when": "Use when the user explicitly requests TDD/RED-GREEN-REFACTOR, or when an owning code skill conditionally hands off implementation method. / 用于用户明确要求 TDD/红绿重构，或主代码技能有条件交接实现方法时。",
       "do_not_use_when": "Do not compete with the owning bugfix, architecture, or performance outcome; do not use for diagnosis-only work or report packaging. / 不与缺陷修复、架构或性能主结果竞争，也不用于只诊断或报告打包。",
       "handoffs": ["axis-test-side-effects"]
+    },
+    {
+      "name": "axis-trade-daily-brief",
+      "primary_outcome": "Produce one source-backed daily risk brief for configured assets and plans",
+      "use_when": "Use for read-only daily monitoring with freshness, deduplication, risk escalation, and delivery status. / 用于只读的每日监控，包含时效、去重、风险升级与交付状态。",
+      "do_not_use_when": "Do not use to execute orders, change positions, approve plans, or mutate the trading system. / 不用于执行订单、改变持仓、批准计划或修改交易系统。",
+      "handoffs": ["axis-trade-risk-research", "axis-trade-plan-gate"]
+    },
+    {
+      "name": "axis-trade-plan-gate",
+      "primary_outcome": "Gate one investment plan against approved system, research, and portfolio evidence",
+      "use_when": "Use to propose, review, activate, revise, or close an investment plan under explicit evidence and approval gates. / 用于在明确证据与审批门禁下提出、评审、激活、修订或结束投资计划。",
+      "do_not_use_when": "Do not use to execute an order, alter system parameters, or fabricate missing portfolio evidence. / 不用于执行订单、修改系统参数或虚构缺失的组合证据。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-trade-portfolio-ledger",
+      "primary_outcome": "Reconcile and post one source-aware private portfolio ledger update",
+      "use_when": "Use to import, reconcile, post, value, or snapshot holdings across supported asset classes. / 用于跨资产类别导入、核对、入账、估值或快照持仓。",
+      "do_not_use_when": "Do not use for watchlists, inferred holdings, order execution, or unreconciled silent writes. / 不用于关注列表、推断持仓、订单执行或未核对的静默写入。",
+      "handoffs": []
+    },
+    {
+      "name": "axis-trade-risk-research",
+      "primary_outcome": "Create one current source-backed asset risk eligibility snapshot",
+      "use_when": "Use for current fundamental, regulatory, market-structure, custody, or protocol-risk research on an exact asset identity. / 用于对精确资产身份开展当前基本面、监管、市场结构、托管或协议风险研究。",
+      "do_not_use_when": "Do not use to approve a plan, alter a trading system, or claim that an asset is risk-free. / 不用于批准计划、修改交易系统或宣称资产无风险。",
+      "handoffs": ["axis-trade-plan-gate"]
+    },
+    {
+      "name": "axis-trade-system-governance",
+      "primary_outcome": "Version and apply one explicitly approved trading-system parameter change",
+      "use_when": "Use to initialize, inspect, evaluate, version, or approval-gate a trading-system rule change. / 用于初始化、检查、评估、版本化或审批门禁交易系统规则变更。",
+      "do_not_use_when": "Do not use to approve an asset plan, reconcile holdings, generate a brief, or execute an order. / 不用于批准资产计划、核对持仓、生成简报或执行订单。",
+      "handoffs": ["axis-trade-plan-gate"]
     },
     {
       "name": "axis-tools-prompt-create",

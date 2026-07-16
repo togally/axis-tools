@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-doc-contract-review"
+  short_description: "Review Word agreements with legal grounds and deliver annotated and clean versions. / 评审 Word 协议并交付含法律依据的批注版与净稿。"
+  default_prompt: "Use $axis-doc-contract-review to review this Word/DOCX agreement comment by comment, verify current official legal grounds, and deliver separate annotated-response and publication-clean files."
+
+policy:
+  allow_implicit_invocation: true

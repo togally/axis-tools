@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-trade-daily-brief"
+  short_description: "Brief daily portfolio and plan risks / 每日汇总持仓与计划风险"
+  default_prompt: "Use $axis-trade-daily-brief to run the approved read-only daily monitoring and delivery workflow."
+
+policy:
+  allow_implicit_invocation: true

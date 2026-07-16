@@ -80,6 +80,27 @@ await withTempDir(async (tmp) => {
   const sourceRoot = path.join(tmp, 'source-skills');
   const repo = path.join(tmp, 'repo');
   await mkdir(repo, { recursive: true });
+  await writeDemoSkill(sourceRoot, 'axis-trade-demo');
+
+  await execFileAsync(process.execPath, [
+    script,
+    '--repo',
+    repo,
+    '--source-root',
+    sourceRoot,
+    '--skill',
+    'axis-trade-demo',
+    '--no-validate',
+  ]);
+
+  const manifest = JSON.parse(await readFile(path.join(repo, 'skills', 'manifest.json'), 'utf8'));
+  assert.equal(manifest.skills[0].name, 'axis-trade-demo');
+});
+
+await withTempDir(async (tmp) => {
+  const sourceRoot = path.join(tmp, 'source-skills');
+  const repo = path.join(tmp, 'repo');
+  await mkdir(repo, { recursive: true });
   await writeDemoSkill(sourceRoot, 'axis-demo-skill');
 
   const error = await execFileAsync(process.execPath, [

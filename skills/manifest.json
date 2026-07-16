@@ -39,6 +39,17 @@
       ]
     },
     {
+      "name": "axis-doc-contract-review",
+      "description": "Use when a user needs a Word/DOCX contract or user agreement reviewed comment by comment, revised with current legal grounds, and delivered as separate annotated-response and publication-clean files. / 用于逐条评审 Word/DOCX 合同或用户协议，依据现行法律修订，并分别交付批注回应版和清洁版。",
+      "path": "skills/axis-doc-contract-review",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/review-matrix.md",
+        "scripts/validate_agreement_docx.py"
+      ]
+    },
+    {
       "name": "axis-doc-dashboard",
       "description": "Use when a user wants to start, open, or verify the local Axis document dashboard and its current-document or archive catalog. / 用于启动、打开或核验本地 Axis 文档看板及其当前文档与历史存档目录。",
       "path": "skills/axis-doc-dashboard",
@@ -207,6 +218,56 @@
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
+      ]
+    },
+    {
+      "name": "axis-trade-daily-brief",
+      "description": "Use when a user wants a source-backed daily briefing for configured holdings, investment plans, and watchlisted assets with freshness, deduplication, risk escalation, and delivery status. / 用于为已配置持仓、投资计划和关注资产生成有来源、可追溯、去重、包含风险升级与推送状态的每日简报。",
+      "path": "skills/axis-trade-daily-brief",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/daily-brief-contract.md"
+      ]
+    },
+    {
+      "name": "axis-trade-plan-gate",
+      "description": "Use when a user wants to propose, review, activate, revise, or close an investment plan under the approved trading system and evidence-backed risk gates. / 用于在已批准交易系统与证据化风险门禁下提出、审查、激活、修订或结束投资计划。",
+      "path": "skills/axis-trade-plan-gate",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/investment-plan-contract.md"
+      ]
+    },
+    {
+      "name": "axis-trade-portfolio-ledger",
+      "description": "Use when a user wants to maintain and reconcile a source-aware cross-asset portfolio ledger and exposure view across A-shares, crypto assets, cash, and extensible asset classes. / 用于维护并核对覆盖 A 股、加密资产、现金及可扩展资产类别的跨资产投资台账与风险敞口。",
+      "path": "skills/axis-trade-portfolio-ledger",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/portfolio-ledger-contract.md"
+      ]
+    },
+    {
+      "name": "axis-trade-risk-research",
+      "description": "Use when a user needs current source-backed fundamental, regulatory, market-structure, custody, or protocol-risk research on an A-share, crypto asset, or other investment candidate. / 用于对 A 股、加密资产或其他投资候选开展基于当前来源的基本面、监管、市场结构、托管或协议风险调研。",
+      "path": "skills/axis-trade-risk-research",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/risk-research-matrix.md"
+      ]
+    },
+    {
+      "name": "axis-trade-system-governance",
+      "description": "Use when a user wants to create, inspect, version, or propose controlled changes to a personal trading system with evaluation and explicit approval before any parameter mutation. / 用于创建、检查、版本化或提议受控调整个人交易系统，并在任何参数变更前完成评价和明确审批。",
+      "path": "skills/axis-trade-system-governance",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/system-governance-contract.md"
       ]
     }
   ]

@@ -78,11 +78,17 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 文档设计 | `axis-doc-drift-capture` | 任务或 PR 完成后记录 task_execution_record、version_iteration_record 和文档漂移影响范围。 |
 | 文档看板 | `axis-doc-dashboard` | 启动并打开独立文档看板；本地应用缺失时，一次确认拉取公开仓库或使用模板本地自建。 |
 | 文档设计 | `axis-doc-project-init` | 通过一次汇总确认配置或迁移 Axis v0.2 的组织、项目、OSS、发布、目录和语言设置。 |
+| 文档审查 | `axis-doc-contract-review` | 逐条审查 Word/DOCX 合同或用户协议，并分别交付批注回应版和发布清洁版。 |
 | 留档与发布 | `axis-code-capture` | 用户明确要求时，将已完成编码证据打包为执行报告和经验卡片。 |
 | 留档与发布 | `axis-ops-oss-publish` | 校验、脱敏、dry-run、同步 v0.2 项目文档或上传项目内不可变包。 |
 | 元工具 | `axis-tools-prompt-create` | 通过多数据源、不同模型等级的盲测创建、改进并选择稳健提示词。 |
 | 元工具 | `axis-tools-skill-create` | 作为唯一 skill 创建入口，扫描、创建、审查或重构公开安全的 Axis/Orbit skill。 |
 | 元工具 | `axis-tools-skill-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
+| 投资治理 | `axis-trade-system-governance` | 对交易系统和参数变更执行提案、评价、明确审批、版本化、验证与回滚门禁。 |
+| 投资治理 | `axis-trade-portfolio-ledger` | 维护 A 股、加密资产、现金及可扩展资产类别的本地台账、估值和风险敞口。 |
+| 投资治理 | `axis-trade-risk-research` | 使用当前官方来源调研投资候选的基本面、监管、协议、托管与流动性风险。 |
+| 投资治理 | `axis-trade-plan-gate` | 对新增、加仓、减仓、离场和观察计划执行交易系统、调研与组合风险准入。 |
+| 投资治理 | `axis-trade-daily-brief` | 只读监控持仓、有效计划和关注资产，生成带来源、覆盖状态和推送回执的每日简报。 |
 | 代码平台 | `axis-integration-yunxiao-codeup` | 通过受信 HTTPS Codeup OpenAPI 查询仓库或创建一个明确请求的合并请求。 |
 
 ### 准备事项
@@ -430,11 +436,17 @@ See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-aud
 | Documentation and design | `axis-doc-drift-capture` | Record task execution, version iteration impact, and affected documents after a task or PR completes. |
 | Document dashboard | `axis-doc-dashboard` | Start and open the standalone document dashboard; when missing, ask once before pulling or scaffolding it locally. |
 | Documentation and design | `axis-doc-project-init` | Configure or migrate Axis v0.2 organization, project, OSS, release, directory, and language settings with one consolidated confirmation. |
+| Document review | `axis-doc-contract-review` | Review Word/DOCX contracts or user agreements comment by comment and deliver separate annotated-response and publication-clean files. |
 | Deposition and release | `axis-code-capture` | Package completed coding evidence as an execution report and experience card when explicitly requested. |
 | Deposition and release | `axis-ops-oss-publish` | Validate, redact, dry-run, synchronize v0.2 project documents, or upload immutable packages inside a project. |
 | Meta-tools | `axis-tools-prompt-create` | Create, refine, and select robust prompts through blind evaluation across source kinds and model tiers. |
 | Meta-tools | `axis-tools-skill-create` | Act as the single skill-creation entrypoint for scanning, creating, reviewing, or refactoring public-safe Axis/Orbit skills. |
 | Meta-tools | `axis-tools-skill-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
+| Investment governance | `axis-trade-system-governance` | Gate trading-system parameter changes through proposal, evaluation, explicit approval, versioning, verification, and rollback. |
+| Investment governance | `axis-trade-portfolio-ledger` | Maintain a local ledger, valuation view, and risk exposures across A-shares, crypto assets, cash, and extensible asset classes. |
+| Investment governance | `axis-trade-risk-research` | Research fundamental, regulatory, protocol, custody, and liquidity risks with current official sources. |
+| Investment governance | `axis-trade-plan-gate` | Gate open, add, reduce, exit, and watch plans against the approved system, research, and portfolio capacity. |
+| Investment governance | `axis-trade-daily-brief` | Read holdings, active plans, and watched assets to produce a source-backed daily brief with coverage and delivery status. |
 | Code platform | `axis-integration-yunxiao-codeup` | Query repositories or create one explicitly requested merge request through a trusted HTTPS Codeup endpoint. |
 
 ### Prerequisites
