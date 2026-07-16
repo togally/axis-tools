@@ -3518,6 +3518,75 @@ try {
   await writeFile(
     firstCompactSecondaryPath,
     firstCompactSecondaryBody.replace(
+      '提交执行请求并查询本人处理结果',
+      '发起有证据支持的契约，并接收可见业务结果。',
+    ),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260716T010159Z-project-knowledge-compact-reader-scaffold-a1b2c399',
+    ]),
+    /reader-facing scaffold is not evidence-backed: compact_operations\/compact_capability_01/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody
+      .replaceAll('POST /app/compact/01', 'COMMAND internal:Compact01Service.execute')
+      .replace('| 契约类型 | HTTP |', '| 契约类型 | COMMAND |'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260716T010159Z-project-knowledge-compact-internal-contract-a1b2c398',
+    ]),
+    /derives a contract from an internal method: compact_operations\/compact_capability_01\/COMPACT_01_EXECUTE/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody
+      .replaceAll('POST /app/compact/01', 'JOB CompactReconcileJob.reconcile')
+      .replace('| 契约类型 | HTTP |', '| 契约类型 | JOB |'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260716T010159Z-project-knowledge-compact-job-class-a1b2c397',
+    ]),
+    /derives a contract from an internal method: compact_operations\/compact_capability_01\/COMPACT_01_EXECUTE/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody
+      .replaceAll('POST /app/compact/01', 'JOB CompactScheduledTask startup schedule')
+      .replace('| 契约类型 | HTTP |', '| 契约类型 | JOB |'),
+    'utf8',
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      path.join(repoRoot, 'dist', 'cli.js'),
+      'project-knowledge-capture',
+      '--repo', compactCapabilityRepo,
+      '--run-id', '20260716T010159Z-project-knowledge-compact-job-task-a1b2c396',
+    ]),
+    /derives a contract from an internal method: compact_operations\/compact_capability_01\/COMPACT_01_EXECUTE/,
+  );
+
+  await writeFile(
+    firstCompactSecondaryPath,
+    firstCompactSecondaryBody.replace(
       'secondary_reader_contract=participant_flow_interface_v1',
       'secondary_reader_contract=participant_flow_interface_v9',
     ),

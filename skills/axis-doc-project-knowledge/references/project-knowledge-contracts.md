@@ -23,6 +23,12 @@ History exists only under `.axis/docs/_archive/` and never appears as another cu
 
 `strict_full` is optional and requires an explicit audit need plus complete evidence. It may require sequential `3.N.1/.2/.3`, parent/child journey bindings, complete Controller/Service/data anchors, ER/table unions and one `5.N.1` through `5.N.8` group per interface. Historical strict documents without `reader_profile` are grandfathered until materially reconciled.
 
+## Reader evidence gate
+
+Boundary locking and reader readiness are separate project-wide gates. Inventory `evidence_refs`, a representative method or one boundary anchor cannot be promoted directly into participant, flow and interface facts. Before rendering each locked secondary document, its reader evidence card must prove concrete business participants/responsibilities, atomic actions and state/branch results, real observable contracts, permission/data scope and bound implementation evidence. The frozen detailed-design prompt returns `ready` only when that card is sufficient; `blocked` records actionable gap codes and produces no reader document. The project gate passes only when every locked secondary is ready, never when only one level-1 capability is polished.
+
+Reusable text such as “发起有证据支持的契约”“复核调用权威”“形成并返回已锁定的业务结果” is scaffold, not evidence. `COMMAND internal:Class.method`, `JOB internal:Class.method`, `COMMAND Class.method`, `JOB XxxJob.method` and `JOB XxxTask schedule` are synthetic implementation labels and are forbidden; class, method, scheduler class and schedule labels belong only in implementation evidence. A real named business command or scheduled-job identifier remains valid when its observable boundary is independently evidenced.
+
 ## Evidence and presentation
 
 - Connect entrypoints, UI/menu/permission, services, integrations, repositories/mappers, entities/tables, migrations/schemas and tests.

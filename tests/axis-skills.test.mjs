@@ -495,10 +495,10 @@ const detailedDesignSelection = JSON.parse(await readFile(
   projectKnowledgeReference('secondary-capability-detailed-design-prompt-selection.json'),
   'utf8',
 ));
-assert.equal(detailedDesignSelection.selected_prompt_id, 'detailed-design-baseline-v1');
+assert.equal(detailedDesignSelection.selected_prompt_id, 'detailed-design-evidence-gated-v2');
 assert.equal(
   detailedDesignSelection.selected_prompt_path,
-  'secondary-capability-detailed-design-prompt-baseline.md',
+  'secondary-capability-detailed-design-prompt-evidence-gated.md',
 );
 assert.deepEqual(
   detailedDesignSelection.models.map(({ model_id: modelId, model_tier: tier }) => [modelId, tier]),
@@ -508,9 +508,13 @@ assert.deepEqual(
     ['gpt-5.6-sol', 'strong'],
   ],
 );
-assert.equal(detailedDesignSelection.diagnostic.completed_observation_count, 36);
-assert.equal(detailedDesignSelection.diagnostic.hard_fail_count, 0);
-assert.equal(detailedDesignSelection.final_holdout.completed_observation_count, 6);
+assert.equal(detailedDesignSelection.diagnostic.completed_observation_count, 144);
+assert.equal(detailedDesignSelection.diagnostic.hard_fail_count, 36);
+assert.equal(
+  detailedDesignSelection.diagnostic.candidate_results['detailed-design-evidence-gated-v2'].hard_fail_count,
+  0,
+);
+assert.equal(detailedDesignSelection.final_holdout.completed_observation_count, 3);
 assert.equal(detailedDesignSelection.final_holdout.hard_fail_count, 0);
 assert.equal(detailedDesignSelection.final_holdout.status, 'pass');
 const sha256 = (body) => createHash('sha256').update(body).digest('hex');
@@ -537,6 +541,7 @@ for (const [hashField, artifactPath] of [
 for (const [promptId, promptFile] of [
   ['detailed-design-baseline-v1', 'secondary-capability-detailed-design-prompt-baseline.md'],
   ['detailed-design-closure-first-v1', 'secondary-capability-detailed-design-prompt-closure-first.md'],
+  ['detailed-design-evidence-gated-v2', 'secondary-capability-detailed-design-prompt-evidence-gated.md'],
 ]) {
   assert.equal(
     detailedDesignSelection.frozen_artifacts.candidate_prompt_sha256[promptId],
@@ -564,7 +569,7 @@ for (const requiredText of [
   'one independently reviewable business outcome',
   'secondary-capability-boundary-matrix-v3.1.md',
   'secondary-capability-detailed-design-output-schema.json',
-  'secondary-capability-detailed-design-prompt-baseline.md',
+  'secondary-capability-detailed-design-prompt-evidence-gated.md',
   'secondary-capability-detailed-design-prompt-selection.json',
   'artifact hashes, diagnostic matrix, frozen holdout',
   'Run the project-wide inventory granularity gate before selecting affected documents',

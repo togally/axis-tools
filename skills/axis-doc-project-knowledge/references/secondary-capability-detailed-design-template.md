@@ -2,6 +2,7 @@
 
 <!-- axis-template-use
 默认生成 reader_profile=compact，只保留下面 1-6 六个读者章节。实际输出必须替换所有花括号内容，删除不适用的示例行与未采用的图；不得把模板变量、示例证据或可选 strict_full 说明留在成品中。
+只有项目级 reader evidence card 经冻结提示词判定 `render_status=ready` 才能套用本模板；`blocked` 时必须补证，不得用通用角色、通用流程或内部方法伪接口填满模板。
 只有证据完整且读者明确需要逐字段、事务与安全审计时，才使用文末 axis-strict-full-profile 扩展，并把下方 metadata 改为 reader_profile=strict_full；不得用 compact 标识承载完整展开。strict_full 不是默认展示方式。
 -->
 
@@ -62,7 +63,7 @@ interface_not_applicable_evidence={exact_repository_path_line_symbol_or_delete_w
 -->
 
 <!-- axis-authoring-contract
-读者表一行只表达一个具体参与者在本能力中的职责及参与步骤；参与类型只能是“业务角色”“外部系统”“内部业务能力”“自动任务”。不得使用“用户”“系统”“相关人员”等泛化角色，也不得把 Controller、Service、Listener、Repository、Mapper、状态机、监听器、调度器、接收器、消费者等实现组件当成业务参与者；应提升为有证据的业务能力或自动任务，实现名称只留在隐藏证据和方法定位。隐藏 access matrix 只记录真实 caller 或 producer，并对每个 actor × api 单独写一行，同一行不得合并多个接口；consumer 或 handler 只在流程映射中标注，不得伪装成调用方。权限填写真实权限码、authenticated、public、可信内部边界或有证据的资源归属规则；不得写“执行已授权流程”等泛化结论。证据不足时写入第 6 章缺口，不推断角色、职责或数据范围。
+读者表一行只表达一个具体参与者在本能力中的职责及参与步骤；参与类型只能是“业务角色”“外部系统”“内部业务能力”“自动任务”。不得使用“用户”“系统”“相关人员”等泛化角色，也不得把 Controller、Service、Listener、Repository、Mapper、状态机、监听器、调度器、接收器、消费者等实现组件当成业务参与者；应提升为有证据的业务能力或自动任务，实现名称只留在隐藏证据和方法定位。不得写“发起有证据支持的契约，并接收可见业务结果”“复核权威和业务前置状态”等可复用脚手架。隐藏 access matrix 只记录真实 caller 或 producer，并对每个 actor × api 单独写一行，同一行不得合并多个接口；consumer 或 handler 只在流程映射中标注，不得伪装成调用方。权限填写真实权限码、authenticated、public、可信内部边界或有证据的资源归属规则；不得写“执行已授权流程”等泛化结论。证据不足时写入第 6 章缺口，不推断角色、职责或数据范围。
 -->
 
 ## 3. 能力流程
@@ -99,7 +100,7 @@ flowchart LR
 -->
 
 <!-- axis-authoring-contract
-步骤表必须覆盖主流程、明确的拒绝分支和补偿；每行只有一个参与者和一个原子业务动作，参与者必须在第 2 章出现。“结果/下一状态与下一步”必须以“；下一步：”明确写出具体步骤 ID，多个分支可列多个 ID，终点写“结束”，使所有步骤都能从至少一个入口到达并最终抵达终点。隐藏 flow-step 表至少为每个可见步骤提供一行证据；一个步骤可用多行分别映射兼容路由或多份契约，一个契约也可映射多个真实参与步骤，不得为接口别名伪造重复业务步骤。HTTP 使用 caller/handler，EVENT 与 TOPIC 使用 producer/consumer，JOB 与 COMMAND 使用 caller/handler；只有 caller/producer 进入 access matrix。无直接契约的内部步骤只写一行 `api_id=not_applicable`、`契约关系=not_applicable`，不得与真实 `api_id` 混写。Mermaid 可选；一张图只表达业务动作、判断、状态或可见结果，每个节点只放一个最小业务单元，不出现类名、方法名、表名或多个动作的并列描述。没有分支或图不能提升理解时，删除图，只保留步骤表。
+步骤表必须覆盖主流程、明确的拒绝分支和补偿；每行只有一个参与者和一个原子业务动作，参与者必须在第 2 章出现。“结果/下一状态与下一步”必须以“；下一步：”明确写出具体步骤 ID，多个分支可列多个 ID，终点写“结束”，使所有步骤都能从至少一个入口到达并最终抵达终点。不得写“复核调用权威”“形成并返回已锁定的业务结果”“返回不满足前置状态的拒绝结果”等通用三段式流程。隐藏 flow-step 表至少为每个可见步骤提供一行证据；一个步骤可用多行分别映射兼容路由或多份契约，一个契约也可映射多个真实参与步骤，不得为接口别名伪造重复业务步骤。HTTP 使用 caller/handler，EVENT 与 TOPIC 使用 producer/consumer，JOB 与 COMMAND 使用 caller/handler；只有 caller/producer 进入 access matrix。无直接契约的内部步骤只写一行 `api_id=not_applicable`、`契约关系=not_applicable`，不得与真实 `api_id` 混写。Mermaid 可选；一张图只表达业务动作、判断、状态或可见结果，每个节点只放一个最小业务单元，不出现类名、方法名、表名或多个动作的并列描述。没有分支或图不能提升理解时，删除图，只保留步骤表。
 -->
 
 ## 4. 对象与规则
@@ -166,7 +167,7 @@ flowchart LR
 -->
 
 <!-- axis-authoring-contract
-每个真实 HTTP / EVENT / TOPIC / JOB / COMMAND 契约必须且只能拥有一个连续编号的 5.N 独立摘要；5.N 标题和九字段摘要必须对读者可见，不得藏入 HTML 注释。标题和“接口/触发”只写一个具体契约，不得用顿号、斜杠或多行合并多个入口；规范化后的一个具体契约也不得用多个 `api_id` 重复表达。“调用方/参与者”列出流程映射到该契约的全部业务参与者，但 consumer/handler 不得因此进入 access matrix。“对应流程步骤”列出该契约直接发生的全部第 3 章步骤，使读者能从接口跳回业务流程；兼容路由可指向同一步，一个契约也可对应生产和消费等多个真实步骤。每个 5.N 内必须各自包含且只包含一个 interface machine table、一个 implementation machine table，以及能匹配本块可见短定位的完整路径证据；implementation machine table 的每个保留行必须在“精确定位”列恰好给出一个完整仓库路径锚点，没有精确证据的实现层删除该行并进入第 6 章缺口。每个可见短定位必须恰好匹配本 5.N implementation machine table 中的一个完整锚点，禁止借用其他 5.N 的机器表或证据。第 2 章隐藏 access matrix 的 `api_id` 集合必须与本章隐藏 interface machine table 的 `api_id` 集合完全一致。
+每个真实 HTTP / EVENT / TOPIC / JOB / COMMAND 契约必须且只能拥有一个连续编号的 5.N 独立摘要；5.N 标题和九字段摘要必须对读者可见，不得藏入 HTML 注释。`COMMAND internal:Class.method`、`JOB internal:Class.method`、`COMMAND Class.method`、`JOB XxxJob.method` 与 `JOB XxxTask schedule` 一律不是契约，只能作为 implementation machine table 的实现定位；找不到真实边界时阻断生成并补证。标题和“接口/触发”只写一个具体契约，不得用顿号、斜杠或多行合并多个入口；规范化后的一个具体契约也不得用多个 `api_id` 重复表达。“调用方/参与者”列出流程映射到该契约的全部业务参与者，但 consumer/handler 不得因此进入 access matrix。“对应流程步骤”列出该契约直接发生的全部第 3 章步骤，使读者能从接口跳回业务流程；兼容路由可指向同一步，一个契约也可对应生产和消费等多个真实步骤。每个 5.N 内必须各自包含且只包含一个 interface machine table、一个 implementation machine table，以及能匹配本块可见短定位的完整路径证据；implementation machine table 的每个保留行必须在“精确定位”列恰好给出一个完整仓库路径锚点，没有精确证据的实现层删除该行并进入第 6 章缺口。每个可见短定位必须恰好匹配本 5.N implementation machine table 中的一个完整锚点，禁止借用其他 5.N 的机器表或证据。第 2 章隐藏 access matrix 的 `api_id` 集合必须与本章隐藏 interface machine table 的 `api_id` 集合完全一致。
 
 接口摘要只列影响业务决策、权限或数据范围、状态、金额/数量/时间、敏感处理、可见结果或失败语义的字段。通用响应包裹、分页样板、链路字段和基础设施 DTO 字段只保留模型名，不逐字段展示。
 

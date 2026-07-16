@@ -83,6 +83,59 @@ test('all reference detailed designs satisfy participant, flow, and interface cl
   }
 });
 
+test('evidence-insufficient cases block without rendering scaffold content', () => {
+  for (const caseId of [
+    'membership_registration_internal_method_only',
+    'sales_reconciliation_scheduler_class_only',
+  ]) {
+    const testCase = caseById(caseId);
+    const prediction = referenceDetailedDesign(testCase);
+    assert.equal(prediction.render_status, 'blocked');
+    assert.deepEqual(prediction.blocking_gap_codes, [
+      'synthetic_internal_contract',
+    ]);
+    assert.deepEqual(prediction.participants, []);
+    assert.deepEqual(prediction.flows, []);
+    assert.deepEqual(prediction.interfaces, []);
+    assert.equal(scoreDetailedDesign(testCase, prediction).score, 1);
+  }
+});
+
+test('rendering a blocked case as ready is a hard failure', () => {
+  const testCase = caseById('membership_registration_internal_method_only');
+  const prediction = referenceDetailedDesign(testCase);
+  prediction.render_status = 'ready';
+  prediction.blocking_gap_codes = [];
+  prediction.participants = cloned(testCase.model_input.participant_inventory);
+  prediction.flows = cloned(testCase.model_input.flow_inventory);
+  prediction.interfaces = testCase.model_input.interface_inventory.map((item, index) => ({
+    block_id: `5.${index + 1}`,
+    ...cloned(item),
+  }));
+  const result = scoreDetailedDesign(testCase, prediction);
+  assertFailure(result, 'render_status_mismatch');
+  assert.ok(result.failure_kinds.includes('blocking_gap_codes_mismatch'));
+  assert.ok(result.failure_kinds.includes('blocked_output_contains_detailed_design'));
+});
+
+test('blocking a reader-ready case or returning the wrong gap set is a hard failure', () => {
+  const readyCase = caseById('commerce_order_query_document');
+  const incorrectlyBlocked = referenceDetailedDesign(readyCase);
+  incorrectlyBlocked.render_status = 'blocked';
+  incorrectlyBlocked.blocking_gap_codes = ['missing_concrete_contract'];
+  incorrectlyBlocked.participants = [];
+  incorrectlyBlocked.flows = [];
+  incorrectlyBlocked.interfaces = [];
+  const blockedResult = scoreDetailedDesign(readyCase, incorrectlyBlocked);
+  assertFailure(blockedResult, 'render_status_mismatch');
+  assert.ok(blockedResult.failure_kinds.includes('blocking_gap_codes_mismatch'));
+
+  const blockedCase = caseById('generic_governance_scaffold_document');
+  const wrongGaps = referenceDetailedDesign(blockedCase);
+  wrongGaps.blocking_gap_codes = ['generic_flow_semantics'];
+  assertFailure(scoreDetailedDesign(blockedCase, wrongGaps), 'blocking_gap_codes_mismatch');
+});
+
 test('missing and invented participants are hard failures', () => {
   const testCase = caseById('commerce_return_refund_handoff_document');
 
