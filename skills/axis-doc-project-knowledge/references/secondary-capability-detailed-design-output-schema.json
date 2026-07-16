@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["case_id", "secondary_capability_id", "participants", "flows", "interfaces"],
+  "properties": {
+    "case_id": { "type": "string" },
+    "secondary_capability_id": { "type": "string" },
+    "participants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["actor_id", "role", "responsibility", "evidence_ids"],
+        "properties": {
+          "actor_id": { "type": "string" },
+          "role": { "type": "string" },
+          "responsibility": { "type": "string" },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "flows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["flow_id", "start_step_ids", "terminal_step_ids", "steps"],
+        "properties": {
+          "flow_id": { "type": "string" },
+          "start_step_ids": { "type": "array", "items": { "type": "string" } },
+          "terminal_step_ids": { "type": "array", "items": { "type": "string" } },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "step_id",
+                "actor_id",
+                "action",
+                "api_id",
+                "input_state",
+                "output_state",
+                "next_step_ids",
+                "evidence_ids"
+              ],
+              "properties": {
+                "step_id": { "type": "string" },
+                "actor_id": { "type": "string" },
+                "action": { "type": "string" },
+                "api_id": { "type": "string" },
+                "input_state": { "type": "string" },
+                "output_state": { "type": "string" },
+                "next_step_ids": { "type": "array", "items": { "type": "string" } },
+                "evidence_ids": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "block_id",
+          "api_id",
+          "contract",
+          "actor_ids",
+          "business_purpose",
+          "visible_result",
+          "evidence_ids"
+        ],
+        "properties": {
+          "block_id": { "type": "string" },
+          "api_id": { "type": "string" },
+          "contract": { "type": "string" },
+          "actor_ids": { "type": "array", "items": { "type": "string" } },
+          "business_purpose": { "type": "string" },
+          "visible_result": { "type": "string" },
+          "evidence_ids": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

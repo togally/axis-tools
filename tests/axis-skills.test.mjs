@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import { tmpdir } from 'node:os';
@@ -462,9 +463,15 @@ for (const requiredFile of [
   'references/project-knowledge-contracts.md',
   'references/business-capability-detailed-design-template.md',
   'references/secondary-capability-boundary-matrix-v3.1.md',
+  'references/secondary-capability-detailed-design-eval-cases.json',
+  'references/secondary-capability-detailed-design-output-schema.json',
+  'references/secondary-capability-detailed-design-prompt-baseline.md',
+  'references/secondary-capability-detailed-design-prompt-closure-first.md',
+  'references/secondary-capability-detailed-design-prompt-selection.json',
   'references/secondary-capability-detailed-design-template.md',
   'references/secondary-capability-eval-cases.json',
   'scripts/evaluate_secondary_capability_prompts.mjs',
+  'scripts/score_secondary_capability_detailed_design.mjs',
 ]) assert.ok(projectKnowledge.files.includes(requiredFile), `missing project-knowledge bundle file: ${requiredFile}`);
 assert.match(projectKnowledge.description, /^Use when/);
 assert.match(projectKnowledge.description, /[\u3400-\u9FFF]/);
@@ -477,6 +484,66 @@ const projectKnowledgeContracts = await readFile(
   'utf8',
 );
 const projectKnowledgeCore = `${projectKnowledgeBody}\n${projectKnowledgeContracts}`;
+const projectKnowledgeReference = (name) => path.join(
+  repoRoot,
+  'skills',
+  'axis-doc-project-knowledge',
+  'references',
+  name,
+);
+const detailedDesignSelection = JSON.parse(await readFile(
+  projectKnowledgeReference('secondary-capability-detailed-design-prompt-selection.json'),
+  'utf8',
+));
+assert.equal(detailedDesignSelection.selected_prompt_id, 'detailed-design-baseline-v1');
+assert.equal(
+  detailedDesignSelection.selected_prompt_path,
+  'secondary-capability-detailed-design-prompt-baseline.md',
+);
+assert.deepEqual(
+  detailedDesignSelection.models.map(({ model_id: modelId, model_tier: tier }) => [modelId, tier]),
+  [
+    ['gpt-5.4-mini', 'small'],
+    ['gpt-5.6-terra', 'standard'],
+    ['gpt-5.6-sol', 'strong'],
+  ],
+);
+assert.equal(detailedDesignSelection.diagnostic.completed_observation_count, 36);
+assert.equal(detailedDesignSelection.diagnostic.hard_fail_count, 0);
+assert.equal(detailedDesignSelection.final_holdout.completed_observation_count, 6);
+assert.equal(detailedDesignSelection.final_holdout.hard_fail_count, 0);
+assert.equal(detailedDesignSelection.final_holdout.status, 'pass');
+const sha256 = (body) => createHash('sha256').update(body).digest('hex');
+for (const [hashField, artifactPath] of [
+  ['cases_sha256', projectKnowledgeReference('secondary-capability-detailed-design-eval-cases.json')],
+  ['output_schema_sha256', projectKnowledgeReference('secondary-capability-detailed-design-output-schema.json')],
+  [
+    'scorer_sha256',
+    path.join(
+      repoRoot,
+      'skills',
+      'axis-doc-project-knowledge',
+      'scripts',
+      'score_secondary_capability_detailed_design.mjs',
+    ),
+  ],
+]) {
+  assert.equal(
+    detailedDesignSelection.frozen_artifacts[hashField],
+    sha256(await readFile(artifactPath)),
+    `detailed-design frozen artifact hash drifted: ${hashField}`,
+  );
+}
+for (const [promptId, promptFile] of [
+  ['detailed-design-baseline-v1', 'secondary-capability-detailed-design-prompt-baseline.md'],
+  ['detailed-design-closure-first-v1', 'secondary-capability-detailed-design-prompt-closure-first.md'],
+]) {
+  assert.equal(
+    detailedDesignSelection.frozen_artifacts.candidate_prompt_sha256[promptId],
+    sha256(await readFile(projectKnowledgeReference(promptFile))),
+    `detailed-design candidate prompt hash drifted: ${promptId}`,
+  );
+}
 for (const requiredText of [
   'Three-Step Work Contract',
   'bootstrap',
@@ -496,6 +563,10 @@ for (const requiredText of [
   'business/level1-capability-dependency-graph.yaml',
   'one independently reviewable business outcome',
   'secondary-capability-boundary-matrix-v3.1.md',
+  'secondary-capability-detailed-design-output-schema.json',
+  'secondary-capability-detailed-design-prompt-baseline.md',
+  'secondary-capability-detailed-design-prompt-selection.json',
+  'artifact hashes, diagnostic matrix, frozen holdout',
   'Run the project-wide inventory granularity gate before selecting affected documents',
   'Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked',
   '$axis-tools-prompt-create',
@@ -678,12 +749,18 @@ for (const requiredText of [
   'interface_design_status',
   'interface_coverage',
   '能力定位与边界',
-  '调用主体、权限与接口矩阵',
+  '参与者、职责与权限',
+  '参与者 | 参与类型 | 业务职责 | 参与步骤 | 权限与数据范围',
   '主体/角色',
   '所需权限/策略',
   '可调用接口/能力',
   '数据范围',
   '授权证据',
+  '步骤 | 参与者 | 业务动作 | 前置状态/条件 | 结果/下一状态与下一步 | 失败/补偿',
+  'axis-flow-step-machine-table',
+  '接口/触发',
+  '调用方/参与者',
+  '对应流程步骤',
   '接口清单与代码追溯',
   '5.1.2 内部处理逻辑',
   '5.1.6 认证与授权执行',

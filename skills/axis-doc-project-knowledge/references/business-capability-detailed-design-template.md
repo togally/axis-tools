@@ -7,6 +7,7 @@
 
 <!-- axis-document-metadata
 reader_profile=compact
+secondary_reader_contract=participant_flow_interface_v1
 document_status=review
 revision={revision}
 level1_capability_id={level1_capability_id}
