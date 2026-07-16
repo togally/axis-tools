@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "selected_prompt_id": "detailed-design-baseline-v1",
+  "selected_prompt_path": "secondary-capability-detailed-design-prompt-baseline.md",
+  "selection_reason": "Both candidates cleared every hard gate and scored 1.0 in every exact model-by-source cell; the baseline won the frozen tie-break on lower prompt length.",
+  "frozen_artifacts": {
+    "cases_sha256": "eb5cad294dbd3c43703671729386232f4031ccbe1651152cf2edc0371b31a7f4",
+    "output_schema_sha256": "2984ce815adca1e8b4092be591052e811a25fe5c675d1c8d7718db66679abae2",
+    "scorer_sha256": "1f6493176bff8b3f069b1eeb7c7bf61c68d8ba4731a7d24dcbc061c4747b2f2f",
+    "candidate_prompt_sha256": {
+      "detailed-design-baseline-v1": "403252f874b4077ce29c4a5ecaa25b2951a4e98892df2ebbb7d02d7093f80734",
+      "detailed-design-closure-first-v1": "c6865ae8260222c5cc2e942f2da3f10fe661938ff81f073dab0b5fcf1e5ebf51"
+    }
+  },
+  "models": [
+    { "model_id": "gpt-5.4-mini", "model_tier": "small" },
+    { "model_id": "gpt-5.6-terra", "model_tier": "standard" },
+    { "model_id": "gpt-5.6-sol", "model_tier": "strong" }
+  ],
+  "inference_settings": {
+    "reasoning_effort": "low",
+    "tools": "disabled_by_instruction_and_read_only_sandbox",
+    "output": "strict_json_schema"
+  },
+  "diagnostic": {
+    "candidate_count": 2,
+    "case_ids": [
+      "commerce_order_query_document",
+      "commerce_return_refund_handoff_document",
+      "healthcare_appointment_reschedule_document"
+    ],
+    "source_kind_count": 3,
+    "repeats": 2,
+    "planned_observation_count": 36,
+    "completed_observation_count": 36,
+    "hard_fail_count": 0,
+    "candidate_results": {
+      "detailed-design-baseline-v1": {
+        "observation_count": 18,
+        "hard_fail_count": 0,
+        "cells": [
+          { "model_id": "gpt-5.4-mini", "source_kind": "route_and_permission_inventory", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.4-mini", "source_kind": "state_machine_and_actor_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.4-mini", "source_kind": "policy_and_notification_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-terra", "source_kind": "route_and_permission_inventory", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-terra", "source_kind": "state_machine_and_actor_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-terra", "source_kind": "policy_and_notification_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-sol", "source_kind": "route_and_permission_inventory", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-sol", "source_kind": "state_machine_and_actor_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-sol", "source_kind": "policy_and_notification_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 }
+        ],
+        "worst_cell_mean": 1,
+        "overall_mean": 1,
+        "cell_spread": 0,
+        "prompt_length": 975
+      },
+      "detailed-design-closure-first-v1": {
+        "observation_count": 18,
+        "hard_fail_count": 0,
+        "cells": [
+          { "model_id": "gpt-5.4-mini", "source_kind": "route_and_permission_inventory", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.4-mini", "source_kind": "state_machine_and_actor_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.4-mini", "source_kind": "policy_and_notification_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-terra", "source_kind": "route_and_permission_inventory", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-terra", "source_kind": "state_machine_and_actor_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-terra", "source_kind": "policy_and_notification_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-sol", "source_kind": "route_and_permission_inventory", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-sol", "source_kind": "state_machine_and_actor_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 },
+          { "model_id": "gpt-5.6-sol", "source_kind": "policy_and_notification_handoff", "observation_count": 2, "hard_fail_count": 0, "mean_score": 1 }
+        ],
+        "worst_cell_mean": 1,
+        "overall_mean": 1,
+        "cell_spread": 0,
+        "prompt_length": 1582
+      }
+    }
+  },
+  "final_holdout": {
+    "opened_after_selection": true,
+    "candidate_id": "detailed-design-baseline-v1",
+    "case_ids": [
+      "commerce_shipment_document",
+      "asset_retirement_approval_document"
+    ],
+    "source_kind_count": 2,
+    "repeats": 1,
+    "planned_observation_count": 6,
+    "completed_observation_count": 6,
+    "hard_fail_count": 0,
+    "cells": [
+      { "model_id": "gpt-5.4-mini", "source_kind": "workflow_and_contract_inventory", "observation_count": 1, "hard_fail_count": 0, "mean_score": 1 },
+      { "model_id": "gpt-5.4-mini", "source_kind": "approval_branch_and_authority_policy", "observation_count": 1, "hard_fail_count": 0, "mean_score": 1 },
+      { "model_id": "gpt-5.6-terra", "source_kind": "workflow_and_contract_inventory", "observation_count": 1, "hard_fail_count": 0, "mean_score": 1 },
+      { "model_id": "gpt-5.6-terra", "source_kind": "approval_branch_and_authority_policy", "observation_count": 1, "hard_fail_count": 0, "mean_score": 1 },
+      { "model_id": "gpt-5.6-sol", "source_kind": "workflow_and_contract_inventory", "observation_count": 1, "hard_fail_count": 0, "mean_score": 1 },
+      { "model_id": "gpt-5.6-sol", "source_kind": "approval_branch_and_authority_policy", "observation_count": 1, "hard_fail_count": 0, "mean_score": 1 }
+    ],
+    "worst_cell_mean": 1,
+    "overall_mean": 1,
+    "cell_spread": 0,
+    "status": "pass"
+  },
+  "thresholds": {
+    "max_hard_fail_count": 0,
+    "min_worst_cell_mean": 0.95,
+    "min_overall_mean": 0.98
+  },
+  "raw_evidence_retention": "external_ephemeral_not_versioned",
+  "evaluated_at": "2026-07-16T20:08:00+08:00"
+}

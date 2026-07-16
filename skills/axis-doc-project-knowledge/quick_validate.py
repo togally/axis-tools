@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -28,13 +29,22 @@ REQUIRED_TERMS = {
         "level-1 dependency graph",
         "secondary_granularity_gate",
         "one independently reviewable business outcome",
-        "reader_profile=compact",
+    "reader_profile=compact",
+    "secondary_reader_contract=participant_flow_interface_v1",
         "strict_full",
         "does **not** require `3.N`",
+        "typed participants (`业务角色`, `外部系统`, `内部业务能力`, or `自动任务`), business responsibilities, participating steps, permission/data scope",
+        "atomic business-step flow",
+        "one independent `5.N` summary per real contract",
+        "access `api_id` set exactly equals",
         "FileName:begin-end#symbol",
         "secondary-capability-boundary-matrix-v3.1.md",
         "$axis-tools-prompt-create",
         "domain bundle retains its public-safe gold cases",
+        "secondary-capability-detailed-design-output-schema.json",
+        "secondary-capability-detailed-design-prompt-baseline.md",
+        "secondary-capability-detailed-design-prompt-selection.json",
+        "artifact hashes, diagnostic matrix, frozen holdout",
         "OSS Upload Confirmation Gate",
         "oss_upload_readiness=unavailable|ready",
         "oss_upload_decision=pending|approved|declined",
@@ -50,10 +60,28 @@ REQUIRED_TERMS = {
 
 GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "## 1. 能力定位与边界",
-    "## 2. 调用主体、权限与接口矩阵",
+    "secondary_reader_contract=participant_flow_interface_v1",
+    "## 2. 参与者、职责与权限",
+    "| 参与者 | 参与类型 | 业务职责 | 参与步骤 | 权限与数据范围 |",
     "| 主体/角色 | 所需权限/策略 | `api_id` | 可调用接口/能力 | 数据范围 | 授权证据 |",
-    "执行已授权流程",
-    "### 5.1 {interface_event_job_or_command_name}",
+    "actor × api",
+    "## 3. 能力流程",
+    "| 步骤 | 参与者 | 业务动作 | 前置状态/条件 | 结果/下一状态与下一步 | 失败/补偿 |",
+    "axis-flow-step-machine-table",
+    "| 步骤 | 参与者 | `api_id` | 契约关系 | 证据 |",
+    "Mermaid 可选",
+    "### 5.1 `{method_and_path_or_event_topic_job_command}`",
+    "| 接口/触发 | `{method_and_path_or_event_topic_job_command}` |",
+    "| 业务目的 | {business_purpose} |",
+    "| 调用方/参与者 | {caller_or_participant} |",
+    "| 前置条件/权限 | {business_precondition_and_permission} |",
+    "| 关键输入 | {business_relevant_input_summary_or_not_applicable} |",
+    "| 业务结果/状态变化 | {business_result_or_state_change} |",
+    "| 失败/拒绝条件 | {business_failure_or_rejection_condition} |",
+    "| 对应流程步骤 | `{flow_step_ids_directly_mapped_to_this_contract}` |",
+    "| 实现定位 |",
+    "必须且只能拥有一个连续编号的 5.N 独立摘要",
+    "access matrix 的 `api_id` 集合必须与本章隐藏 interface machine table 的 `api_id` 集合完全一致",
     "#### 5.1.1 接口清单与代码追溯",
     "| 项目 | 内容 |",
     "| 实现层 | 精确定位 | 职责 |",
@@ -69,7 +97,7 @@ GROUPED_INTERFACE_TEMPLATE_TERMS = [
     "#### 5.1.6 认证与授权执行",
     "#### 5.1.7 事务、并发、性能与容错",
     "#### 5.1.8 安全、测试与验收",
-    "### 5.2 {next_interface_event_job_or_command_name}",
+    "### 5.2 `{next_method_and_path_or_event_topic_job_command}`",
     "#### 5.2.1 接口清单与代码追溯",
     "#### 5.2.2 内部处理逻辑",
     "#### 5.2.3 请求字段",
@@ -110,10 +138,451 @@ SENSITIVE_PATTERN = re.compile(
 
 MAX_READABLE_MARKDOWN_TABLE_COLUMNS = 6
 
+DETAILED_DESIGN_CANDIDATE_PROMPT_FILES = {
+    "detailed-design-baseline-v1": (
+        "secondary-capability-detailed-design-prompt-baseline.md"
+    ),
+    "detailed-design-closure-first-v1": (
+        "secondary-capability-detailed-design-prompt-closure-first.md"
+    ),
+}
+
 
 def fail(message: str) -> int:
     print(f"ERROR: {message}", file=sys.stderr)
     return 1
+
+
+def is_finite_number(value: object) -> bool:
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value == value
+        and value not in {float("inf"), float("-inf")}
+    )
+
+
+def is_non_negative_integer(value: object) -> bool:
+    return (
+        isinstance(value, int)
+        and not isinstance(value, bool)
+        and value >= 0
+    )
+
+
+def numbers_match(left: object, right: object) -> bool:
+    return (
+        is_finite_number(left)
+        and is_finite_number(right)
+        and abs(left - right) <= 1e-12
+    )
+
+
+def detailed_design_result_cells_summary(
+    result: dict,
+    models: list,
+    cases: list[dict],
+    repeats: int,
+    label: str,
+) -> tuple[str | None, dict | None]:
+    expected_cells: dict[tuple[str, str], int] = {}
+    source_case_counts: dict[str, int] = {}
+    for case in cases:
+        source_kind = case["source_kind"]
+        source_case_counts[source_kind] = source_case_counts.get(source_kind, 0) + 1
+    for model in models:
+        for source_kind, case_count in source_case_counts.items():
+            expected_cells[(model["model_id"], source_kind)] = case_count * repeats
+
+    cells = result.get("cells")
+    if not isinstance(cells, list):
+        return f"{label} exact model-by-source cells must be an array", None
+    observed_cells: set[tuple[str, str]] = set()
+    weighted_score_sum = 0.0
+    observation_count = 0
+    hard_fail_count = 0
+    cell_means: list[float] = []
+    for cell in cells:
+        if not isinstance(cell, dict):
+            return f"{label} contains an invalid exact model-by-source cell", None
+        model_id = cell.get("model_id")
+        source_kind = cell.get("source_kind")
+        if not isinstance(model_id, str) or not isinstance(source_kind, str):
+            return f"{label} cell model_id/source_kind is invalid", None
+        key = (model_id, source_kind)
+        if key not in expected_cells:
+            return f"{label} contains an unexpected exact model-by-source cell", None
+        if key in observed_cells:
+            return f"{label} contains a duplicate exact model-by-source cell", None
+        observed_cells.add(key)
+        expected_observation_count = expected_cells[key]
+        cell_observation_count = cell.get("observation_count")
+        if (
+            not is_non_negative_integer(cell_observation_count)
+            or cell_observation_count != expected_observation_count
+        ):
+            return f"{label} cell observation_count is inconsistent", None
+        cell_hard_fail_count = cell.get("hard_fail_count")
+        if (
+            not isinstance(cell_hard_fail_count, int)
+            or isinstance(cell_hard_fail_count, bool)
+            or cell_hard_fail_count < 0
+            or cell_hard_fail_count > cell_observation_count
+        ):
+            return f"{label} cell hard_fail_count is invalid", None
+        cell_mean = cell.get("mean_score")
+        if not is_finite_number(cell_mean) or cell_mean < 0 or cell_mean > 1:
+            return f"{label} cell mean_score is invalid", None
+        observation_count += cell_observation_count
+        hard_fail_count += cell_hard_fail_count
+        weighted_score_sum += cell_mean * cell_observation_count
+        cell_means.append(cell_mean)
+    if observed_cells != set(expected_cells):
+        return f"{label} exact model-by-source matrix is incomplete", None
+
+    return None, {
+        "observation_count": observation_count,
+        "hard_fail_count": hard_fail_count,
+        "worst_cell_mean": min(cell_means),
+        "overall_mean": weighted_score_sum / observation_count,
+        "cell_spread": max(cell_means) - min(cell_means),
+    }
+
+
+def detailed_design_prompt_selection_error(
+    selection: object,
+    eval_cases_document: object,
+    skill_dir: Path,
+) -> str | None:
+    """Recompute the frozen prompt result from versioned aggregate evidence."""
+
+    if not isinstance(selection, dict):
+        return "detailed-design prompt selection must be an object"
+    if not isinstance(eval_cases_document, dict):
+        return "detailed-design evaluation cases must be an object"
+
+    models = selection.get("models")
+    if not isinstance(models, list) or not models:
+        return "detailed-design model matrix must be a non-empty array"
+    model_ids: set[str] = set()
+    for model in models:
+        if not isinstance(model, dict):
+            return "detailed-design model matrix contains an invalid row"
+        model_id = model.get("model_id")
+        model_tier = model.get("model_tier")
+        if not isinstance(model_id, str) or not model_id:
+            return "detailed-design model matrix contains an invalid model_id"
+        if not isinstance(model_tier, str) or not model_tier:
+            return "detailed-design model matrix contains an invalid model_tier"
+        if model_id in model_ids:
+            return "detailed-design model matrix contains a duplicate model_id"
+        model_ids.add(model_id)
+
+    cases = eval_cases_document.get("cases")
+    if not isinstance(cases, list) or not cases:
+        return "detailed-design evaluation cases must be a non-empty array"
+    cases_by_id: dict[str, dict] = {}
+    for case in cases:
+        if not isinstance(case, dict):
+            return "detailed-design evaluation cases contain an invalid row"
+        case_id = case.get("case_id")
+        source_kind = case.get("source_kind")
+        stage = case.get("evaluation_stage")
+        if not isinstance(case_id, str) or not case_id:
+            return "detailed-design evaluation case has an invalid case_id"
+        if case_id in cases_by_id:
+            return "detailed-design evaluation cases contain a duplicate case_id"
+        if not isinstance(source_kind, str) or not source_kind:
+            return f"detailed-design evaluation case {case_id} has an invalid source_kind"
+        if stage not in {"diagnostic", "final_holdout"}:
+            return f"detailed-design evaluation case {case_id} has an invalid stage"
+        cases_by_id[case_id] = case
+
+    thresholds = selection.get("thresholds")
+    if not isinstance(thresholds, dict):
+        return "detailed-design thresholds must be an object"
+    if set(thresholds) != {
+        "max_hard_fail_count",
+        "min_worst_cell_mean",
+        "min_overall_mean",
+    }:
+        return "detailed-design threshold fields drifted"
+    max_hard_fail_count = thresholds.get("max_hard_fail_count")
+    if (
+        not isinstance(max_hard_fail_count, int)
+        or isinstance(max_hard_fail_count, bool)
+        or max_hard_fail_count < 0
+    ):
+        return "detailed-design max_hard_fail_count must be a non-negative integer"
+    for field in ["min_worst_cell_mean", "min_overall_mean"]:
+        value = thresholds.get(field)
+        if not is_finite_number(value) or value < 0 or value > 1:
+            return f"detailed-design {field} must be between 0 and 1"
+
+    diagnostic = selection.get("diagnostic")
+    if not isinstance(diagnostic, dict):
+        return "detailed-design diagnostic result must be an object"
+    diagnostic_case_ids = diagnostic.get("case_ids")
+    if not isinstance(diagnostic_case_ids, list) or any(
+        not isinstance(case_id, str) for case_id in diagnostic_case_ids
+    ):
+        return "detailed-design diagnostic case_ids must be an array of strings"
+    expected_diagnostic_case_ids = {
+        case_id
+        for case_id, case in cases_by_id.items()
+        if case.get("evaluation_stage") == "diagnostic"
+    }
+    if (
+        len(diagnostic_case_ids) != len(set(diagnostic_case_ids))
+        or set(diagnostic_case_ids) != expected_diagnostic_case_ids
+    ):
+        return "detailed-design diagnostic case set drifted"
+    diagnostic_cases = [cases_by_id[case_id] for case_id in diagnostic_case_ids]
+    diagnostic_source_kind_count = len(
+        {case["source_kind"] for case in diagnostic_cases}
+    )
+    if (
+        not is_non_negative_integer(diagnostic.get("source_kind_count"))
+        or diagnostic.get("source_kind_count") != diagnostic_source_kind_count
+    ):
+        return "detailed-design diagnostic source_kind_count is inconsistent"
+
+    diagnostic_repeats = diagnostic.get("repeats")
+    if (
+        not isinstance(diagnostic_repeats, int)
+        or isinstance(diagnostic_repeats, bool)
+        or diagnostic_repeats < 1
+    ):
+        return "detailed-design diagnostic repeats must be a positive integer"
+    candidate_results = diagnostic.get("candidate_results")
+    if not isinstance(candidate_results, dict) or not candidate_results:
+        return "detailed-design diagnostic candidate_results must be a non-empty object"
+    if set(candidate_results) != set(DETAILED_DESIGN_CANDIDATE_PROMPT_FILES):
+        return "detailed-design diagnostic candidate set drifted"
+    if (
+        not is_non_negative_integer(diagnostic.get("candidate_count"))
+        or diagnostic.get("candidate_count") != len(candidate_results)
+    ):
+        return "detailed-design diagnostic candidate_count is inconsistent"
+
+    planned_per_candidate = (
+        len(models) * len(diagnostic_case_ids) * diagnostic_repeats
+    )
+    planned_diagnostic_observations = (
+        planned_per_candidate * len(candidate_results)
+    )
+    if (
+        not is_non_negative_integer(diagnostic.get("planned_observation_count"))
+        or diagnostic.get("planned_observation_count")
+        != planned_diagnostic_observations
+    ):
+        return "detailed-design diagnostic planned_observation_count is inconsistent"
+
+    references_dir = skill_dir / "references"
+    ranked_candidates: list[tuple[tuple, str, dict, bool]] = []
+    completed_diagnostic_observations = 0
+    diagnostic_hard_fail_count = 0
+    for prompt_id, result in candidate_results.items():
+        if not isinstance(result, dict):
+            return f"detailed-design candidate result is invalid: {prompt_id}"
+        cells_error, cells_summary = detailed_design_result_cells_summary(
+            result,
+            models,
+            diagnostic_cases,
+            diagnostic_repeats,
+            f"detailed-design candidate {prompt_id}",
+        )
+        if cells_error:
+            return cells_error
+        observation_count = result.get("observation_count")
+        if (
+            not is_non_negative_integer(observation_count)
+            or observation_count != planned_per_candidate
+            or observation_count != cells_summary["observation_count"]
+        ):
+            return (
+                "detailed-design candidate observation_count is inconsistent: "
+                + prompt_id
+            )
+        hard_fail_count = result.get("hard_fail_count")
+        if (
+            not isinstance(hard_fail_count, int)
+            or isinstance(hard_fail_count, bool)
+            or hard_fail_count < 0
+            or hard_fail_count > observation_count
+        ):
+            return f"detailed-design candidate hard_fail_count is invalid: {prompt_id}"
+        if hard_fail_count != cells_summary["hard_fail_count"]:
+            return (
+                "detailed-design candidate hard_fail_count is inconsistent with "
+                f"exact model-by-source cells: {prompt_id}"
+            )
+        completed_diagnostic_observations += observation_count
+        diagnostic_hard_fail_count += hard_fail_count
+
+        for field in ["worst_cell_mean", "overall_mean", "cell_spread"]:
+            value = result.get(field)
+            if not is_finite_number(value) or value < 0 or value > 1:
+                return f"detailed-design candidate {field} is invalid: {prompt_id}"
+            if not numbers_match(value, cells_summary[field]):
+                return (
+                    f"detailed-design candidate {field} is inconsistent with "
+                    f"exact model-by-source cells: {prompt_id}"
+                )
+        prompt_length = result.get("prompt_length")
+        if (
+            not isinstance(prompt_length, int)
+            or isinstance(prompt_length, bool)
+            or prompt_length < 0
+        ):
+            return f"detailed-design candidate prompt_length is invalid: {prompt_id}"
+        prompt_path = references_dir / DETAILED_DESIGN_CANDIDATE_PROMPT_FILES[prompt_id]
+        if not prompt_path.exists():
+            return f"detailed-design candidate prompt not found: {prompt_id}"
+        actual_prompt_length = len(prompt_path.read_text(encoding="utf-8"))
+        if prompt_length != actual_prompt_length:
+            return f"detailed-design candidate prompt_length drifted: {prompt_id}"
+        estimated_cost = result.get("estimated_cost")
+        if estimated_cost is not None and (
+            not is_finite_number(estimated_cost) or estimated_cost < 0
+        ):
+            return f"detailed-design candidate estimated_cost is invalid: {prompt_id}"
+
+        passes_thresholds = (
+            hard_fail_count <= max_hard_fail_count
+            and result["worst_cell_mean"] >= thresholds["min_worst_cell_mean"]
+            and result["overall_mean"] >= thresholds["min_overall_mean"]
+        )
+        rank_key = (
+            hard_fail_count,
+            -result["worst_cell_mean"],
+            -result["overall_mean"],
+            result["cell_spread"],
+            prompt_length,
+            float("inf") if estimated_cost is None else estimated_cost,
+            prompt_id,
+        )
+        ranked_candidates.append((rank_key, prompt_id, result, passes_thresholds))
+
+    if (
+        not is_non_negative_integer(diagnostic.get("completed_observation_count"))
+        or diagnostic.get("completed_observation_count")
+        != completed_diagnostic_observations
+    ):
+        return "detailed-design diagnostic completed_observation_count is inconsistent"
+    if (
+        not is_non_negative_integer(diagnostic.get("hard_fail_count"))
+        or diagnostic.get("hard_fail_count") != diagnostic_hard_fail_count
+    ):
+        return "detailed-design diagnostic hard_fail_count is inconsistent"
+
+    ranked_candidates.sort(key=lambda item: item[0])
+    recomputed_winner = next(
+        (prompt_id for _, prompt_id, _, passes in ranked_candidates if passes),
+        None,
+    )
+    if selection.get("selected_prompt_id") != recomputed_winner:
+        return "detailed-design selected prompt does not match recomputed winner"
+    if recomputed_winner is None:
+        return "detailed-design prompt selection has no candidate passing thresholds"
+    expected_selected_path = DETAILED_DESIGN_CANDIDATE_PROMPT_FILES[recomputed_winner]
+    if selection.get("selected_prompt_path") != expected_selected_path:
+        return "detailed-design selected prompt path does not match recomputed winner"
+
+    holdout = selection.get("final_holdout")
+    if not isinstance(holdout, dict):
+        return "detailed-design frozen holdout must be an object"
+    if holdout.get("opened_after_selection") is not True:
+        return "detailed-design frozen holdout was not opened after selection"
+    if holdout.get("candidate_id") != recomputed_winner:
+        return "detailed-design frozen holdout candidate does not match winner"
+    holdout_case_ids = holdout.get("case_ids")
+    if not isinstance(holdout_case_ids, list) or any(
+        not isinstance(case_id, str) for case_id in holdout_case_ids
+    ):
+        return "detailed-design holdout case_ids must be an array of strings"
+    expected_holdout_case_ids = {
+        case_id
+        for case_id, case in cases_by_id.items()
+        if case.get("evaluation_stage") == "final_holdout"
+    }
+    if (
+        len(holdout_case_ids) != len(set(holdout_case_ids))
+        or set(holdout_case_ids) != expected_holdout_case_ids
+    ):
+        return "detailed-design holdout case set drifted"
+    holdout_cases = [cases_by_id[case_id] for case_id in holdout_case_ids]
+    holdout_source_kind_count = len({case["source_kind"] for case in holdout_cases})
+    if (
+        not is_non_negative_integer(holdout.get("source_kind_count"))
+        or holdout.get("source_kind_count") != holdout_source_kind_count
+    ):
+        return "detailed-design holdout source_kind_count is inconsistent"
+
+    holdout_repeats = holdout.get("repeats")
+    if (
+        not isinstance(holdout_repeats, int)
+        or isinstance(holdout_repeats, bool)
+        or holdout_repeats < 1
+    ):
+        return "detailed-design holdout repeats must be a positive integer"
+    planned_holdout_observations = len(models) * len(holdout_case_ids) * holdout_repeats
+    if (
+        not is_non_negative_integer(holdout.get("planned_observation_count"))
+        or holdout.get("planned_observation_count") != planned_holdout_observations
+    ):
+        return "detailed-design holdout planned_observation_count is inconsistent"
+    holdout_cells_error, holdout_cells_summary = detailed_design_result_cells_summary(
+        holdout,
+        models,
+        holdout_cases,
+        holdout_repeats,
+        "detailed-design holdout",
+    )
+    if holdout_cells_error:
+        return holdout_cells_error
+    if (
+        not is_non_negative_integer(holdout.get("completed_observation_count"))
+        or holdout.get("completed_observation_count")
+        != planned_holdout_observations
+        or holdout.get("completed_observation_count")
+        != holdout_cells_summary["observation_count"]
+    ):
+        return "detailed-design holdout completed_observation_count is inconsistent"
+    holdout_hard_fail_count = holdout.get("hard_fail_count")
+    if (
+        not isinstance(holdout_hard_fail_count, int)
+        or isinstance(holdout_hard_fail_count, bool)
+        or holdout_hard_fail_count < 0
+        or holdout_hard_fail_count > planned_holdout_observations
+    ):
+        return "detailed-design holdout hard_fail_count is invalid"
+    if holdout_hard_fail_count != holdout_cells_summary["hard_fail_count"]:
+        return (
+            "detailed-design holdout hard_fail_count is inconsistent with "
+            "exact model-by-source cells"
+        )
+    for field in ["worst_cell_mean", "overall_mean", "cell_spread"]:
+        value = holdout.get(field)
+        if not is_finite_number(value) or value < 0 or value > 1:
+            return f"detailed-design holdout {field} is invalid"
+        if not numbers_match(value, holdout_cells_summary[field]):
+            return (
+                f"detailed-design holdout {field} is inconsistent with "
+                "exact model-by-source cells"
+            )
+    holdout_passes = (
+        holdout_hard_fail_count <= max_hard_fail_count
+        and holdout["worst_cell_mean"] >= thresholds["min_worst_cell_mean"]
+        and holdout["overall_mean"] >= thresholds["min_overall_mean"]
+    )
+    expected_holdout_status = "pass" if holdout_passes else "fail"
+    if holdout.get("status") != expected_holdout_status:
+        return "detailed-design frozen holdout status is inconsistent"
+    if not holdout_passes:
+        return "detailed-design frozen holdout is not passing"
+
+    return None
 
 
 def has_cjk(text: str) -> bool:
@@ -503,10 +972,34 @@ def validate(skill_dir: Path) -> int:
         evaluator_path = (
             skill_dir / "scripts" / "evaluate_secondary_capability_prompts.mjs"
         )
+        detailed_design_eval_cases_path = (
+            skill_dir
+            / "references"
+            / "secondary-capability-detailed-design-eval-cases.json"
+        )
+        detailed_design_scorer_path = (
+            skill_dir
+            / "scripts"
+            / "score_secondary_capability_detailed_design.mjs"
+        )
+        detailed_design_output_schema_path = (
+            skill_dir
+            / "references"
+            / "secondary-capability-detailed-design-output-schema.json"
+        )
+        detailed_design_selection_path = (
+            skill_dir
+            / "references"
+            / "secondary-capability-detailed-design-prompt-selection.json"
+        )
         for required_path, label in [
             (candidate_manifest_path, "granularity prompt candidate manifest"),
             (eval_cases_path, "granularity prompt evaluation cases"),
             (evaluator_path, "granularity prompt evaluator"),
+            (detailed_design_eval_cases_path, "detailed-design evaluation cases"),
+            (detailed_design_scorer_path, "detailed-design scorer"),
+            (detailed_design_output_schema_path, "detailed-design output schema"),
+            (detailed_design_selection_path, "detailed-design prompt selection"),
         ]:
             if not required_path.exists():
                 return fail(f"{label} not found")
@@ -515,8 +1008,94 @@ def validate(skill_dir: Path) -> int:
                 candidate_manifest_path.read_text(encoding="utf-8")
             )
             eval_cases = json.loads(eval_cases_path.read_text(encoding="utf-8"))
+            detailed_design_eval_cases = json.loads(
+                detailed_design_eval_cases_path.read_text(encoding="utf-8")
+            )
+            detailed_design_output_schema = json.loads(
+                detailed_design_output_schema_path.read_text(encoding="utf-8")
+            )
+            detailed_design_selection = json.loads(
+                detailed_design_selection_path.read_text(encoding="utf-8")
+            )
         except json.JSONDecodeError as exc:
             return fail(f"granularity evaluation JSON is invalid: {exc}")
+        if detailed_design_eval_cases.get("schema_version") != 1:
+            return fail("detailed-design evaluation schema_version must be 1")
+        detailed_design_cases = detailed_design_eval_cases.get("cases", [])
+        if len(detailed_design_cases) < 3:
+            return fail("detailed-design evaluation requires at least 3 public-safe cases")
+        if len({case.get("source_kind") for case in detailed_design_cases}) < 3:
+            return fail("detailed-design evaluation requires at least 3 source kinds")
+        if detailed_design_output_schema.get("type") != "object":
+            return fail("detailed-design output schema root type must be object")
+        if set(detailed_design_output_schema.get("required", [])) != {
+            "case_id",
+            "secondary_capability_id",
+            "participants",
+            "flows",
+            "interfaces",
+        }:
+            return fail("detailed-design output schema required fields drifted")
+
+        selected_detailed_prompt_path = detailed_design_selection.get(
+            "selected_prompt_path"
+        )
+        if not isinstance(selected_detailed_prompt_path, str):
+            return fail("selected detailed-design prompt path is invalid")
+        detailed_references_dir = (skill_dir / "references").resolve()
+        selected_detailed_prompt_file = (
+            detailed_references_dir / selected_detailed_prompt_path
+        ).resolve()
+        if detailed_references_dir not in selected_detailed_prompt_file.parents:
+            return fail("selected detailed-design prompt escapes references directory")
+        if not selected_detailed_prompt_file.exists():
+            return fail("selected detailed-design prompt not found")
+
+        frozen_artifacts = detailed_design_selection.get("frozen_artifacts", {})
+        expected_artifacts = {
+            "cases_sha256": detailed_design_eval_cases_path,
+            "output_schema_sha256": detailed_design_output_schema_path,
+            "scorer_sha256": detailed_design_scorer_path,
+        }
+        for hash_field, artifact_path in expected_artifacts.items():
+            actual_hash = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+            if frozen_artifacts.get(hash_field) != actual_hash:
+                return fail(f"detailed-design frozen hash mismatch: {hash_field}")
+        candidate_hashes = frozen_artifacts.get("candidate_prompt_sha256", {})
+        candidate_prompt_paths = {
+            prompt_id: detailed_references_dir / prompt_file
+            for prompt_id, prompt_file in DETAILED_DESIGN_CANDIDATE_PROMPT_FILES.items()
+        }
+        for prompt_id, prompt_path in candidate_prompt_paths.items():
+            if not prompt_path.exists():
+                return fail(f"detailed-design candidate prompt not found: {prompt_id}")
+            actual_hash = hashlib.sha256(prompt_path.read_bytes()).hexdigest()
+            if candidate_hashes.get(prompt_id) != actual_hash:
+                return fail(f"detailed-design candidate hash mismatch: {prompt_id}")
+
+        model_pairs = {
+            (model.get("model_id"), model.get("model_tier"))
+            for model in detailed_design_selection.get("models", [])
+        }
+        if len(detailed_design_selection.get("models", [])) != 3 or model_pairs != {
+            ("gpt-5.4-mini", "small"),
+            ("gpt-5.6-terra", "standard"),
+            ("gpt-5.6-sol", "strong"),
+        }:
+            return fail("detailed-design exact model-tier matrix drifted")
+        settings = detailed_design_selection.get("inference_settings", {})
+        if (
+            settings.get("reasoning_effort") != "low"
+            or settings.get("output") != "strict_json_schema"
+        ):
+            return fail("detailed-design inference settings drifted")
+        selection_error = detailed_design_prompt_selection_error(
+            detailed_design_selection,
+            detailed_design_eval_cases,
+            skill_dir,
+        )
+        if selection_error:
+            return fail(selection_error)
         selected_prompt_id = candidate_manifest.get("selected_prompt_id")
         if selected_prompt_id != "boundary_matrix_v3_1":
             return fail("selected granularity prompt id must be boundary_matrix_v3_1")
@@ -771,6 +1350,54 @@ def validate(skill_dir: Path) -> int:
         for term in GROUPED_INTERFACE_TEMPLATE_TERMS:
             if term not in interface_template:
                 return fail(f"grouped interface template missing required term: {term}")
+        if interface_template.count(
+            "| 参与者 | 参与类型 | 业务职责 | 参与步骤 | 权限与数据范围 |"
+        ) != 1:
+            return fail("compact participant table must use the five-field reader schema")
+        if interface_template.count(
+            "| 步骤 | 参与者 | 业务动作 | 前置状态/条件 | 结果/下一状态与下一步 | 失败/补偿 |"
+        ) != 1:
+            return fail("compact capability flow must use the atomic six-field step schema")
+        if interface_template.count("<!-- axis-flow-step-machine-table") != 1:
+            return fail("compact capability flow must contain one flow-step machine table")
+        compact_interface_match = re.search(
+            r"^###\s+5\.1\s+`\{method_and_path_or_event_topic_job_command\}`\s*$"
+            r"([\s\S]*?)(?=^<!--\s+axis-evidence:)",
+            interface_template,
+            re.MULTILINE,
+        )
+        if not compact_interface_match:
+            return fail("compact independent interface summary cannot be isolated")
+        compact_interface = compact_interface_match.group(1)
+        compact_interface_fields = [
+            "接口/触发",
+            "业务目的",
+            "调用方/参与者",
+            "前置条件/权限",
+            "关键输入",
+            "业务结果/状态变化",
+            "失败/拒绝条件",
+            "对应流程步骤",
+            "实现定位",
+        ]
+        compact_interface_positions = [
+            compact_interface.find(f"| {field} |")
+            for field in compact_interface_fields
+        ]
+        if any(position < 0 for position in compact_interface_positions) or (
+            compact_interface_positions != sorted(compact_interface_positions)
+        ):
+            return fail("compact independent interface summary fields are missing or out of order")
+        for forbidden_field in ["入口", "核心业务输入", "数据影响", "验收"]:
+            if re.search(
+                rf"^\|\s*{re.escape(forbidden_field)}\s*\|",
+                compact_interface,
+                re.MULTILINE,
+            ):
+                return fail(
+                    "compact independent interface summary contains a retired reader field: "
+                    + forbidden_field
+                )
         if not re.search(
             r"^\| 实体/表 \|[^\n]*"
             r"`table_id=\{parent_table_ids_or_not_applicable\}`[^\n]*"

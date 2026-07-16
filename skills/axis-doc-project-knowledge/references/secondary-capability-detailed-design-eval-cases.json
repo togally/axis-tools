@@ -1,0 +1,545 @@
+{
+  "schema_version": 1,
+  "description": "Public-safe, de-identified detailed-design rendering cases. Each secondary-capability boundary is already locked; these cases evaluate participant closure, business-flow traceability, and one independent block per interface without re-running capability decomposition.",
+  "cases": [
+    {
+      "case_id": "commerce_order_query_document",
+      "evaluation_stage": "diagnostic",
+      "source_kind": "route_and_permission_inventory",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "order_query",
+          "name": "Order query",
+          "business_outcome": "An authenticated buyer can view the orders visible to that buyer."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "buyer",
+            "role": "Authenticated buyer",
+            "responsibility": "Selects either the order list or one owned order detail to view.",
+            "evidence_ids": ["Q-P01"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "order_list_query",
+            "start_step_ids": ["list_visible_orders"],
+            "terminal_step_ids": ["list_visible_orders"],
+            "steps": [
+              {
+                "step_id": "list_visible_orders",
+                "actor_id": "buyer",
+                "action": "Request the visible order list",
+                "api_id": "ORDER_LIST",
+                "input_state": "Authenticated buyer session",
+                "output_state": "Visible order list returned",
+                "next_step_ids": [],
+                "evidence_ids": ["Q-F01"]
+              }
+            ]
+          },
+          {
+            "flow_id": "order_detail_query",
+            "start_step_ids": ["view_owned_order_detail"],
+            "terminal_step_ids": ["view_owned_order_detail"],
+            "steps": [
+              {
+                "step_id": "view_owned_order_detail",
+                "actor_id": "buyer",
+                "action": "Request one owned order detail",
+                "api_id": "ORDER_DETAIL",
+                "input_state": "Authenticated buyer and selected order",
+                "output_state": "Owned order detail returned",
+                "next_step_ids": [],
+                "evidence_ids": ["Q-F02"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "ORDER_LIST",
+            "contract": "GET /trade/orders",
+            "actor_ids": ["buyer"],
+            "business_purpose": "List orders visible to the current buyer.",
+            "visible_result": "A buyer-scoped order list.",
+            "evidence_ids": ["Q-I01"]
+          },
+          {
+            "api_id": "ORDER_DETAIL",
+            "contract": "GET /trade/orders/{orderId}",
+            "actor_ids": ["buyer"],
+            "business_purpose": "View one order after buyer ownership is checked.",
+            "visible_result": "One buyer-owned order detail or a business rejection.",
+            "evidence_ids": ["Q-I02"]
+          }
+        ],
+        "evidence": [
+          { "id": "Q-P01", "statement": "The authenticated buyer is the business participant for both query routes." },
+          { "id": "Q-F01", "statement": "The list route returns only orders visible to the current buyer." },
+          { "id": "Q-F02", "statement": "The detail route checks buyer ownership before returning one order." },
+          { "id": "Q-I01", "statement": "GET /trade/orders is one independently callable HTTP contract." },
+          { "id": "Q-I02", "statement": "GET /trade/orders/{orderId} is a second independently callable HTTP contract." }
+        ]
+      },
+      "oracle": {
+        "required_actor_ids": ["buyer"],
+        "expected_flows": [
+          {
+            "flow_id": "order_list_query",
+            "start_step_ids": ["list_visible_orders"],
+            "terminal_step_ids": ["list_visible_orders"],
+            "steps": [
+              { "step_id": "list_visible_orders", "actor_id": "buyer", "api_id": "ORDER_LIST", "next_step_ids": [] }
+            ]
+          },
+          {
+            "flow_id": "order_detail_query",
+            "start_step_ids": ["view_owned_order_detail"],
+            "terminal_step_ids": ["view_owned_order_detail"],
+            "steps": [
+              { "step_id": "view_owned_order_detail", "actor_id": "buyer", "api_id": "ORDER_DETAIL", "next_step_ids": [] }
+            ]
+          }
+        ],
+        "expected_interfaces": [
+          { "api_id": "ORDER_LIST", "contract": "GET /trade/orders", "actor_ids": ["buyer"] },
+          { "api_id": "ORDER_DETAIL", "contract": "GET /trade/orders/{orderId}", "actor_ids": ["buyer"] }
+        ]
+      }
+    },
+    {
+      "case_id": "commerce_return_refund_handoff_document",
+      "evaluation_stage": "diagnostic",
+      "source_kind": "state_machine_and_actor_handoff",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "return_refund_after_sale",
+          "name": "Return-and-refund after-sale",
+          "business_outcome": "A return-and-refund case reaches a return-received state that makes the refund eligible to continue."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "buyer",
+            "role": "Buyer",
+            "responsibility": "Applies for return-and-refund and supplies return logistics.",
+            "evidence_ids": ["R-P01"]
+          },
+          {
+            "actor_id": "merchant",
+            "role": "Merchant operator",
+            "responsibility": "Confirms that the returned goods were received.",
+            "evidence_ids": ["R-P02"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "return_refund_handoff",
+            "start_step_ids": ["apply_return_refund"],
+            "terminal_step_ids": ["confirm_return_received"],
+            "steps": [
+              {
+                "step_id": "apply_return_refund",
+                "actor_id": "buyer",
+                "action": "Apply for return-and-refund",
+                "api_id": "RETURN_REFUND_APPLY",
+                "input_state": "Eligible fulfilled order",
+                "output_state": "Return-and-refund case accepted",
+                "next_step_ids": ["submit_return_logistics"],
+                "evidence_ids": ["R-F01"]
+              },
+              {
+                "step_id": "submit_return_logistics",
+                "actor_id": "buyer",
+                "action": "Submit return carrier and tracking data",
+                "api_id": "RETURN_LOGISTICS_SUBMIT",
+                "input_state": "Accepted return-and-refund case",
+                "output_state": "Return shipment recorded",
+                "next_step_ids": ["confirm_return_received"],
+                "evidence_ids": ["R-F02"]
+              },
+              {
+                "step_id": "confirm_return_received",
+                "actor_id": "merchant",
+                "action": "Confirm receipt of returned goods",
+                "api_id": "RETURN_RECEIPT_CONFIRM",
+                "input_state": "Recorded return shipment",
+                "output_state": "Return received and refund eligible",
+                "next_step_ids": [],
+                "evidence_ids": ["R-F03"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "RETURN_REFUND_APPLY",
+            "contract": "POST /trade/after-sales",
+            "actor_ids": ["buyer"],
+            "business_purpose": "Open a return-and-refund case for an eligible order.",
+            "visible_result": "An accepted after-sale case or a business rejection.",
+            "evidence_ids": ["R-I01"]
+          },
+          {
+            "api_id": "RETURN_LOGISTICS_SUBMIT",
+            "contract": "POST /trade/after-sales/{caseId}/return-logistics",
+            "actor_ids": ["buyer"],
+            "business_purpose": "Record the buyer's return shipment.",
+            "visible_result": "Return carrier and tracking data recorded.",
+            "evidence_ids": ["R-I02"]
+          },
+          {
+            "api_id": "RETURN_RECEIPT_CONFIRM",
+            "contract": "POST /merchant/after-sales/{caseId}/confirm-return",
+            "actor_ids": ["merchant"],
+            "business_purpose": "Confirm that the merchant received the returned goods.",
+            "visible_result": "The case becomes eligible for refund continuation.",
+            "evidence_ids": ["R-I03"]
+          }
+        ],
+        "evidence": [
+          { "id": "R-P01", "statement": "The buyer owns the application and return-logistics actions." },
+          { "id": "R-P02", "statement": "A merchant operator owns the returned-goods confirmation action." },
+          { "id": "R-F01", "statement": "The accepted case is the prerequisite for supplying return logistics." },
+          { "id": "R-F02", "statement": "Recorded logistics is the prerequisite for merchant receipt confirmation." },
+          { "id": "R-F03", "statement": "Merchant receipt confirmation produces the return-received result." },
+          { "id": "R-I01", "statement": "The application route is an independent HTTP contract." },
+          { "id": "R-I02", "statement": "The return-logistics route is an independent HTTP contract." },
+          { "id": "R-I03", "statement": "The merchant confirmation route is an independent HTTP contract." }
+        ]
+      },
+      "oracle": {
+        "required_actor_ids": ["buyer", "merchant"],
+        "expected_flows": [
+          {
+            "flow_id": "return_refund_handoff",
+            "start_step_ids": ["apply_return_refund"],
+            "terminal_step_ids": ["confirm_return_received"],
+            "steps": [
+              { "step_id": "apply_return_refund", "actor_id": "buyer", "api_id": "RETURN_REFUND_APPLY", "next_step_ids": ["submit_return_logistics"] },
+              { "step_id": "submit_return_logistics", "actor_id": "buyer", "api_id": "RETURN_LOGISTICS_SUBMIT", "next_step_ids": ["confirm_return_received"] },
+              { "step_id": "confirm_return_received", "actor_id": "merchant", "api_id": "RETURN_RECEIPT_CONFIRM", "next_step_ids": [] }
+            ]
+          }
+        ],
+        "expected_interfaces": [
+          { "api_id": "RETURN_REFUND_APPLY", "contract": "POST /trade/after-sales", "actor_ids": ["buyer"] },
+          { "api_id": "RETURN_LOGISTICS_SUBMIT", "contract": "POST /trade/after-sales/{caseId}/return-logistics", "actor_ids": ["buyer"] },
+          { "api_id": "RETURN_RECEIPT_CONFIRM", "contract": "POST /merchant/after-sales/{caseId}/confirm-return", "actor_ids": ["merchant"] }
+        ]
+      }
+    },
+    {
+      "case_id": "commerce_shipment_document",
+      "evaluation_stage": "final_holdout",
+      "source_kind": "workflow_and_contract_inventory",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "shipment_execution",
+          "name": "Order shipment execution",
+          "business_outcome": "A merchant records delivery data and marks a package as shipped within one shipment lifecycle."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "merchant",
+            "role": "Merchant fulfillment operator",
+            "responsibility": "Records delivery data and confirms package shipment.",
+            "evidence_ids": ["S-P01"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "merchant_shipment_execution",
+            "start_step_ids": ["record_delivery_data"],
+            "terminal_step_ids": ["mark_package_shipped"],
+            "steps": [
+              {
+                "step_id": "record_delivery_data",
+                "actor_id": "merchant",
+                "action": "Record carrier and tracking data",
+                "api_id": "DELIVERY_RECORD",
+                "input_state": "Package ready for shipment",
+                "output_state": "Delivery data recorded",
+                "next_step_ids": ["mark_package_shipped"],
+                "evidence_ids": ["S-F01"]
+              },
+              {
+                "step_id": "mark_package_shipped",
+                "actor_id": "merchant",
+                "action": "Mark the package as shipped",
+                "api_id": "PACKAGE_SHIP",
+                "input_state": "Delivery data recorded",
+                "output_state": "Package shipment confirmed",
+                "next_step_ids": [],
+                "evidence_ids": ["S-F02"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "DELIVERY_RECORD",
+            "contract": "POST /merchant/orders/{orderId}/delivery",
+            "actor_ids": ["merchant"],
+            "business_purpose": "Record carrier and tracking data for the order.",
+            "visible_result": "Delivery data recorded.",
+            "evidence_ids": ["S-I01"]
+          },
+          {
+            "api_id": "PACKAGE_SHIP",
+            "contract": "POST /merchant/orders/{orderId}/packages/{packageId}/ship",
+            "actor_ids": ["merchant"],
+            "business_purpose": "Confirm shipment of one package.",
+            "visible_result": "The package is marked shipped.",
+            "evidence_ids": ["S-I02"]
+          }
+        ],
+        "evidence": [
+          { "id": "S-P01", "statement": "The merchant fulfillment operator performs both shipment actions." },
+          { "id": "S-F01", "statement": "Delivery data must be recorded before shipment is confirmed." },
+          { "id": "S-F02", "statement": "Shipment confirmation is the terminal result of this flow." },
+          { "id": "S-I01", "statement": "The delivery-data route is an independent HTTP contract." },
+          { "id": "S-I02", "statement": "The package-shipment route is another independent HTTP contract." }
+        ]
+      },
+      "oracle": {
+        "required_actor_ids": ["merchant"],
+        "expected_flows": [
+          {
+            "flow_id": "merchant_shipment_execution",
+            "start_step_ids": ["record_delivery_data"],
+            "terminal_step_ids": ["mark_package_shipped"],
+            "steps": [
+              { "step_id": "record_delivery_data", "actor_id": "merchant", "api_id": "DELIVERY_RECORD", "next_step_ids": ["mark_package_shipped"] },
+              { "step_id": "mark_package_shipped", "actor_id": "merchant", "api_id": "PACKAGE_SHIP", "next_step_ids": [] }
+            ]
+          }
+        ],
+        "expected_interfaces": [
+          { "api_id": "DELIVERY_RECORD", "contract": "POST /merchant/orders/{orderId}/delivery", "actor_ids": ["merchant"] },
+          { "api_id": "PACKAGE_SHIP", "contract": "POST /merchant/orders/{orderId}/packages/{packageId}/ship", "actor_ids": ["merchant"] }
+        ]
+      }
+    },
+    {
+      "case_id": "healthcare_appointment_reschedule_document",
+      "evaluation_stage": "diagnostic",
+      "source_kind": "policy_and_notification_handoff",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "appointment_reschedule",
+          "name": "Appointment reschedule",
+          "business_outcome": "A patient moves one owned future appointment to an available slot and receives a confirmed replacement schedule."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "patient",
+            "role": "Authenticated patient",
+            "responsibility": "Chooses a replacement slot for an owned future appointment.",
+            "evidence_ids": ["H-P01"]
+          },
+          {
+            "actor_id": "clinic_schedule",
+            "role": "Clinic scheduling capability",
+            "responsibility": "Moves the reservation and publishes the confirmed schedule change.",
+            "evidence_ids": ["H-P02"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "patient_appointment_reschedule",
+            "start_step_ids": ["request_replacement_slot"],
+            "terminal_step_ids": ["publish_schedule_change"],
+            "steps": [
+              {
+                "step_id": "request_replacement_slot",
+                "actor_id": "patient",
+                "action": "Request an available replacement slot",
+                "api_id": "APPOINTMENT_RESCHEDULE",
+                "input_state": "Owned future appointment and available replacement slot",
+                "output_state": "Replacement slot accepted for scheduling",
+                "next_step_ids": ["publish_schedule_change"],
+                "evidence_ids": ["H-F01"]
+              },
+              {
+                "step_id": "publish_schedule_change",
+                "actor_id": "clinic_schedule",
+                "action": "Publish the confirmed schedule change",
+                "api_id": "APPOINTMENT_RESCHEDULED",
+                "input_state": "Appointment moved to the replacement slot",
+                "output_state": "Confirmed schedule change available to notification consumers",
+                "next_step_ids": [],
+                "evidence_ids": ["H-F02"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "APPOINTMENT_RESCHEDULE",
+            "contract": "POST /patient/appointments/{appointmentId}/reschedule",
+            "actor_ids": ["patient"],
+            "business_purpose": "Move one patient-owned future appointment to an available slot.",
+            "visible_result": "The appointment is confirmed at the replacement slot or the request is rejected.",
+            "evidence_ids": ["H-I01"]
+          },
+          {
+            "api_id": "APPOINTMENT_RESCHEDULED",
+            "contract": "EVENT appointment.rescheduled",
+            "actor_ids": ["clinic_schedule"],
+            "business_purpose": "Publish the confirmed appointment schedule change.",
+            "visible_result": "Notification consumers receive the replacement appointment schedule.",
+            "evidence_ids": ["H-I02"]
+          }
+        ],
+        "evidence": [
+          { "id": "H-P01", "statement": "Only the authenticated patient may move that patient's future appointment." },
+          { "id": "H-P02", "statement": "The clinic scheduling capability owns the reservation move and change event." },
+          { "id": "H-F01", "statement": "The replacement slot must be available before the reservation is moved." },
+          { "id": "H-F02", "statement": "A confirmed move publishes one schedule-change event." },
+          { "id": "H-I01", "statement": "The reschedule route is one independently callable HTTP contract." },
+          { "id": "H-I02", "statement": "The schedule-change event is one independent downstream contract." }
+        ]
+      },
+      "oracle": {
+        "required_actor_ids": ["patient", "clinic_schedule"],
+        "expected_flows": [
+          {
+            "flow_id": "patient_appointment_reschedule",
+            "start_step_ids": ["request_replacement_slot"],
+            "terminal_step_ids": ["publish_schedule_change"],
+            "steps": [
+              { "step_id": "request_replacement_slot", "actor_id": "patient", "api_id": "APPOINTMENT_RESCHEDULE", "next_step_ids": ["publish_schedule_change"] },
+              { "step_id": "publish_schedule_change", "actor_id": "clinic_schedule", "api_id": "APPOINTMENT_RESCHEDULED", "next_step_ids": [] }
+            ]
+          }
+        ],
+        "expected_interfaces": [
+          { "api_id": "APPOINTMENT_RESCHEDULE", "contract": "POST /patient/appointments/{appointmentId}/reschedule", "actor_ids": ["patient"] },
+          { "api_id": "APPOINTMENT_RESCHEDULED", "contract": "EVENT appointment.rescheduled", "actor_ids": ["clinic_schedule"] }
+        ]
+      }
+    },
+    {
+      "case_id": "asset_retirement_approval_document",
+      "evaluation_stage": "final_holdout",
+      "source_kind": "approval_branch_and_authority_policy",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "asset_retirement_approval",
+          "name": "Asset retirement approval",
+          "business_outcome": "A submitted asset-retirement request receives one governed approval or rejection decision."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "asset_manager",
+            "role": "Asset manager",
+            "responsibility": "Submits a retirement request for an asset in the manager's organization.",
+            "evidence_ids": ["A-P01"]
+          },
+          {
+            "actor_id": "compliance_approver",
+            "role": "Compliance approver",
+            "responsibility": "Approves or rejects the submitted retirement request with a reason.",
+            "evidence_ids": ["A-P02"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "asset_retirement_decision",
+            "start_step_ids": ["submit_retirement_request"],
+            "terminal_step_ids": ["approve_retirement", "reject_retirement"],
+            "steps": [
+              {
+                "step_id": "submit_retirement_request",
+                "actor_id": "asset_manager",
+                "action": "Submit an asset-retirement request",
+                "api_id": "RETIREMENT_SUBMIT",
+                "input_state": "Active organization-owned asset",
+                "output_state": "Retirement request pending compliance decision",
+                "next_step_ids": ["approve_retirement", "reject_retirement"],
+                "evidence_ids": ["A-F01"]
+              },
+              {
+                "step_id": "approve_retirement",
+                "actor_id": "compliance_approver",
+                "action": "Approve the retirement request",
+                "api_id": "RETIREMENT_APPROVE",
+                "input_state": "Pending retirement request with complete evidence",
+                "output_state": "Retirement request approved",
+                "next_step_ids": [],
+                "evidence_ids": ["A-F02"]
+              },
+              {
+                "step_id": "reject_retirement",
+                "actor_id": "compliance_approver",
+                "action": "Reject the retirement request",
+                "api_id": "RETIREMENT_REJECT",
+                "input_state": "Pending retirement request",
+                "output_state": "Retirement request rejected with reason",
+                "next_step_ids": [],
+                "evidence_ids": ["A-F03"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "RETIREMENT_SUBMIT",
+            "contract": "POST /assets/{assetId}/retirement-requests",
+            "actor_ids": ["asset_manager"],
+            "business_purpose": "Submit one governed retirement request for an owned asset.",
+            "visible_result": "A pending retirement request is created or the submission is rejected.",
+            "evidence_ids": ["A-I01"]
+          },
+          {
+            "api_id": "RETIREMENT_APPROVE",
+            "contract": "POST /retirement-requests/{requestId}/approve",
+            "actor_ids": ["compliance_approver"],
+            "business_purpose": "Approve one pending retirement request.",
+            "visible_result": "The request becomes approved.",
+            "evidence_ids": ["A-I02"]
+          },
+          {
+            "api_id": "RETIREMENT_REJECT",
+            "contract": "POST /retirement-requests/{requestId}/reject",
+            "actor_ids": ["compliance_approver"],
+            "business_purpose": "Reject one pending retirement request with a reason.",
+            "visible_result": "The request becomes rejected with a visible reason.",
+            "evidence_ids": ["A-I03"]
+          }
+        ],
+        "evidence": [
+          { "id": "A-P01", "statement": "The asset manager submits requests only for assets in the manager's organization." },
+          { "id": "A-P02", "statement": "The compliance approver owns both terminal decision actions." },
+          { "id": "A-F01", "statement": "Submission creates a pending request that requires one terminal decision." },
+          { "id": "A-F02", "statement": "Approval is a terminal governed result." },
+          { "id": "A-F03", "statement": "Rejection is a terminal governed result and requires a reason." },
+          { "id": "A-I01", "statement": "Submission is one independent HTTP contract." },
+          { "id": "A-I02", "statement": "Approval is one independent HTTP contract." },
+          { "id": "A-I03", "statement": "Rejection is one independent HTTP contract." }
+        ]
+      },
+      "oracle": {
+        "required_actor_ids": ["asset_manager", "compliance_approver"],
+        "expected_flows": [
+          {
+            "flow_id": "asset_retirement_decision",
+            "start_step_ids": ["submit_retirement_request"],
+            "terminal_step_ids": ["approve_retirement", "reject_retirement"],
+            "steps": [
+              { "step_id": "submit_retirement_request", "actor_id": "asset_manager", "api_id": "RETIREMENT_SUBMIT", "next_step_ids": ["approve_retirement", "reject_retirement"] },
+              { "step_id": "approve_retirement", "actor_id": "compliance_approver", "api_id": "RETIREMENT_APPROVE", "next_step_ids": [] },
+              { "step_id": "reject_retirement", "actor_id": "compliance_approver", "api_id": "RETIREMENT_REJECT", "next_step_ids": [] }
+            ]
+          }
+        ],
+        "expected_interfaces": [
+          { "api_id": "RETIREMENT_SUBMIT", "contract": "POST /assets/{assetId}/retirement-requests", "actor_ids": ["asset_manager"] },
+          { "api_id": "RETIREMENT_APPROVE", "contract": "POST /retirement-requests/{requestId}/approve", "actor_ids": ["compliance_approver"] },
+          { "api_id": "RETIREMENT_REJECT", "contract": "POST /retirement-requests/{requestId}/reject", "actor_ids": ["compliance_approver"] }
+        ]
+      }
+    }
+  ]
+}

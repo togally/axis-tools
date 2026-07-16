@@ -1248,6 +1248,32 @@ function metadataIdentifierList(metadata, key) {
 function visibleMarkdownBody(body) {
     return body.replace(/<!--[\s\S]*?-->/g, '');
 }
+function markdownLocalLinkTargets(body) {
+    return [...visibleMarkdownBody(body).matchAll(/\[[^\]\n]+\]\(([^)\n]+)\)/g)]
+        .map((match) => match[1].trim())
+        .filter((target) => (target.length > 0
+        && !/^(?:[a-z][a-z0-9+.-]*:|#)/i.test(target)));
+}
+function assertSecondaryNavigationLinks(body, documentPath, sourceRoot, expectedRelativeTargets, scope) {
+    const documentDirectory = path.dirname(documentPath);
+    const resolvedSourceRoot = path.resolve(sourceRoot);
+    const resolvedTargets = new Set();
+    for (const rawTarget of markdownLocalLinkTargets(body)) {
+        const target = rawTarget.split(/[?#]/, 1)[0];
+        const resolved = path.resolve(documentDirectory, target);
+        if (!(resolved === resolvedSourceRoot || resolved.startsWith(`${resolvedSourceRoot}${path.sep}`))
+            || !existsSync(resolved)) {
+            throw new Error(`project knowledge secondary capability navigation link does not resolve: ${scope}/${rawTarget}`);
+        }
+        resolvedTargets.add(resolved);
+    }
+    for (const expectedRelativeTarget of expectedRelativeTargets) {
+        const expected = path.resolve(sourceRoot, expectedRelativeTarget);
+        if (!resolvedTargets.has(expected)) {
+            throw new Error(`project knowledge secondary capability navigation omits expected document: ${scope}/${expectedRelativeTarget}`);
+        }
+    }
+}
 function compactCodeAnchor(raw, filePath, lineStart, lineEnd, symbol) {
     return {
         raw,
@@ -1263,6 +1289,21 @@ function shortCodeAnchors(body) {
         .filter((match) => Number(match[2]) <= Number(match[3]))
         .map((match) => compactCodeAnchor(match[0], match[1], match[2], match[3], match[4]));
 }
+function apparentVisibleCodeLocators(body) {
+    return [...visibleMarkdownBody(body).matchAll(/`([^`\n]*\.[A-Za-z0-9]+:[1-9]\d*-[1-9]\d*#[^`\n]+)`/g)].map((match) => match[1].trim());
+}
+function apparentCodeLocators(body) {
+    return [...body.matchAll(/`([^`\n]*\.[A-Za-z0-9]+:[1-9]\d*-[1-9]\d*#[^`\n]+)`/g)].map((match) => match[1].trim());
+}
+function assertCompactCodeLocatorAtomicity(body, scope) {
+    for (const locator of apparentCodeLocators(body)) {
+        const anchors = [...shortCodeAnchors(locator), ...exactCodeAnchors(locator)];
+        if (anchors.length !== 1
+            || (typeof anchors[0] === 'string' ? anchors[0] : anchors[0].raw) !== locator) {
+            throw new Error(`project knowledge compact partial locator is malformed or combines symbols: ${scope}`);
+        }
+    }
+}
 function axisEvidenceAnchors(body) {
     return [...body.matchAll(/<!--\s*axis-evidence:\s*([\s\S]*?)\s*-->/gi)]
         .flatMap((match) => exactCodeAnchors(match[1]))
@@ -1274,11 +1315,28 @@ function axisEvidenceAnchors(body) {
     })
         .filter((anchor) => anchor !== null);
 }
+function hiddenExactCodeAnchors(body) {
+    return [...body.matchAll(/<!--([\s\S]*?)-->/g)]
+        .flatMap((match) => exactCodeAnchors(match[1]))
+        .map((anchor) => {
+        const parsed = /^(.+):([1-9]\d*)-([1-9]\d*)#([A-Za-z_$][A-Za-z0-9_$<>.\-]*)$/.exec(anchor);
+        return parsed
+            ? compactCodeAnchor(anchor, parsed[1], parsed[2], parsed[3], parsed[4])
+            : null;
+    })
+        .filter((anchor) => anchor !== null);
+}
 function assertCompactEvidenceLocators(body, shortLocatorBodies, scope) {
-    const evidenceAnchors = axisEvidenceAnchors(body);
-    if (evidenceAnchors.length === 0) {
+    for (const locator of apparentVisibleCodeLocators(body)) {
+        const anchors = shortCodeAnchors(locator);
+        if (anchors.length !== 1 || anchors[0].raw !== locator) {
+            throw new Error(`project knowledge compact partial visible locator is malformed or combines symbols: ${scope}`);
+        }
+    }
+    if (axisEvidenceAnchors(body).length === 0) {
         throw new Error(`project knowledge compact partial document missing axis-evidence: ${scope}`);
     }
+    const evidenceAnchors = hiddenExactCodeAnchors(body);
     if (shortLocatorBodies.length === 0) {
         throw new Error(`project knowledge compact partial document missing exact short locator: ${scope}`);
     }
@@ -1288,14 +1346,14 @@ function assertCompactEvidenceLocators(body, shortLocatorBodies, scope) {
             throw new Error(`project knowledge compact partial document missing exact short locator: ${scope}`);
         }
         for (const anchor of anchors) {
-            const exactMatches = evidenceAnchors.filter((evidence) => (evidence.fileName === anchor.fileName
+            const exactMatches = new Set(evidenceAnchors.filter((evidence) => (evidence.fileName === anchor.fileName
                 && evidence.lineStart === anchor.lineStart
                 && evidence.lineEnd === anchor.lineEnd
-                && evidence.symbol === anchor.symbol));
-            if (exactMatches.length === 0) {
+                && evidence.symbol === anchor.symbol)).map((evidence) => evidence.raw));
+            if (exactMatches.size === 0) {
                 throw new Error(`project knowledge compact partial short locator does not exactly match path evidence: ${scope}`);
             }
-            if (exactMatches.length > 1) {
+            if (exactMatches.size > 1) {
                 throw new Error(`project knowledge compact partial short locator is ambiguous: ${scope}`);
             }
         }
@@ -1305,34 +1363,190 @@ function assertCompactEvidenceLocators(body, shortLocatorBodies, scope) {
     }
 }
 function compactTopLevelSections(body, expected, scope) {
-    const headings = [...body.matchAll(/^##(?!#)\s+(\d+)\.?\s+(.+?)\s*$/gm)];
+    const visibleBody = visibleMarkdownBody(body);
+    const headings = [...visibleBody.matchAll(/^##(?!#)\s+(\d+)\.?\s+(.+?)\s*$/gm)];
     if (headings.length !== expected.length
-        || headings.some((heading, index) => (Number(heading[1]) !== index + 1 || heading[2].trim() !== expected[index]))) {
+        || headings.some((heading, index) => (Number(heading[1]) !== index + 1
+            || !(Array.isArray(expected[index]) ? expected[index] : [expected[index]])
+                .includes(heading[2].trim())))) {
         throw new Error(`project knowledge compact partial document has invalid six-section structure: ${scope}`);
     }
     return new Map(headings.map((heading, index) => {
         const start = (heading.index ?? 0) + heading[0].length;
-        const end = index + 1 < headings.length ? (headings[index + 1].index ?? body.length) : body.length;
-        return [index + 1, body.slice(start, end)];
+        const end = index + 1 < headings.length
+            ? (headings[index + 1].index ?? visibleBody.length)
+            : visibleBody.length;
+        return [index + 1, visibleBody.slice(start, end)];
     }));
 }
-function isCompactPartialSecondaryCapabilityDetailedDesign(body) {
-    return /^##\s+1\.?\s+能力定位与边界\s*$/m.test(body)
-        && /^##\s+2\.?\s+调用主体、权限与接口矩阵\s*$/m.test(body)
-        && /^##\s+6\.?\s+覆盖缺口\s*$/m.test(body);
+function axisNamedCommentBodies(body, name) {
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return [...body.matchAll(new RegExp(`<!--\\s*${escapedName}\\b([\\s\\S]*?)-->`, 'gi'))]
+        .map((match) => match[1]);
 }
-function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityId, secondary, gapReportBody) {
+function assertCompactSingleLayerDiagrams(body, scope) {
+    const diagrams = mermaidDiagramBodies(body)
+        .filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
+    const exactMethodCallPattern = /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*\(\)$/;
+    if (diagrams.length === 0) {
+        throw new Error(`project knowledge compact partial diagram missing: ${scope}`);
+    }
+    for (const diagram of diagrams) {
+        const nodeLabels = flowchartNodeLabelMap(diagram);
+        const edges = flowchartEdgeEndpoints(diagram);
+        const methodNodeCount = [...nodeLabels.values()]
+            .filter((label) => exactMethodCallPattern.test(label)).length;
+        if (nodeLabels.size < 2
+            || edges.edgeCount === 0
+            || !edges.traceable
+            || [...edges.endpointIds].some((nodeId) => !nodeLabels.has(nodeId))
+            || (methodNodeCount > 0 && methodNodeCount !== nodeLabels.size)) {
+            throw new Error(`project knowledge compact partial diagram mixes semantic layers or is empty: ${scope}`);
+        }
+    }
+}
+const compactConcreteContractPattern = /^(?:(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)$/;
+const compactGenericFlowTextPattern = /^(?:发起(?:能力)?请求|校验(?:主体与)?权威边界|形成(?:可验收)?业务结果|执行(?:业务)?操作|处理请求|返回结果|完成流程)$/;
+const compactPlaceholderEvidencePattern = /(?:\bmissing_evidence\b|\bTODO\b|\bTBD\b)/i;
+function compactCanonicalContract(value) {
+    return normalizeMarkdownCell(value).replace(/\s+/g, ' ');
+}
+function compactDelimitedValues(value) {
+    return normalizeMarkdownCell(value)
+        .split(/[,，、;；]+/)
+        .map((item) => item.trim().replace(/[。.]+$/g, ''))
+        .filter(Boolean);
+}
+function compactContractMatchesType(contract, contractType) {
+    return contractType === 'HTTP'
+        ? /^(?:GET|POST|PUT|PATCH|DELETE)\s+\//.test(contract)
+        : contract.startsWith(`${contractType} `);
+}
+function compactStepIds(value) {
+    const steps = [];
+    for (const match of normalizeMarkdownCell(value).matchAll(/\bS([1-9]\d*)(?:\s*[-–—~至]\s*S?([1-9]\d*))?\b/g)) {
+        const start = Number(match[1]);
+        const end = match[2] ? Number(match[2]) : start;
+        if (end < start || end - start > 100)
+            return [];
+        for (let index = start; index <= end; index += 1)
+            steps.push(`S${index}`);
+    }
+    return steps;
+}
+function compactNextStepTargets(value) {
+    const tokens = normalizeMarkdownCell(value)
+        .split(/[,，、;；]+/)
+        .map((token) => token.trim())
+        .filter(Boolean);
+    const nextSteps = [];
+    let canTerminate = false;
+    let valid = tokens.length > 0;
+    for (const token of tokens) {
+        if (/^(?:结束|终止|无后续|not_applicable)$/i.test(token)) {
+            if (canTerminate)
+                valid = false;
+            canTerminate = true;
+        }
+        else if (/^S[1-9]\d*$/.test(token)) {
+            if (nextSteps.includes(token))
+                valid = false;
+            nextSteps.push(token);
+        }
+        else {
+            valid = false;
+        }
+    }
+    return { valid, nextSteps, canTerminate };
+}
+function sameStringSet(left, right) {
+    const leftSet = new Set(left);
+    const rightSet = new Set(right);
+    return leftSet.size === rightSet.size && [...leftSet].every((value) => rightSet.has(value));
+}
+function assertCompactBusinessDiagrams(body, scope) {
+    const diagrams = mermaidDiagramBodies(body)
+        .filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
+    const exactMethodCallPattern = /^(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*\(\)$/;
+    for (const diagram of diagrams) {
+        const nodeLabels = flowchartNodeLabelMap(diagram);
+        const edges = flowchartEdgeEndpoints(diagram);
+        if (nodeLabels.size < 2
+            || edges.edgeCount === 0
+            || !edges.traceable
+            || [...edges.endpointIds].some((nodeId) => !nodeLabels.has(nodeId))
+            || [...nodeLabels.values()].some((label) => (exactMethodCallPattern.test(label)
+                || compactGenericFlowTextPattern.test(label)
+                || /(?:Controller|Service|Repository|Mapper|\.java\b|\bapi_id\b)/i.test(label)))) {
+            throw new Error(`project knowledge compact secondary capability business diagram is generic or mixes semantic layers: ${scope}`);
+        }
+    }
+}
+function compactVisibleLocatorLines(body) {
+    return visibleMarkdownBody(body)
+        .split(/\r?\n/)
+        .filter((line) => shortCodeAnchors(line).length > 0);
+}
+function declaresCompactReaderProfile(body) {
+    const metadata = /<!--\s*axis-document-metadata\b([\s\S]*?)-->/i.exec(body)?.[1] ?? '';
+    return /\breader_profile\s*=\s*compact\b/.test(metadata);
+}
+function usesParticipantFlowInterfaceContract(body) {
+    const metadata = /<!--\s*axis-document-metadata\b([\s\S]*?)-->/i.exec(body)?.[1] ?? '';
+    return /\bsecondary_reader_contract\s*=\s*participant_flow_interface_v1\b/.test(metadata);
+}
+function compactSecondaryReaderContract(body) {
+    const metadata = /<!--\s*axis-document-metadata\b([\s\S]*?)-->/i.exec(body)?.[1] ?? '';
+    return /\bsecondary_reader_contract\s*=\s*([^\s|`]+)/.exec(metadata)?.[1] ?? '';
+}
+function resemblesParticipantFlowInterfaceContract(body) {
+    const visibleBody = visibleMarkdownBody(body);
+    return /^##\s+2\.?\s+参与者、职责与权限\s*$/m.test(visibleBody)
+        || /<!--\s*axis-flow-step-machine-table\b/i.test(body);
+}
+function rawNumberedTopLevelSection(body, sectionNumber) {
+    const headings = [...body.matchAll(/^##(?!#)\s+(\d+)\.?\s+.+?\s*$/gm)];
+    const index = headings.findIndex((heading) => Number(heading[1]) === sectionNumber);
+    if (index < 0)
+        return '';
+    const start = (headings[index].index ?? 0) + headings[index][0].length;
+    const end = index + 1 < headings.length ? (headings[index + 1].index ?? body.length) : body.length;
+    return body.slice(start, end);
+}
+function visibleNumberedLevel2Headings(body) {
+    return [...visibleMarkdownBody(body).matchAll(/^##(?!#)\s+(\d+)\.?\s+(.+?)\s*$/gm)]
+        .map((heading) => `${heading[1]}.${heading[2].trim()}`);
+}
+function isCompactPartialSecondaryCapabilityDetailedDesign(body) {
+    const visibleBody = visibleMarkdownBody(body);
+    const headings = visibleNumberedLevel2Headings(body);
+    return declaresCompactReaderProfile(body)
+        || (headings.length === 6
+            && /^##\s+1\.?\s+能力定位与边界\s*$/m.test(visibleBody)
+            && /^##\s+2\.?\s+调用主体、权限与接口矩阵\s*$/m.test(visibleBody)
+            && /^##\s+6\.?\s+(?:缺口|覆盖缺口)\s*$/m.test(visibleBody));
+}
+function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityId, secondary, gapReportBody, requiresCurrentReaderContract = false) {
     const secondaryId = secondary.secondary_capability_id;
     const scope = `${capabilityId}/${secondaryId}`;
     const sections = compactTopLevelSections(body, [
         '能力定位与边界',
-        '调用主体、权限与接口矩阵',
-        '能力级流程与跨接口关系',
-        '业务对象、状态与规则',
-        '接口详细设计',
-        '覆盖缺口',
+        ['参与者、职责与权限', '调用主体、权限与接口矩阵'],
+        ['能力流程', '能力级流程与跨接口关系'],
+        ['对象与规则', '业务对象、状态与规则'],
+        ['接口摘要', '接口详细设计'],
+        ['缺口', '覆盖缺口'],
     ], scope);
     const metadata = axisDocumentMetadata(body, scope);
+    const readerContract = compactSecondaryReaderContract(body);
+    if (readerContract && readerContract !== 'participant_flow_interface_v1') {
+        throw new Error(`project knowledge compact secondary capability has unsupported secondary_reader_contract: ${scope}/${readerContract}`);
+    }
+    if ((requiresCurrentReaderContract || resemblesParticipantFlowInterfaceContract(body))
+        && readerContract !== 'participant_flow_interface_v1') {
+        throw new Error(`project knowledge compact secondary capability requires secondary_reader_contract=participant_flow_interface_v1: ${scope}`);
+    }
+    const currentCompactProfile = readerContract === 'participant_flow_interface_v1';
     if (metadataScalar(metadata, 'reader_profile') !== 'compact') {
         throw new Error(`project knowledge compact partial secondary capability requires reader_profile=compact: ${scope}`);
     }
@@ -1348,61 +1562,565 @@ function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityI
         || metadataBusinessIds.some((businessId) => !expectedBusinessIds.has(businessId))) {
         throw new Error(`project knowledge compact partial secondary capability metadata business_ids mismatch: ${scope}`);
     }
-    if (metadataScalar(metadata, 'interface_design_status') !== 'detailed'
-        || metadataScalar(metadata, 'interface_coverage') !== 'partial') {
-        throw new Error(`project knowledge compact partial secondary capability requires detailed partial coverage: ${scope}`);
+    const interfaceStatus = metadataScalar(metadata, 'interface_design_status');
+    const interfaceCoverage = metadataScalar(metadata, 'interface_coverage');
+    const interfaceNotApplicable = interfaceStatus === 'not_applicable'
+        && interfaceCoverage === 'not_applicable';
+    if (!interfaceNotApplicable
+        && (interfaceStatus !== 'detailed' || !/^(?:complete|partial)$/.test(interfaceCoverage))) {
+        throw new Error(`project knowledge compact secondary capability requires detailed complete-or-partial coverage or evidenced not_applicable: ${scope}`);
     }
     const gapId = metadataScalar(metadata, 'interface_gap_id');
-    if (!projectKnowledgeTraceIdentifierPattern.test(gapId)
-        || invalidProjectKnowledgeTraceIdentifierPattern.test(gapId)) {
-        throw new Error(`project knowledge compact partial secondary capability requires an explicit interface gap: ${scope}`);
+    if (interfaceNotApplicable) {
+        const notApplicableReason = metadataScalar(metadata, 'interface_not_applicable_reason');
+        const notApplicableEvidence = metadataScalar(metadata, 'interface_not_applicable_evidence');
+        if (gapId !== 'not_applicable'
+            || notApplicableReason.length < 4
+            || compactPlaceholderEvidencePattern.test(notApplicableReason)
+            || exactCodeAnchors(notApplicableEvidence).length !== 1) {
+            throw new Error(`project knowledge compact secondary capability interface not_applicable requires reason and exact evidence: ${scope}`);
+        }
     }
-    const escapedGapId = gapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const gapPattern = new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`);
-    if (!gapPattern.test(sections.get(6) ?? '') || !gapPattern.test(gapReportBody)) {
-        throw new Error(`project knowledge compact partial secondary capability gap is not traced: ${scope}/${gapId}`);
+    else if (interfaceCoverage === 'partial') {
+        if (!projectKnowledgeTraceIdentifierPattern.test(gapId)
+            || invalidProjectKnowledgeTraceIdentifierPattern.test(gapId)) {
+            throw new Error(`project knowledge compact partial secondary capability requires an explicit interface gap: ${scope}`);
+        }
+        const escapedGapId = gapId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const gapPattern = new RegExp(`(^|[^A-Za-z0-9_.:\\-])${escapedGapId}([^A-Za-z0-9_.:\\-]|$)`);
+        const localGapTrace = [
+            sections.get(6) ?? '',
+            ...axisNamedCommentBodies(body, 'axis-gap-machine-table'),
+        ].join('\n');
+        if (!gapPattern.test(localGapTrace) || !gapPattern.test(gapReportBody)) {
+            throw new Error(`project knowledge compact partial secondary capability gap is not traced: ${scope}/${gapId}`);
+        }
+    }
+    else if (gapId !== 'not_applicable') {
+        throw new Error(`project knowledge compact complete secondary capability must not declare an interface gap: ${scope}`);
     }
     if (normalizeMarkdownCell(sections.get(1) ?? '').length < 10) {
         throw new Error(`project knowledge compact partial secondary capability boundary is empty: ${scope}`);
     }
-    const accessTable = markdownTables(sections.get(2) ?? '').find((table) => {
+    if (currentCompactProfile) {
+        assertCompactCodeLocatorAtomicity(body, scope);
+        const visibleParticipantTable = markdownTables(sections.get(2) ?? '').find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 5
+                && headers.every((header, index) => header === [
+                    '参与者',
+                    '参与类型',
+                    '业务职责',
+                    '参与步骤',
+                    '权限与数据范围',
+                ][index]);
+        });
+        if (!visibleParticipantTable || visibleParticipantTable.rows.length === 0
+            || visibleParticipantTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+            throw new Error(`project knowledge compact secondary capability participant table is empty: ${scope}`);
+        }
+        const participantSteps = new Map();
+        for (const row of visibleParticipantTable.rows) {
+            const participant = normalizeMarkdownCell(row[0] ?? '');
+            const participantType = normalizeMarkdownCell(row[1] ?? '');
+            const responsibility = normalizeMarkdownCell(row[2] ?? '');
+            const steps = compactStepIds(row[3] ?? '');
+            const permissionAndScope = normalizeMarkdownCell(row[4] ?? '');
+            if (participant.length < 2
+                || /^(?:actor|user|caller|参与者|调用方|用户|角色|系统|平台)$/i.test(participant)
+                || /(?:Controller|Service|Listener|Repository|Mapper|状态机|监听器|调度器|接收器|消费者|服务)$/i.test(participant)
+                || !/^(?:业务角色|外部系统|内部业务能力|自动任务)$/.test(participantType)
+                || responsibility.length < 4
+                || /^(?:参与业务|处理业务|执行流程|完成职责)$/i.test(responsibility)
+                || steps.length === 0
+                || new Set(steps).size !== steps.length
+                || permissionAndScope.length < 4
+                || row.some((cell) => compactPlaceholderEvidencePattern.test(normalizeMarkdownCell(cell)))) {
+                throw new Error(`project knowledge compact secondary capability participant responsibility is generic or incomplete: ${scope}/${participant || 'unknown'}`);
+            }
+            if (participantSteps.has(participant)) {
+                throw new Error(`project knowledge compact secondary capability duplicates participant: ${scope}/${participant}`);
+            }
+            participantSteps.set(participant, new Set(steps));
+        }
+        const visibleFlowTable = markdownTables(sections.get(3) ?? '').find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 6
+                && headers.every((header, index) => header === [
+                    '步骤',
+                    '参与者',
+                    '业务动作',
+                    '前置状态/条件',
+                    '结果/下一状态与下一步',
+                    '失败/补偿',
+                ][index]);
+        });
+        if (!visibleFlowTable || visibleFlowTable.rows.length === 0
+            || visibleFlowTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+            throw new Error(`project knowledge compact secondary capability atomic business flow is empty: ${scope}`);
+        }
+        const visibleFlowByStep = new Map();
+        const actualStepsByParticipant = new Map();
+        for (let index = 0; index < visibleFlowTable.rows.length; index += 1) {
+            const row = visibleFlowTable.rows[index];
+            const stepId = normalizeMarkdownCell(row[0] ?? '');
+            const participant = normalizeMarkdownCell(row[1] ?? '');
+            const action = normalizeMarkdownCell(row[2] ?? '');
+            const resultAndNextStep = normalizeMarkdownCell(row[4] ?? '');
+            const nextStepMatch = /(?:^|[；;])\s*下一步[:：]\s*(.+)$/.exec(resultAndNextStep);
+            const nextStepText = normalizeMarkdownCell(nextStepMatch?.[1] ?? '');
+            const resultText = nextStepMatch
+                ? resultAndNextStep.slice(0, nextStepMatch.index).trim()
+                : '';
+            const nextTargets = compactNextStepTargets(nextStepText);
+            if (stepId !== `S${index + 1}`) {
+                throw new Error(`project knowledge compact secondary capability flow steps must be consecutive: ${scope}/${stepId || 'unknown'}`);
+            }
+            if (!participantSteps.has(participant)) {
+                throw new Error(`project knowledge compact secondary capability flow references unknown participant: ${scope}/${participant || 'unknown'}`);
+            }
+            if (action.length < 4
+                || compactGenericFlowTextPattern.test(action)
+                || /(?:Controller|Service|Repository|Mapper|\.java\b|\bapi_id\b)/i.test(action)
+                || !nextStepMatch
+                || resultText.length < 4
+                || !nextTargets.valid
+                || row.some((cell) => compactPlaceholderEvidencePattern.test(normalizeMarkdownCell(cell)))) {
+                throw new Error(`project knowledge compact secondary capability flow action is generic or technical: ${scope}/${stepId}`);
+            }
+            visibleFlowByStep.set(stepId, {
+                participant,
+                action,
+                nextSteps: nextTargets.nextSteps,
+                canTerminate: nextTargets.canTerminate,
+            });
+            const steps = actualStepsByParticipant.get(participant) ?? new Set();
+            steps.add(stepId);
+            actualStepsByParticipant.set(participant, steps);
+        }
+        if (!sameStringSet(participantSteps.keys(), actualStepsByParticipant.keys())) {
+            throw new Error(`project knowledge compact secondary capability participants do not close over the business flow: ${scope}`);
+        }
+        for (const [participant, declaredSteps] of participantSteps) {
+            if (!sameStringSet(declaredSteps, actualStepsByParticipant.get(participant) ?? [])) {
+                throw new Error(`project knowledge compact secondary capability participant step declaration mismatches flow: ${scope}/${participant}`);
+            }
+        }
+        const incomingSteps = new Map([...visibleFlowByStep.keys()].map((stepId) => [stepId, new Set()]));
+        for (const [stepId, step] of visibleFlowByStep) {
+            for (const nextStepId of step.nextSteps) {
+                if (!visibleFlowByStep.has(nextStepId)) {
+                    throw new Error(`project knowledge compact secondary capability flow references unknown next step: ${scope}/${stepId}/${nextStepId}`);
+                }
+                incomingSteps.get(nextStepId)?.add(stepId);
+            }
+        }
+        const rootSteps = [...incomingSteps]
+            .filter(([, incoming]) => incoming.size === 0)
+            .map(([stepId]) => stepId);
+        const terminalSteps = [...visibleFlowByStep]
+            .filter(([, step]) => step.canTerminate)
+            .map(([stepId]) => stepId);
+        const reachable = (roots, reverse = false) => {
+            const reached = new Set();
+            const queue = [...roots];
+            while (queue.length > 0) {
+                const stepId = queue.shift();
+                if (reached.has(stepId))
+                    continue;
+                reached.add(stepId);
+                const adjacent = reverse
+                    ? [...(incomingSteps.get(stepId) ?? [])]
+                    : (visibleFlowByStep.get(stepId)?.nextSteps ?? []);
+                queue.push(...adjacent);
+            }
+            return reached;
+        };
+        if (rootSteps.length === 0
+            || terminalSteps.length === 0
+            || reachable(rootSteps).size !== visibleFlowByStep.size
+            || reachable(terminalSteps, true).size !== visibleFlowByStep.size) {
+            throw new Error(`project knowledge compact secondary capability business flow is disconnected or has no reachable terminal: ${scope}`);
+        }
+        assertCompactBusinessDiagrams(sections.get(3) ?? '', `${scope}/3`);
+        const machineAccessTables = axisNamedCommentBodies(body, 'axis-access-matrix-machine-table')
+            .flatMap((commentBody) => markdownTables(commentBody))
+            .filter((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 6
+                && headers.every((header, index) => header === [
+                    '主体/角色',
+                    '所需权限/策略',
+                    'api_id',
+                    '可调用接口/能力',
+                    '数据范围',
+                    '授权证据',
+                ][index]);
+        });
+        if (interfaceNotApplicable && machineAccessTables.length > 0) {
+            throw new Error(`project knowledge compact secondary capability interface not_applicable must not declare an access matrix: ${scope}`);
+        }
+        if (!interfaceNotApplicable && (machineAccessTables.length !== 1
+            || machineAccessTables[0].rows.length === 0
+            || machineAccessTables[0].rows.some((row) => (row.slice(0, 5).some((cell) => !normalizeMarkdownCell(cell))
+                || exactCodeAnchors(row[5] ?? '').length === 0)))) {
+            throw new Error(`project knowledge compact partial secondary capability machine access matrix is empty: ${scope}`);
+        }
+        const accessApiIds = new Set();
+        const accessActorsByApi = new Map();
+        const accessContractByApi = new Map();
+        const accessApiByContract = new Map();
+        const accessActorApiPairs = new Set();
+        for (const row of machineAccessTables[0]?.rows ?? []) {
+            const participant = normalizeMarkdownCell(row[0] ?? '');
+            const apiId = normalizeMarkdownCell(row[2] ?? '');
+            const contract = compactCanonicalContract(row[3] ?? '');
+            if (!participantSteps.has(participant)) {
+                throw new Error(`project knowledge compact secondary capability access matrix references unknown participant: ${scope}/${participant || 'unknown'}`);
+            }
+            if (!projectKnowledgeTraceIdentifierPattern.test(apiId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)
+                || !compactConcreteContractPattern.test(contract)) {
+                throw new Error(`project knowledge compact secondary capability access matrix aggregates or omits a concrete interface: ${scope}/${apiId || 'unknown'}`);
+            }
+            const previousContract = accessContractByApi.get(apiId);
+            if (previousContract && previousContract !== contract) {
+                throw new Error(`project knowledge compact secondary capability api_id maps to multiple contracts: ${scope}/${apiId}`);
+            }
+            const previousApiId = accessApiByContract.get(contract);
+            if (previousApiId && previousApiId !== apiId) {
+                throw new Error(`project knowledge compact secondary capability concrete contract maps to multiple api_id values: ${scope}/${contract}`);
+            }
+            const actorApiPair = `${participant}::${apiId}`;
+            if (accessActorApiPairs.has(actorApiPair)) {
+                throw new Error(`project knowledge compact secondary capability duplicates actor-interface access: ${scope}/${participant}/${apiId}`);
+            }
+            accessActorApiPairs.add(actorApiPair);
+            accessApiIds.add(apiId);
+            accessContractByApi.set(apiId, contract);
+            accessApiByContract.set(contract, apiId);
+            const actors = accessActorsByApi.get(apiId) ?? new Set();
+            actors.add(participant);
+            accessActorsByApi.set(apiId, actors);
+        }
+        const flowMachineTables = axisNamedCommentBodies(body, 'axis-flow-step-machine-table')
+            .flatMap((commentBody) => markdownTables(commentBody))
+            .filter((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 5
+                && headers.every((header, index) => header === ['步骤', '参与者', 'api_id', '契约关系', '证据'][index]);
+        });
+        if (flowMachineTables.length !== 1 || flowMachineTables[0].rows.length < visibleFlowTable.rows.length) {
+            throw new Error(`project knowledge compact secondary capability flow machine trace is incomplete: ${scope}`);
+        }
+        const flowApiIds = new Set();
+        const flowStepsByApi = new Map();
+        const tracedFlowSteps = new Set();
+        const flowMappingsByStep = new Map();
+        const flowParticipantsByApi = new Map();
+        const flowAuthorizedActorsByApi = new Map();
+        const flowRelationsByApi = new Map();
+        for (const row of flowMachineTables[0].rows) {
+            const stepId = normalizeMarkdownCell(row[0] ?? '');
+            const participant = normalizeMarkdownCell(row[1] ?? '');
+            const apiId = normalizeMarkdownCell(row[2] ?? '');
+            const contractRelation = normalizeMarkdownCell(row[3] ?? '');
+            const visibleStep = visibleFlowByStep.get(stepId);
+            if (!visibleStep || visibleStep.participant !== participant
+                || exactCodeAnchors(row[4] ?? '').length === 0) {
+                throw new Error(`project knowledge compact secondary capability flow machine trace mismatches visible step: ${scope}/${stepId || 'unknown'}`);
+            }
+            tracedFlowSteps.add(stepId);
+            const stepMappings = flowMappingsByStep.get(stepId) ?? new Set();
+            if (stepMappings.has(apiId)) {
+                throw new Error(`project knowledge compact secondary capability duplicates flow-interface mapping: ${scope}/${stepId}/${apiId}`);
+            }
+            stepMappings.add(apiId);
+            flowMappingsByStep.set(stepId, stepMappings);
+            if (apiId === 'not_applicable') {
+                if (contractRelation !== 'not_applicable') {
+                    throw new Error(`project knowledge compact secondary capability internal step requires contract relation not_applicable: ${scope}/${stepId}`);
+                }
+                continue;
+            }
+            if (!projectKnowledgeTraceIdentifierPattern.test(apiId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)
+                || !/^(?:caller|producer|consumer|handler)$/.test(contractRelation)) {
+                throw new Error(`project knowledge compact secondary capability flow references invalid api_id: ${scope}/${apiId || 'unknown'}`);
+            }
+            flowApiIds.add(apiId);
+            const mappedSteps = flowStepsByApi.get(apiId) ?? new Set();
+            mappedSteps.add(stepId);
+            flowStepsByApi.set(apiId, mappedSteps);
+            const participants = flowParticipantsByApi.get(apiId) ?? new Set();
+            participants.add(participant);
+            flowParticipantsByApi.set(apiId, participants);
+            const relations = flowRelationsByApi.get(apiId) ?? new Set();
+            relations.add(contractRelation);
+            flowRelationsByApi.set(apiId, relations);
+            if (/^(?:caller|producer)$/.test(contractRelation)) {
+                const authorizedActors = flowAuthorizedActorsByApi.get(apiId) ?? new Set();
+                authorizedActors.add(participant);
+                flowAuthorizedActorsByApi.set(apiId, authorizedActors);
+                if (!accessActorsByApi.get(apiId)?.has(participant)) {
+                    throw new Error(`project knowledge compact secondary capability flow caller or producer lacks access evidence: ${scope}/${stepId}/${apiId}`);
+                }
+            }
+            else if (accessActorsByApi.get(apiId)?.has(participant)) {
+                throw new Error(`project knowledge compact secondary capability consumer or handler must not be represented as a caller: ${scope}/${stepId}/${apiId}`);
+            }
+        }
+        if (!sameStringSet(tracedFlowSteps, visibleFlowByStep.keys())) {
+            throw new Error(`project knowledge compact secondary capability flow machine trace omits a visible step: ${scope}`);
+        }
+        for (const [stepId, mappings] of flowMappingsByStep) {
+            if (mappings.has('not_applicable') && mappings.size > 1) {
+                throw new Error(`project knowledge compact secondary capability mixes interface and non-interface mappings: ${scope}/${stepId}`);
+            }
+        }
+        if (interfaceNotApplicable && flowApiIds.size > 0) {
+            throw new Error(`project knowledge compact secondary capability interface not_applicable flow must contain only internal steps: ${scope}`);
+        }
+        for (const [apiId, accessActors] of accessActorsByApi) {
+            if (!sameStringSet(accessActors, flowAuthorizedActorsByApi.get(apiId) ?? [])) {
+                throw new Error(`project knowledge compact secondary capability access evidence mismatches flow callers and producers: ${scope}/${apiId}`);
+            }
+        }
+        if (normalizeMarkdownCell(sections.get(4) ?? '').length < 10) {
+            throw new Error(`project knowledge compact partial secondary capability rules are empty: ${scope}`);
+        }
+        const rawInterfaceSection = rawNumberedTopLevelSection(body, 5);
+        const interfaceGroups = numberedMarkdownSubsections(rawInterfaceSection, 5);
+        const visibleInterfaceGroups = numberedMarkdownSubsections(sections.get(5) ?? '', 5);
+        if (interfaceNotApplicable) {
+            if (interfaceGroups.length > 0
+                || axisNamedCommentBodies(body, 'axis-interface-machine-table').length > 0
+                || axisNamedCommentBodies(body, 'axis-implementation-machine-table').length > 0
+                || compactConcreteContractPattern.test(normalizeMarkdownCell(sections.get(5) ?? ''))
+                || normalizeMarkdownCell(sections.get(5) ?? '').length < 10) {
+                throw new Error(`project knowledge compact secondary capability interface not_applicable must not contain interface blocks: ${scope}`);
+            }
+            assertCompactEvidenceLocators(rawInterfaceSection, compactVisibleLocatorLines(rawInterfaceSection), `${scope}/5`);
+            assertCompactEvidenceLocators([rawNumberedTopLevelSection(body, 1), rawNumberedTopLevelSection(body, 3)].join('\n'), compactVisibleLocatorLines([sections.get(1) ?? '', sections.get(3) ?? ''].join('\n')), scope);
+            return;
+        }
+        const interfaceFields = [
+            '接口/触发',
+            '业务目的',
+            '调用方/参与者',
+            '前置条件/权限',
+            '关键输入',
+            '业务结果/状态变化',
+            '失败/拒绝条件',
+            '对应流程步骤',
+            '实现定位',
+        ];
+        if (visibleInterfaceGroups.length === 0
+            || visibleInterfaceGroups.some((group, index) => (group.index !== index + 1
+                || group.title.length < 2
+                || /^(?:代表入口|接口摘要|接口)$/.test(group.title)))) {
+            throw new Error(`project knowledge compact secondary capability must group each concrete interface: ${scope}`);
+        }
+        if (interfaceGroups.length !== visibleInterfaceGroups.length
+            || interfaceGroups.some((group, index) => (group.index !== visibleInterfaceGroups[index].index
+                || normalizeMarkdownCell(group.title) !== normalizeMarkdownCell(visibleInterfaceGroups[index].title)))) {
+            throw new Error(`project knowledge compact secondary capability interface headings must remain reader-visible: ${scope}`);
+        }
+        const interfaceSummaries = interfaceGroups.map((group, groupIndex) => {
+            const visibleGroup = visibleInterfaceGroups[groupIndex];
+            const matchingTables = markdownTables(visibleGroup.body)
+                .filter((table) => markdownTableMatchesExactVerticalFields(table, interfaceFields));
+            if (matchingTables.length !== 1) {
+                throw new Error(`project knowledge compact secondary capability interface summary does not match fixed schema: ${scope}/5.${group.index}`);
+            }
+            const fields = exactVerticalMarkdownTableFields(matchingTables[0], interfaceFields, `${scope}/5.${group.index}`);
+            if (interfaceFields.some((field) => !normalizeMarkdownCell(fields.get(field) ?? ''))
+                || interfaceFields.some((field) => compactPlaceholderEvidencePattern.test(normalizeMarkdownCell(fields.get(field) ?? '')))
+                || !compactConcreteContractPattern.test(normalizeMarkdownCell(fields.get('接口/触发') ?? ''))) {
+                throw new Error(`project knowledge compact secondary capability interface summary aggregates or omits a concrete contract: ${scope}/5.${group.index}`);
+            }
+            const interfaceMachines = axisNamedCommentBodies(group.body, 'axis-interface-machine-table')
+                .flatMap((commentBody) => markdownTables(commentBody))
+                .map((table) => verticalMarkdownTableFields(table))
+                .filter((machine) => machine !== null);
+            if (interfaceMachines.length !== 1
+                || ['level1_journey_id', 'flow_id', 'api_id', '契约类型', '方法与完整路径或主题', '请求模型', '响应模型', '状态']
+                    .some((field) => !normalizeMarkdownCell(interfaceMachines[0].get(field) ?? ''))) {
+                throw new Error(`project knowledge compact secondary capability interface block requires one scoped machine trace: ${scope}/5.${group.index}`);
+            }
+            assertCompactEvidenceLocators(group.body, compactVisibleLocatorLines(group.body), `${scope}/5.${group.index}`);
+            const implementationTables = axisNamedCommentBodies(group.body, 'axis-implementation-machine-table')
+                .flatMap((commentBody) => markdownTables(commentBody));
+            if (implementationTables.length !== 1
+                || implementationTables.some((table) => {
+                    const headers = table.headers.map(normalizeMarkdownCell);
+                    return headers.length !== 3
+                        || headers.some((header, index) => header !== ['实现层', '精确定位', '职责'][index])
+                        || table.rows.length === 0
+                        || table.rows.some((row) => (row.some((cell) => !normalizeMarkdownCell(cell))
+                            || exactCodeAnchors(row[1] ?? '').length !== 1));
+                })) {
+                throw new Error(`project knowledge compact secondary capability interface block requires one scoped implementation trace: ${scope}/5.${group.index}`);
+            }
+            const implementationAnchors = implementationTables[0].rows
+                .flatMap((row) => exactCodeAnchors(row[1] ?? ''))
+                .map((anchor) => {
+                const parsed = /^(.+):([1-9]\d*)-([1-9]\d*)#([A-Za-z_$][A-Za-z0-9_$<>.\-]*)$/.exec(anchor);
+                return parsed
+                    ? compactCodeAnchor(anchor, parsed[1], parsed[2], parsed[3], parsed[4])
+                    : null;
+            })
+                .filter((anchor) => anchor !== null);
+            const visibleImplementationLocators = compactVisibleLocatorLines(visibleGroup.body)
+                .flatMap((line) => shortCodeAnchors(line));
+            if (visibleImplementationLocators.length === 0
+                || visibleImplementationLocators.some((locator) => (implementationAnchors.filter((anchor) => (anchor.fileName === locator.fileName
+                    && anchor.lineStart === locator.lineStart
+                    && anchor.lineEnd === locator.lineEnd
+                    && anchor.symbol === locator.symbol)).length !== 1))) {
+                throw new Error(`project knowledge compact secondary capability visible implementation locator does not match its scoped implementation trace: ${scope}/5.${group.index}`);
+            }
+            return { fields, machine: interfaceMachines[0] };
+        });
+        const allInterfaceMachineComments = axisNamedCommentBodies(body, 'axis-interface-machine-table');
+        const allImplementationMachineComments = axisNamedCommentBodies(body, 'axis-implementation-machine-table');
+        if (allInterfaceMachineComments.length !== interfaceGroups.length
+            || allImplementationMachineComments.length !== interfaceGroups.length) {
+            throw new Error(`project knowledge compact secondary capability interface traces must stay inside their 5.N blocks: ${scope}`);
+        }
+        const interfaceApiIds = new Set();
+        const interfaceApiByContract = new Map();
+        for (let index = 0; index < interfaceSummaries.length; index += 1) {
+            const { machine, fields: summary } = interfaceSummaries[index];
+            const apiId = normalizeMarkdownCell(machine.get('api_id') ?? '');
+            const contract = compactCanonicalContract(machine.get('方法与完整路径或主题') ?? '');
+            const contractType = normalizeMarkdownCell(machine.get('契约类型') ?? '');
+            const callers = compactDelimitedValues(summary.get('调用方/参与者') ?? '');
+            const correspondingSteps = compactStepIds(summary.get('对应流程步骤') ?? '');
+            const allowedRelations = contractType === 'HTTP'
+                ? new Set(['caller', 'handler'])
+                : /^(?:EVENT|TOPIC)$/.test(contractType)
+                    ? new Set(['producer', 'consumer'])
+                    : new Set(['caller', 'handler']);
+            const contractRelations = flowRelationsByApi.get(apiId) ?? new Set();
+            if (!projectKnowledgeTraceIdentifierPattern.test(apiId)
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)
+                || interfaceApiIds.has(apiId)
+                || !compactConcreteContractPattern.test(contract)
+                || contract !== compactCanonicalContract(summary.get('接口/触发') ?? '')
+                || !compactContractMatchesType(contract, contractType)
+                || contractRelations.size === 0
+                || [...contractRelations].some((relation) => !allowedRelations.has(relation))
+                || callers.length === 0
+                || !sameStringSet(callers, flowParticipantsByApi.get(apiId) ?? [])
+                || correspondingSteps.length === 0
+                || new Set(correspondingSteps).size !== correspondingSteps.length
+                || !sameStringSet(correspondingSteps, flowStepsByApi.get(apiId) ?? [])) {
+                throw new Error(`project knowledge compact secondary capability interface block is not one-to-one with its api_id, contract and callers: ${scope}/5.${index + 1}/${apiId || 'unknown'}`);
+            }
+            interfaceApiIds.add(apiId);
+            const previousApiId = interfaceApiByContract.get(contract);
+            if (previousApiId && previousApiId !== apiId) {
+                throw new Error(`project knowledge compact secondary capability concrete interface contract maps to multiple api_id values: ${scope}/${contract}`);
+            }
+            interfaceApiByContract.set(contract, apiId);
+            if (accessContractByApi.get(apiId) !== contract) {
+                throw new Error(`project knowledge compact secondary capability access matrix mismatches interface block: ${scope}/${apiId}`);
+            }
+        }
+        if (!sameStringSet(interfaceApiIds, accessApiIds)
+            || !sameStringSet(interfaceApiIds, flowApiIds)) {
+            throw new Error(`project knowledge compact secondary capability api_id sets do not close across access, flow and interface blocks: ${scope}`);
+        }
+        assertCompactEvidenceLocators([rawNumberedTopLevelSection(body, 1), rawNumberedTopLevelSection(body, 3)].join('\n'), compactVisibleLocatorLines([sections.get(1) ?? '', sections.get(3) ?? ''].join('\n')), scope);
+        return;
+    }
+    const legacyAccessTables = markdownTables(sections.get(2) ?? '');
+    const accessTable = legacyAccessTables.find((table) => {
         const headers = table.headers.map(normalizeMarkdownCell);
         return headers.length === 5
             && headers.every((header, index) => header === ['主体', '策略', '真实入口', '结果', '定位'][index]);
     });
-    if (!accessTable || accessTable.rows.length === 0
-        || accessTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+    const legacyReaderAccessTable = legacyAccessTables.find((table) => {
+        const headers = table.headers.map(normalizeMarkdownCell);
+        return headers.length === 4
+            && headers.every((header, index) => header === [
+                '主体/角色',
+                '所需权限/策略',
+                '可调用接口/能力',
+                '数据范围',
+            ][index]);
+    });
+    const selectedLegacyAccessTable = accessTable ?? legacyReaderAccessTable;
+    if (!selectedLegacyAccessTable || selectedLegacyAccessTable.rows.length === 0
+        || selectedLegacyAccessTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
         throw new Error(`project knowledge compact partial secondary capability access matrix is empty: ${scope}`);
     }
-    assertCompactPartialMethodDiagrams(sections.get(3) ?? '', `${scope}/3`);
+    if (accessTable) {
+        assertCompactPartialMethodDiagrams(sections.get(3) ?? '', `${scope}/3`);
+    }
+    else {
+        const legacyDiagrams = mermaidDiagramBodies(sections.get(3) ?? '')
+            .filter((diagram) => /\b(?:flowchart|graph)\b/i.test(diagram));
+        if (legacyDiagrams.length === 0 || legacyDiagrams.some((diagram) => {
+            const nodes = flowchartNodeLabelMap(diagram);
+            const edges = flowchartEdgeEndpoints(diagram);
+            return nodes.size < 2
+                || edges.edgeCount === 0
+                || !edges.traceable
+                || [...edges.endpointIds].some((nodeId) => !nodes.has(nodeId));
+        })) {
+            throw new Error(`project knowledge compact partial legacy capability flow is empty: ${scope}`);
+        }
+    }
     if (normalizeMarkdownCell(sections.get(4) ?? '').length < 10) {
         throw new Error(`project knowledge compact partial secondary capability rules are empty: ${scope}`);
     }
-    const interfaceTable = markdownTables(sections.get(5) ?? '').find((table) => {
+    const legacyInterfaceTables = markdownTables(sections.get(5) ?? '');
+    const interfaceTable = legacyInterfaceTables.find((table) => {
         const headers = table.headers.map(normalizeMarkdownCell);
         return headers.length === 4
             && headers.every((header, index) => header === ['入口', '处理方法', '成功结果', '边界'][index]);
     });
-    if (!interfaceTable || interfaceTable.rows.length === 0
-        || interfaceTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell)))) {
+    const legacyReaderInterfaceTables = numberedMarkdownSubsections(sections.get(5) ?? '', 5)
+        .flatMap((group) => markdownTables(group.body))
+        .filter((table) => markdownTableMatchesExactVerticalFields(table, [
+        '入口',
+        '业务目的',
+        '调用方',
+        '用户/调用方可见结果',
+        '方法定位',
+    ]));
+    if ((!interfaceTable || interfaceTable.rows.length === 0
+        || interfaceTable.rows.some((row) => row.some((cell) => !normalizeMarkdownCell(cell))))
+        && legacyReaderInterfaceTables.length === 0) {
         throw new Error(`project knowledge compact partial secondary capability interface summary is empty: ${scope}`);
     }
-    assertCompactEvidenceLocators(body, accessTable.rows.map((row) => row[4] ?? ''), scope);
+    const locatorBodies = accessTable
+        ? accessTable.rows.map((row) => row[4] ?? '')
+        : compactVisibleLocatorLines(body);
+    assertCompactEvidenceLocators(body, locatorBodies, scope);
 }
 function isCompactPartialLevel1CapabilityDetailedDesign(body) {
-    return /^##\s+1\.?\s+能力边界\s*$/m.test(body)
-        && /^##\s+2\.?\s+二级能力\s*$/m.test(body)
-        && /^##\s+6\.?\s+证据与缺口\s*$/m.test(body);
+    const visibleBody = visibleMarkdownBody(body);
+    const headings = visibleNumberedLevel2Headings(body);
+    return declaresCompactReaderProfile(body)
+        || (headings.length === 6
+            && /^##\s+1\.?\s+(?:设计结论与能力边界|能力边界)\s*$/m.test(visibleBody)
+            && /^##\s+2\.?\s+(?:二级能力完整性与导航|二级能力)\s*$/m.test(visibleBody)
+            && /^##\s+6\.?\s+(?:缺口与覆盖说明|证据与缺口)\s*$/m.test(visibleBody));
 }
 function assertCompactPartialLevel1CapabilityDetailedDesign(body, capabilityId, secondaryCapabilities, gapReportBody) {
     const sections = compactTopLevelSections(body, [
-        '能力边界',
-        '二级能力',
-        '对外业务入口',
-        '原子流程',
-        '关键规则',
-        '证据与缺口',
+        ['设计结论与能力边界', '能力边界'],
+        ['二级能力完整性与导航', '二级能力'],
+        ['对外业务能力与接口实现', '对外业务入口'],
+        ['业务语义', '原子流程'],
+        ['表结构设计', '关键规则'],
+        ['缺口与覆盖说明', '证据与缺口'],
     ], capabilityId);
+    const currentCompactProfile = /^##\s+3\.?\s+对外业务能力与接口实现\s*$/m
+        .test(visibleMarkdownBody(body));
     const metadata = axisDocumentMetadata(body, capabilityId);
     if (metadataScalar(metadata, 'reader_profile') !== 'compact') {
         throw new Error(`project knowledge compact partial level-1 capability requires reader_profile=compact: ${capabilityId}`);
@@ -1437,8 +2155,14 @@ function assertCompactPartialLevel1CapabilityDetailedDesign(body, capabilityId, 
             throw new Error(`project knowledge compact partial level-1 gap is not traced: ${capabilityId}/${gapId}`);
         }
     }
-    if (!/\bpartial\b/.test(sections.get(6) ?? '')
-        || !/(?:缺口|未覆盖|仍需|补齐|补证)/.test(sections.get(6) ?? '')) {
+    const visibleGapSection = sections.get(6) ?? '';
+    const gapMachineTrace = axisNamedCommentBodies(body, 'axis-gap-machine-table').join('\n');
+    if ((currentCompactProfile
+        && (!/(?:缺口|未覆盖|仍需|补齐|补证)/.test(visibleGapSection)
+            || gapIds.some((gapId) => !gapMachineTrace.includes(gapId))))
+        || (!currentCompactProfile
+            && (!/\bpartial\b/.test(visibleGapSection)
+                || !/(?:缺口|未覆盖|仍需|补齐|补证)/.test(visibleGapSection)))) {
         throw new Error(`project knowledge compact partial level-1 evidence gap is empty: ${capabilityId}`);
     }
     if (normalizeMarkdownCell(sections.get(1) ?? '').length < 10) {
@@ -1447,7 +2171,11 @@ function assertCompactPartialLevel1CapabilityDetailedDesign(body, capabilityId, 
     const navigationTable = markdownTables(sections.get(2) ?? '').find((table) => {
         const headers = table.headers.map(normalizeMarkdownCell);
         return headers.length === 3
-            && headers.every((header, index) => header === ['二级能力', '最小业务结果', '详情'][index]);
+            && headers.every((header, index) => (header === [
+                '二级能力',
+                currentCompactProfile ? '业务摘要' : '最小业务结果',
+                '详情',
+            ][index]));
     });
     if (!navigationTable || navigationTable.rows.length !== secondaryCapabilities.length) {
         throw new Error(`project knowledge compact partial level-1 secondary capability navigation is incomplete: ${capabilityId}`);
@@ -1469,6 +2197,58 @@ function assertCompactPartialLevel1CapabilityDetailedDesign(body, capabilityId, 
         if (!linkedSecondaryIds.has(secondaryId)) {
             throw new Error(`project knowledge compact partial level-1 overview omits secondary capability link: ${capabilityId}/${secondaryId}`);
         }
+    }
+    if (currentCompactProfile) {
+        const journeyTables = axisNamedCommentBodies(body, 'axis-journey-machine-table')
+            .flatMap((commentBody) => markdownTables(commentBody))
+            .map((table) => verticalMarkdownTableFields(table))
+            .filter((fields) => fields !== null);
+        const journeySecondaryIds = journeyTables.map((fields) => (normalizeMarkdownCell(fields.get('secondary_capability_id') ?? '')));
+        if (journeyTables.length < secondaryCapabilities.length
+            || journeyTables.some((fields) => (['level1_journey_id', 'flow_id', 'secondary_capability_id', 'api_id', '代表入口']
+                .some((field) => !normalizeMarkdownCell(fields.get(field) ?? ''))))) {
+            throw new Error(`project knowledge compact partial level-1 business entry coverage is incomplete: ${capabilityId}`);
+        }
+        for (const secondary of secondaryCapabilities) {
+            const secondaryId = secondary.secondary_capability_id;
+            if (journeySecondaryIds.filter((value) => value === secondaryId).length !== 1) {
+                throw new Error(`project knowledge compact partial level-1 business entry omits secondary capability: ${capabilityId}/${secondaryId}`);
+            }
+        }
+        assertCompactSingleLayerDiagrams(sections.get(3) ?? '', `${capabilityId}/3`);
+        if (normalizeMarkdownCell(sections.get(4) ?? '').length < 10) {
+            throw new Error(`project knowledge compact partial level-1 business semantics are empty: ${capabilityId}`);
+        }
+        const tableSummary = markdownTables(sections.get(5) ?? '').find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 5 && table.rows.length > 0;
+        });
+        const tableInventory = axisNamedCommentBodies(body, 'axis-table-inventory-machine-table')
+            .flatMap((commentBody) => markdownTables(commentBody))
+            .find((table) => {
+            const headers = table.headers.map(normalizeMarkdownCell);
+            return headers.length === 6
+                && headers.every((header, index) => header === [
+                    'table_id',
+                    '物理表名',
+                    '业务实体/用途',
+                    '所属二级能力',
+                    '读写 api_id',
+                    '证据',
+                ][index]);
+        });
+        if (!tableSummary || !tableInventory || tableInventory.rows.length === 0) {
+            throw new Error(`project knowledge compact partial level-1 table summary is empty: ${capabilityId}`);
+        }
+        assertCompactEvidenceLocators(body, compactVisibleLocatorLines([
+            sections.get(1) ?? '',
+            sections.get(3) ?? '',
+            sections.get(5) ?? '',
+        ].join('\n')), capabilityId);
+        return new Map(secondaryCapabilities.map((secondary) => [
+            secondary.secondary_capability_id,
+            [],
+        ]));
     }
     const entryTable = markdownTables(sections.get(3) ?? '').find((table) => {
         const headers = table.headers.map(normalizeMarkdownCell);
@@ -3126,6 +3906,7 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     const level1JourneyCoverageByCapability = new Map();
     const level1DependencyProjectionsByCapability = new Map();
     const compactPartialLevel1CapabilityIds = new Set();
+    const participantReaderContractLevel1CapabilityIds = new Set();
     for (const capability of level1Capabilities) {
         const capabilityId = capability.level1_capability_id;
         const capabilityDocument = capabilityDetailedDesigns.find((document) => document.docId === `business_capability_detailed_design_${capabilityId}`);
@@ -3138,8 +3919,16 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
             .exec(capabilityDocumentBody)?.[1];
         level1JourneyCoverageByCapability.set(capabilityId, capabilityCoverage);
         const compactPartial = isCompactPartialLevel1CapabilityDetailedDesign(capabilityDocumentBody);
-        if (compactPartial)
+        if (compactPartial) {
             compactPartialLevel1CapabilityIds.add(capabilityId);
+            const readerContract = compactSecondaryReaderContract(capabilityDocumentBody);
+            if (readerContract && readerContract !== 'participant_flow_interface_v1') {
+                throw new Error(`project knowledge compact level-1 capability has unsupported secondary_reader_contract: ${capabilityId}/${readerContract}`);
+            }
+            if (readerContract === 'participant_flow_interface_v1') {
+                participantReaderContractLevel1CapabilityIds.add(capabilityId);
+            }
+        }
         level1JourneysByCapability.set(capabilityId, compactPartial
             ? assertCompactPartialLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody)
             : assertLevel1CapabilityDetailedDesign(capabilityDocumentBody, capabilityId, capability.secondary_capabilities, gapReportBody));
@@ -3165,7 +3954,9 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
     let allSecondaryInterfacesComplete = true;
     for (const capability of level1Capabilities) {
         const capabilityId = capability.level1_capability_id;
-        for (const secondary of capability.secondary_capabilities) {
+        const secondaries = capability.secondary_capabilities;
+        for (let secondaryIndex = 0; secondaryIndex < secondaries.length; secondaryIndex += 1) {
+            const secondary = secondaries[secondaryIndex];
             const secondaryId = secondary.secondary_capability_id;
             const relativePath = `business/capabilities/${capabilityId}/secondary-capabilities/${secondaryId}/detailed-design.md`;
             const absolutePath = path.join(sourceRoot, relativePath);
@@ -3179,11 +3970,32 @@ async function projectKnowledgeSourceFiles(sourceRoot) {
                 throw new Error(`project knowledge secondary capability detailed design has wrong identity: ${capabilityId}/${secondaryId}`);
             }
             const compactPartial = isCompactPartialSecondaryCapabilityDetailedDesign(body);
+            const secondaryReaderContract = compactSecondaryReaderContract(body);
+            if (secondaryReaderContract
+                && secondaryReaderContract !== 'participant_flow_interface_v1') {
+                throw new Error(`project knowledge compact secondary capability has unsupported secondary_reader_contract: ${capabilityId}/${secondaryId}/${secondaryReaderContract}`);
+            }
+            if (participantReaderContractLevel1CapabilityIds.has(capabilityId)
+                && !usesParticipantFlowInterfaceContract(body)) {
+                throw new Error(`project knowledge compact level-1 capability requires all secondary documents to use secondary_reader_contract=participant_flow_interface_v1: ${capabilityId}/${secondaryId}`);
+            }
+            if (compactPartial && usesParticipantFlowInterfaceContract(body)) {
+                const expectedNavigationTargets = [
+                    `business/capabilities/${capabilityId}/detailed-design.md`,
+                ];
+                if (secondaryIndex > 0) {
+                    expectedNavigationTargets.push(`business/capabilities/${capabilityId}/secondary-capabilities/${secondaries[secondaryIndex - 1].secondary_capability_id}/detailed-design.md`);
+                }
+                if (secondaryIndex + 1 < secondaries.length) {
+                    expectedNavigationTargets.push(`business/capabilities/${capabilityId}/secondary-capabilities/${secondaries[secondaryIndex + 1].secondary_capability_id}/detailed-design.md`);
+                }
+                assertSecondaryNavigationLinks(body, absolutePath, sourceRoot, expectedNavigationTargets, `${capabilityId}/${secondaryId}`);
+            }
             if (compactPartial !== compactPartialLevel1CapabilityIds.has(capabilityId)) {
                 throw new Error(`project knowledge compact partial document profile mismatch: ${capabilityId}/${secondaryId}`);
             }
             if (compactPartial) {
-                assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityId, secondary, gapReportBody);
+                assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityId, secondary, gapReportBody, participantReaderContractLevel1CapabilityIds.has(capabilityId));
             }
             else {
                 assertSecondaryCapabilityDetailedDesign(body, capabilityId, secondaryId);

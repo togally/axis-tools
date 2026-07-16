@@ -43,6 +43,7 @@ Read [project-knowledge-contracts.md](references/project-knowledge-contracts.md)
 - Preserve confirmed business wording and distinguish repository facts, approved decisions, assumptions, missing evidence and conflicts.
 - One `level1_capability_id` owns one overview; every locked `secondary_capability_id` owns exactly one independent child document. `business_id` is evidence mapping, never a document boundary.
 - One secondary capability represents one independently reviewable business outcome with cohesive actor, authority/data boundary, state and lifecycle. Split enumerated independent results; never split mechanically by Controller, method, technical layer or table.
+- Every secondary child names all evidence-backed participants, their business responsibilities and flow steps. Multiple participants may collaborate on one outcome; a separate accepted result or authority boundary, not an interface alone, triggers another capability.
 - Archive each canonical document before modification. Never mutate an `approved` document in place; create a new `review` revision with `supersedes`.
 - Do not expose credentials, private URLs, raw logs/payloads, account identifiers, customer data, or unsupported claims.
 - No external OSS write occurs before explicit approval for the exact immutable run ID and target prefix.
@@ -59,6 +60,10 @@ Use `$axis-tools-prompt-create` before changing the reusable secondary-granulari
 
 Normal project-knowledge runs execute the frozen prompt and do not invoke prompt R&D. The selected granularity prompt is [secondary-capability-boundary-matrix-v3.1.md](references/secondary-capability-boundary-matrix-v3.1.md). A replacement is promoted only with frozen hashes, oracle-leak checks, worst-cell evidence and holdout status returned by `$axis-tools-prompt-create`.
 
+Keep boundary evaluation separate from detailed-design rendering. Boundary cases decide which evidence belongs to one independently reviewable outcome; [secondary-capability-detailed-design-eval-cases.json](references/secondary-capability-detailed-design-eval-cases.json), [secondary-capability-detailed-design-output-schema.json](references/secondary-capability-detailed-design-output-schema.json) and `scripts/score_secondary_capability_detailed_design.mjs` then score participant closure, reachable business flow and one block per frozen contract. Never feed the evaluator-only oracle into a model request. Any reusable detailed-design prompt or authoring-contract change must pass these public-safe cases with zero hard failures before promotion.
+
+The frozen detailed-design rendering prompt is [secondary-capability-detailed-design-prompt-baseline.md](references/secondary-capability-detailed-design-prompt-baseline.md). Its exact model tiers, inference settings, artifact hashes, diagnostic matrix, frozen holdout and deterministic tie-break are recorded in [secondary-capability-detailed-design-prompt-selection.json](references/secondary-capability-detailed-design-prompt-selection.json); normal runs must not silently substitute the longer challenger or edit an artifact without rerunning selection.
+
 ## Capability and Reader Contract
 
 Run the project-wide inventory granularity gate before selecting affected documents. Build atomic evidence cards for every inventory row and uncovered entrypoint, partition every evidence ID exactly once, record split/merge decisions and legacy dispositions, and run separate under-merge and over-split reviews. Lock `secondary_granularity_gate` before document generation. Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked.
@@ -66,8 +71,14 @@ Run the project-wide inventory granularity gate before selecting affected docume
 Default `reader_profile=compact`:
 
 - a level-1 overview has six useful sections: boundary, secondary navigation, external business flows, business semantics, business-data summary and actionable gaps;
-- a secondary document has six sections: capability boundary, caller/permission/entry matrix, capability flow, objects/rules, interface summaries and gaps;
-- compact does **not** require `3.N` grouping, full journey expansion, full ER/table-ID unions, or visible `5.N.1` through `5.N.8` sections;
+- a secondary document has six sections: capability boundary; typed participants (`业务角色`, `外部系统`, `内部业务能力`, or `自动任务`), business responsibilities, participating steps, permission/data scope; an atomic business-step flow; objects/rules; one independent `5.N` summary per real contract; and gaps;
+- every flow row binds one concrete participant to one atomic business action, precondition, result/next state, explicit next-step IDs and failure/compensation; participants must resolve back to the participant section, and every branch must remain reachable from an entry to a terminal;
+- every caller/producer × `api_id` access row is independent, and the access `api_id` set exactly equals the independent interface-summary `api_id` set; one normalized concrete contract maps back to exactly one `api_id`; consumer/handler relations stay in the flow trace and never masquerade as callers; never merge multiple HTTP, event, topic, job or command contracts into one summary or duplicate one contract under aliases;
+- every flow-contract mapping declares `caller|producer|consumer|handler|not_applicable`; every interface summary visibly lists the exact business-flow steps and all real participants where that contract occurs, while only caller/producer relations close against access evidence;
+- every `5.N` heading and nine-field summary stay reader-visible; the block owns exactly one interface machine table, one implementation machine table and its own matching exact evidence; every retained implementation row has exactly one full repository path anchor, and each visible short implementation locator resolves to exactly one anchor in that same block; one block can never borrow another block's machine trace or full-path binding;
+- newly generated or migrated compact level-1 and secondary documents declare `secondary_reader_contract=participant_flow_interface_v1`; the level-1 marker is a migration latch for all child documents, unknown values fail, and deleting or misspelling a child marker cannot silently return it to legacy validation;
+- when exact evidence proves a capability has no contract, use the dedicated `not_applicable` metadata branch, keep every flow mapping internal, and omit access/interface/implementation blocks instead of inventing an interface;
+- compact does **not** require `3.N` grouping, full journey expansion, full ER/table-ID unions, or visible `5.N.1` through `5.N.8` sections, but it still requires complete participant, flow-step and per-contract summary structure for the evidence in scope;
 - `strict_full` is allowed only for an explicit audit need with complete evidence and owns those expanded structures.
 
 Keep stable IDs, coverage controls, full paths and exact traces in hidden metadata. Readers see only business-relevant fields and `FileName:begin-end#symbol`. Every diagram uses one semantic layer and one atomic business unit or concrete method call per node.
@@ -110,6 +121,8 @@ Spend no more than 30% of the interaction challenging compound capability names,
 - Inventory level-1 count equals overview count; locked secondary count equals child-document count.
 - Every evidence ID is assigned once, every legacy aggregate has a disposition, and under/over-split reviews pass.
 - Compact documents follow the six-section reader contract and do not inherit strict-only numbering/detail requirements.
+- Every participant has a concrete business responsibility and at least one flow step; every flow step has one declared participant, one atomic action and explicit next-step IDs or a terminal marker.
+- Every discovered real contract appears exactly once as its own `5.N` summary, with no combined entries and no mismatch against the hidden access-matrix `api_id` set.
 - Parent/child, architecture/overview and adjacent navigation links resolve; no detail link returns 404.
 - Dependency graph nodes equal inventory; pending has no edges and `not_derived` projections, while derived projections exactly match direct graph edges.
 - Every factual claim has evidence or an explicit assumption/gap/conflict; basename labels bind to hidden exact anchors.
