@@ -141,6 +141,7 @@ async function main() {
   if (!dryRun && !hasFlag('--no-validate')) {
     const seenTargets = new Set();
     for (const item of result.installed) {
+      if (item?.status === 'retired') continue;
       if (!item?.target) continue;
       const skillDir = normalizeSkillTarget(item.target);
       if (seenTargets.has(skillDir)) continue;

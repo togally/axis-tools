@@ -17,4 +17,5 @@ coverage/
 .gstack/
 .worktrees/
 .axis/config.local.yml
+.axis/docs/
 .axis/outbox/

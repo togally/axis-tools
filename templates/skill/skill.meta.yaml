@@ -1,5 +1,5 @@
 schema_version: 1
-id: skill.example.axis-skill-example
+id: skill.example.axis-tools-skill-example
 visibility: public
 status: draft
 owner_role: engineering

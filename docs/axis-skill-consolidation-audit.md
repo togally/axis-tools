@@ -16,9 +16,11 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 
 ## Rename Guard
 
-- packaged skill directories match `axis-(code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*`;
+- packaged skill directories match `axis-(code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*`;
 - frontmatter `name`, manifest `name/path`, OpenAI `display_name`, and `$skill-name` prompt agree;
 - retired document skills must not reappear in the manifest or packaged directory list;
+- retired meta-tool IDs `axis-create-skill`, `axis-skill-create`, and `axis-skill-update` must not remain callable or installed; their owners are `axis-tools-skill-create` and `axis-tools-skill-update`;
+- prompt R&D is owned by `axis-tools-prompt-create`, while `axis-tools-skill-create` remains the single packaging entrypoint;
 - references may describe retirement history only in this audit, not as callable handoffs;
 - tests enforce the new consolidated inventory.
 
@@ -34,7 +36,7 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 
 ## Boundaries Kept Separate
 
-`axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, skill lifecycle, platform integrations and operations dashboards also keep their distinct risk and output contracts.
+`axis-doc-drift-capture` remains separate because it consumes completed task or PR evidence and produces audit records; it is not a design generator. Code capture, test reporting, OSS publishing, TDD, benchmarks, performance tuning, bug fixing, meta-tooling, platform integrations and operations dashboards also keep their distinct risk and output contracts.
 
 ## Archive And Dashboard Decision
 

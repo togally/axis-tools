@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -231,6 +231,70 @@ await withTempDir(async (home) => {
 });
 
 await withTempDir(async (home) => {
+  const codexHome = path.join(home, '.codex');
+  const backupDir = path.join(home, 'rename-backup');
+  const legacyNames = ['axis-create-skill', 'axis-skill-create', 'axis-skill-update'];
+  for (const name of legacyNames) {
+    const dir = path.join(codexHome, 'skills', name);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, 'SKILL.md'), `# legacy ${name}\n`, 'utf8');
+  }
+
+  const dryRun = await run([
+    'install', '--agent', 'codex', '--dry-run',
+    '--skill', 'axis-tools-skill-create',
+    '--skill', 'axis-tools-skill-update',
+  ], { env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome } });
+  const dryRunResult = JSON.parse(dryRun.stdout);
+  assert.deepEqual(
+    dryRunResult.inventory.filter((item) => item.renamed_to).map((item) => item.skill).sort(),
+    legacyNames,
+  );
+  assert.equal(dryRunResult.inventory.filter((item) => item.renamed_to).every((item) => item.action === 'block'), true);
+
+  await assert.rejects(
+    () => run([
+      'install', '--agent', 'codex',
+      '--skill', 'axis-tools-skill-create',
+      '--skill', 'axis-tools-skill-update',
+    ], { env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome } }),
+    /Refusing to remove retired skill directory/,
+  );
+
+  const forced = await run([
+    'install', '--agent', 'codex', '--force', '--backup-dir', backupDir,
+    '--skill', 'axis-tools-skill-create',
+    '--skill', 'axis-tools-skill-update',
+  ], { env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome } });
+  const forcedResult = JSON.parse(forced.stdout);
+  assert.deepEqual(
+    forcedResult.installed.filter((item) => item.status === 'retired').map((item) => item.skill).sort(),
+    legacyNames,
+  );
+  for (const name of legacyNames) {
+    await assert.rejects(() => access(path.join(codexHome, 'skills', name)), /ENOENT/);
+  }
+  await access(path.join(codexHome, 'skills', 'axis-tools-skill-create', 'SKILL.md'));
+  await access(path.join(codexHome, 'skills', 'axis-tools-skill-update', 'SKILL.md'));
+
+  await run(['install', '--rollback', backupDir], {
+    env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome },
+  });
+  for (const name of legacyNames) {
+    assert.equal(await readFile(path.join(codexHome, 'skills', name, 'SKILL.md'), 'utf8'), `# legacy ${name}\n`);
+  }
+  await assert.rejects(() => access(path.join(codexHome, 'skills', 'axis-tools-skill-create')), /ENOENT/);
+  await assert.rejects(() => access(path.join(codexHome, 'skills', 'axis-tools-skill-update')), /ENOENT/);
+
+  await assert.rejects(
+    () => run(['install', '--agent', 'codex', '--skill', 'axis-skill-create'], {
+      env: { HOME: home, USERPROFILE: home, CODEX_HOME: codexHome },
+    }),
+    /axis-skill-create was renamed to axis-tools-skill-create/,
+  );
+});
+
+await withTempDir(async (home) => {
   const { stdout } = await run(['install', '--agent', 'all'], {
     env: {
       HOME: home,
@@ -251,6 +315,8 @@ await withTempDir(async (home) => {
   const codexHome = path.join(home, '.codex');
   const dashboard = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard');
   await execFileAsync('git', ['clone', repoRoot, cleanRepo], { maxBuffer: 10 * 1024 * 1024 });
+  await symlink(path.join(repoRoot, 'node_modules'), path.join(cleanRepo, 'node_modules'), 'dir');
+  await execFileAsync('git', ['config', 'status.showUntrackedFiles', 'no'], { cwd: cleanRepo });
   await mkdir(dashboard, { recursive: true });
   await writeFile(path.join(dashboard, 'SKILL.md'), '# local edit\n', 'utf8');
 

@@ -13,8 +13,8 @@ import { parse as parseYaml } from 'yaml';
 import type { ProjectInitInspection } from './project-init/index.js';
 
 type InstallAgentChoice = 'codex' | 'claude-code' | 'all';
-type InstallStatus = 'copied' | 'identical' | 'would_copy' | 'would_replace' | 'blocked';
-type InstallAction = 'copy' | 'replace' | 'skip' | 'block';
+type InstallStatus = 'copied' | 'identical' | 'retired' | 'would_copy' | 'would_replace' | 'would_retire' | 'blocked';
+type InstallAction = 'copy' | 'replace' | 'retire' | 'skip' | 'block';
 type ReleaseChannel = 'private_beta' | 'public';
 type ReleaseGate = 'not_requested' | 'pending' | 'passed' | 'failed';
 type AssetType = 'coding_capture' | 'test_report' | 'project_knowledge_snapshot';
@@ -23,7 +23,12 @@ type PublishStatus = 'local_ready' | 'uploading' | 'published' | 'failed';
 type PublishMode = 'dry_run' | 'local_only' | 'upload';
 type ContractVersion = '0.2';
 
-const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
+const retiredPackagedSkills = new Map<string, string>([
+  ['axis-create-skill', 'axis-tools-skill-create'],
+  ['axis-skill-create', 'axis-tools-skill-create'],
+  ['axis-skill-update', 'axis-tools-skill-update'],
+]);
 
 interface InstalledSkill {
   skill: string;
@@ -44,6 +49,7 @@ interface InstallInventoryItem {
   source_sha256: string;
   target_sha256: string | null;
   reason?: string;
+  renamed_to?: string;
 }
 
 interface BackupEntry {
@@ -299,7 +305,7 @@ interface ResolveAxisConfigOptions {
 
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
-const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/outbox/'];
+const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/docs/', '.axis/outbox/'];
 const requiredEnvFields = ['endpoint_env', 'region_env', 'access_key_id_env', 'access_key_secret_env'] as const;
 const skillNames = {
   projectInit: 'axis-doc-project-init',
@@ -5355,7 +5361,7 @@ async function packagedSkillNames(): Promise<string[]> {
     if (!entry.isDirectory()) continue;
     if (existsSync(path.join(root, entry.name, 'SKILL.md'))) {
       if (!packagedSkillNamePattern.test(entry.name)) {
-        throw new Error(`Packaged skill must use axis-{category}-<action>: ${entry.name}`);
+        throw new Error(`Packaged skill must use an approved axis-{category}-<action> prefix, including axis-tools- for meta-tools: ${entry.name}`);
       }
       names.push(entry.name);
     }
@@ -5463,6 +5469,37 @@ async function inventorySkillBundle(
   };
 }
 
+async function inventoryRetiredSkillBundle(
+  retiredName: string,
+  replacementName: string,
+  agent: Exclude<InstallAgentChoice, 'all'>,
+  force: boolean,
+): Promise<InstallInventoryItem | null> {
+  const targetDir = agentSkillDir(agent, retiredName);
+  const targetStats = await lstatIfExists(targetDir);
+  if (!targetStats) return null;
+  const sourceDir = path.join(skillsRoot(), replacementName);
+  const targetSha256 = !targetStats.isSymbolicLink() && targetStats.isDirectory()
+    ? await directoryFingerprint(targetDir)
+    : null;
+  return {
+    skill: retiredName,
+    agent,
+    source: sourceDir,
+    target: targetDir,
+    target_root: agentSkillRoot(agent),
+    exists: true,
+    identical: false,
+    action: force ? 'retire' : 'block',
+    source_sha256: await directoryFingerprint(sourceDir),
+    target_sha256: targetSha256,
+    renamed_to: replacementName,
+    reason: force
+      ? `retired skill will be backed up and removed; use ${replacementName}`
+      : `retired skill exists; re-run with --force to back it up and remove it, then use ${replacementName}`,
+  };
+}
+
 function timestampForPath(date = new Date()): string {
   return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
@@ -5561,7 +5598,7 @@ async function copySkillBundle(
   }
   const tempTarget = path.join(path.dirname(targetDir), `.axis-install-${path.basename(targetDir)}-${randomBytes(4).toString('hex')}`);
   try {
-    if (inventory.action === 'replace') {
+    if (inventory.action === 'copy' || inventory.action === 'replace') {
       await backupExistingTarget(targetDir, backupSession);
       if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === skillName) {
         throw new Error(`Simulated install failure after backup for ${skillName}`);
@@ -5577,6 +5614,27 @@ async function copySkillBundle(
   return 'copied';
 }
 
+async function retireSkillBundle(
+  inventory: InstallInventoryItem,
+  backupSession: BackupSession,
+): Promise<InstallStatus> {
+  if (inventory.action === 'block') {
+    throw new Error(
+      `Refusing to remove retired skill directory at ${inventory.target}. ` +
+      `Re-run with --force to back it up and retire it; use ${inventory.renamed_to}.`,
+    );
+  }
+  if (inventory.action !== 'retire') {
+    throw new Error(`Invalid retired skill action for ${inventory.skill}: ${inventory.action}`);
+  }
+  await backupExistingTarget(inventory.target, backupSession);
+  if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === inventory.skill) {
+    throw new Error(`Simulated install failure after backup for ${inventory.skill}`);
+  }
+  await rm(inventory.target, { recursive: true, force: true });
+  return 'retired';
+}
+
 async function buildInstallInventory(
   agent: InstallAgentChoice,
   force: boolean,
@@ -5588,6 +5646,10 @@ async function buildInstallInventory(
   }
   const requestedNames = [...new Set(requestedSkills)];
   for (const requestedName of requestedNames) {
+    const replacement = retiredPackagedSkills.get(requestedName);
+    if (replacement) {
+      throw new Error(`Packaged skill ${requestedName} was renamed to ${replacement}; request the new name explicitly.`);
+    }
     if (!packagedNames.includes(requestedName)) {
       throw new Error(`Unknown packaged skill: ${requestedName}`);
     }
@@ -5602,12 +5664,20 @@ async function buildInstallInventory(
       inventory.push(await inventorySkillBundle(skillName, selectedAgent, source, target, force));
     }
   }
+  for (const [retiredName, replacementName] of retiredPackagedSkills) {
+    if (!names.includes(replacementName)) continue;
+    for (const selectedAgent of selectedAgents(agent)) {
+      const retired = await inventoryRetiredSkillBundle(retiredName, replacementName, selectedAgent, force);
+      if (retired) inventory.push(retired);
+    }
+  }
   return inventory;
 }
 
 function dryRunStatusFor(action: InstallAction): InstallStatus {
   if (action === 'skip') return 'identical';
   if (action === 'replace') return 'would_replace';
+  if (action === 'retire') return 'would_retire';
   if (action === 'block') return 'blocked';
   return 'would_copy';
 }
@@ -5636,15 +5706,29 @@ async function installPackagedSkills(
     };
   }
 
+  const blocked = inventory.find((item) => item.action === 'block');
+  if (blocked) {
+    if (blocked.renamed_to) {
+      throw new Error(
+        `Refusing to remove retired skill directory at ${blocked.target}. ` +
+        `Re-run with --force to back it up and retire it; use ${blocked.renamed_to}.`,
+      );
+    }
+    throw new Error(`Refusing to overwrite modified skill directory at ${blocked.target}. Re-run with --force to replace it.`);
+  }
+
   const backupSession = createBackupSession();
   const installed: InstalledSkill[] = [];
   try {
     for (const item of inventory) {
+      const status = item.action === 'retire'
+        ? await retireSkillBundle(item, backupSession)
+        : await copySkillBundle(item.skill, item.source, item.target, item, backupSession);
       installed.push({
         skill: item.skill,
         agent: item.agent,
         target: item.target,
-        status: await copySkillBundle(item.skill, item.source, item.target, item, backupSession),
+        status,
       });
     }
   } catch (error: unknown) {

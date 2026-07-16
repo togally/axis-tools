@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "selected_prompt_id": "boundary_matrix_v3_1",
+  "selection_rule": "Maximize the worst model-by-source score first, then mean score, stability, and finally prompt brevity.",
+  "acceptance_thresholds": {
+    "diagnostic_worst_unit_score": 80,
+    "diagnostic_mean_score": 90,
+    "final_holdout_worst_unit_score": 90,
+    "evidence_coverage": 1,
+    "invented_evidence_count": 0
+  },
+  "candidates": [
+    {
+      "prompt_id": "rule_only_v1",
+      "label": "Current rule-only baseline",
+      "prompt_file": "secondary-capability-prompt-baseline.md"
+    },
+    {
+      "prompt_id": "outcome_algorithm_v2",
+      "label": "Outcome-first algorithm",
+      "prompt_file": "secondary-capability-prompt-algorithmic.md"
+    },
+    {
+      "prompt_id": "boundary_matrix_v3",
+      "label": "Two-pass boundary matrix with merge veto and counterexamples",
+      "prompt_file": "secondary-capability-decomposition-prompt.md"
+    },
+    {
+      "prompt_id": "outcome_gate_v2_3",
+      "label": "Outcome-first algorithm with project-wide lock and balanced command/query cohesion rules",
+      "prompt_file": "secondary-capability-prompt-v2.3.md"
+    },
+    {
+      "prompt_id": "outcome_gate_v2_4",
+      "label": "Evidence-only outcome gate with end-to-end orchestration precedence",
+      "prompt_file": "secondary-capability-prompt-v2.4.md"
+    },
+    {
+      "prompt_id": "boundary_matrix_v3_1",
+      "label": "Selected atomic evidence boundary matrix with authority-aware inverse operations and balanced query/orchestration cohesion",
+      "prompt_file": "secondary-capability-boundary-matrix-v3.1.md"
+    }
+  ]
+}

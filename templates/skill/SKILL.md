@@ -1,5 +1,5 @@
 ---
-name: axis-skill-example
+name: axis-tools-skill-example
 description: Use when demonstrating a public-safe Axis skill template with mock inputs and redacted examples. / 用于演示只包含 mock 输入和脱敏示例的公开安全 Axis 技能模板。
 ---
 

@@ -26,7 +26,7 @@ async function writeExecutable(filePath, text) {
   await chmod(filePath, 0o755);
 }
 
-async function writePackagedSkill(repo, name = 'axis-skill-demo') {
+async function writePackagedSkill(repo, name = 'axis-tools-skill-demo') {
   const skillDir = path.join(repo, 'skills', name);
   await mkdir(path.join(skillDir, 'references'), { recursive: true });
   await mkdir(path.join(skillDir, 'scripts'), { recursive: true });
@@ -112,9 +112,9 @@ await withTempDir(async (tmp) => {
 
   const result = JSON.parse(stdout);
   assert.equal(result.ok, true);
-  assert.equal(result.installed.some((item) => item.skill === 'axis-skill-demo'), true);
-  const localSkill = path.join(home, '.codex', 'skills', 'axis-skill-demo');
-  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-skill-demo')), true);
+  assert.equal(result.installed.some((item) => item.skill === 'axis-tools-skill-demo'), true);
+  const localSkill = path.join(home, '.codex', 'skills', 'axis-tools-skill-demo');
+  assert.equal(await readFile(path.join(localSkill, 'SKILL.md'), 'utf8').then((text) => text.includes('axis-tools-skill-demo')), true);
   assert.equal(await readFile(path.join(localSkill, 'references', 'guide.md'), 'utf8'), 'reference\n');
   assert.equal(await readFile(path.join(localSkill, 'scripts', 'helper.py'), 'utf8'), 'print("ok")\n');
 });
@@ -295,14 +295,15 @@ const packagedSkillNames = [
   'axis-integration-yunxiao-codeup',
   'axis-ops-ali-dashboard',
   'axis-ops-oss-publish',
-  'axis-skill-create',
-  'axis-skill-update',
   'axis-test-benchmark',
   'axis-test-report',
   'axis-test-side-effects',
   'axis-test-tdd',
+  'axis-tools-prompt-create',
+  'axis-tools-skill-create',
+  'axis-tools-skill-update',
 ];
-const skillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const skillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
 const packagedSkillDirs = (await readdir(path.join(repoRoot, 'skills'), { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
@@ -406,7 +407,16 @@ assert.deepEqual(projectKnowledge.files.sort(), [
   'references/level1-capability-dependency-graph-template.yaml',
   'references/project-business-architecture-template.md',
   'references/project-technical-architecture-template.md',
+  'references/secondary-capability-boundary-matrix-v3.1.md',
+  'references/secondary-capability-decomposition-prompt.md',
   'references/secondary-capability-detailed-design-template.md',
+  'references/secondary-capability-eval-cases.json',
+  'references/secondary-capability-prompt-algorithmic.md',
+  'references/secondary-capability-prompt-baseline.md',
+  'references/secondary-capability-prompt-candidates.json',
+  'references/secondary-capability-prompt-v2.3.md',
+  'references/secondary-capability-prompt-v2.4.md',
+  'scripts/evaluate_secondary_capability_prompts.mjs',
 ]);
 assert.match(projectKnowledge.description, /^Use when/);
 assert.match(projectKnowledge.description, /[\u3400-\u9FFF]/);
@@ -473,6 +483,13 @@ for (const requiredText of [
   'Section 5 is grouped by contract',
   'Secondary Capability Granularity Contract',
   'one independently reviewable business outcome',
+  'secondary-capability-boundary-matrix-v3.1.md',
+  'Run the project-wide inventory granularity gate before selecting affected documents',
+  'Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked',
+  'secondary_granularity_gate=locked',
+  'secondary_granularity_prompt=boundary_matrix_v3_1',
+  'must_split',
+  'must_merge',
   'hidden authoring metadata',
   'file basename, line range and symbol',
   'One diagram uses one semantic layer',
@@ -481,6 +498,16 @@ for (const requiredText of [
   '5.2.8',
   'gaps/doc-gap-report.md',
   'axis-doc-development',
+  'OSS Upload Confirmation Gate',
+  'oss_upload_readiness=unavailable|ready',
+  'oss_upload_decision=pending|approved|declined',
+  'axis validate-config --repo <repo>',
+  'axis project-knowledge-capture --repo <repo>',
+  'axis oss-publish --repo <repo> --run-id <run_id> --dry-run',
+  'axis-ops-oss-publish',
+  'Do not upload in the same turn that asks for confirmation',
+  'Silence, timeout, ambiguity, or authorization from an older run is not consent',
+  'Never test write permission by creating, overwriting or deleting an OSS object before confirmation',
   '_archive',
 ]) {
   assert.match(projectKnowledgeBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -920,7 +947,7 @@ for (const skill of manifest.skills) {
   assert.match(skill.description, /[\u3400-\u9FFF]/);
 }
 
-const createSkillMd = await readFile(path.join(repoRoot, 'skills', 'axis-skill-create', 'SKILL.md'), 'utf8');
+const createSkillMd = await readFile(path.join(repoRoot, 'skills', 'axis-tools-skill-create', 'SKILL.md'), 'utf8');
 assert.match(createSkillMd, /scan.+whether/i);
 assert.match(createSkillMd, /Bilingual Description Rule/);
 assert.match(createSkillMd, /Three-Step Work Contract/);
@@ -957,7 +984,7 @@ for (const skillName of [
   'axis-test-benchmark',
   'axis-code-arch-optimize',
   'axis-code-bugfix',
-  'axis-skill-create',
+  'axis-tools-skill-create',
   'axis-doc-development',
   'axis-doc-drift-capture',
   'axis-doc-project-knowledge',

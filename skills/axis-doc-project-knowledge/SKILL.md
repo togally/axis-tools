@@ -60,6 +60,23 @@ Invariants:
 
 Keep light adversarial review below 30% of the interaction. Challenge invented capability boundaries, missing secondary capabilities, ambiguous `business_id` mapping, business rules, permissions, states, tables, interfaces, code locations, architecture claims or false completeness; then proceed decisively once evidence and decisions are sufficient.
 
+## OSS Upload Confirmation Gate
+
+Run this gate only after local project-knowledge validation succeeds. It does not change the selected operating mode and never makes publishing implicit.
+
+1. Establish upload readiness without an external write.
+   - Run `axis validate-config --repo <repo>` and require a resolved Axis v0.2 `oss_profile`.
+   - Check that every environment-variable name returned in `required_env` is present in the current process. Never read, print or log credential values, and never ask the user to paste them.
+   - Create a fresh local snapshot with `axis project-knowledge-capture --repo <repo>`, then run `axis oss-publish --repo <repo> --run-id <run_id> --dry-run`.
+   - If the available OSS integration supports it, use only a read-only remote access or policy probe. Never test write permission by creating, overwriting or deleting an OSS object before confirmation.
+   - Record exactly one readiness state: `oss_upload_readiness=unavailable|ready`. `ready` requires valid OSS configuration, required credential variables, current-task permission to invoke the publish action after confirmation, a public-safety-clean capture and a passed dry-run. Credential presence, a read-only probe and dry-run do not prove that remote OSS write IAM will succeed; report that residual risk explicitly.
+2. If readiness is `unavailable`, keep the result local, report the missing configuration, credential, permission or preflight condition, and do not ask a misleading upload question.
+3. If readiness is `ready`, record `oss_upload_decision=pending|approved|declined`, show the exact `run_id`, `target_prefix`, file count and redaction count, and ask one direct yes/no question: `检测到 OSS 配置和上传条件，是否将本次项目知识快照上传到 <target_prefix>？`
+   - End the turn and wait for the answer. Do not upload in the same turn that asks for confirmation.
+   - Silence, timeout, ambiguity, or authorization from an older run is not consent.
+4. Only explicit approval for that exact `run_id` and `target_prefix` changes the decision to `approved`. Then use `$axis-ops-oss-publish` to execute the real upload. On rejection, set the decision to `declined`, keep the snapshot local and do not ask again unless the run or target changes or the user requests it.
+5. After an authorized upload, verify `publish.status=published`, `_sync/manifest.json`, Dashboard/catalog current paths and archive traceability. If remote OSS IAM rejects the write, report the failure and keep the local snapshot; do not broaden permissions or retry destructively.
+
 ## Markdown Table Readability Contract
 
 Reader-facing Markdown horizontal tables have at most six columns and contain only compact, atomic values. A record containing several prose-heavy business fields uses its own `项目 / 内容` vertical table. Stable IDs, coverage controls, full repository paths and machine trace fields stay in named HTML comments; do not expose them merely to preserve a capture schema. Escape literal pipe characters inside cells. Dashboard horizontal scrolling is only a rendering fallback; it does not make a wide source table valid.
@@ -77,6 +94,14 @@ Compatibility switch: historical strict documents without `reader_profile` remai
 ## Secondary Capability Granularity Contract
 
 One secondary capability owns one independently reviewable business outcome. / 一个二级能力只承载一个可独立命名、评审和演进的业务结果，并保持内聚的主要角色、权限与数据边界、权威状态和生命周期。独立入口或触发、独立用户可见结果、独立状态机、独立治理权限或可单独演进的事务边界，都是继续拆分的证据。像“发布、互动、发现、举报与治理”这样枚举多个目标的能力必须拆开；同一个 Controller、Service、目录或 `business_id` 不能作为保持合并的理由。反过来，不得按 Controller/Service/Mapper 技术层、每个方法或每张表机械拆分；多个方法共同完成同一业务结果时仍属于同一二级能力。
+
+Run the project-wide inventory granularity gate before selecting affected documents. This gate applies to `bootstrap`, `scan_and_reconcile` and `requirement_design`: a reviewed, unchanged or currently out-of-scope inventory row is not grandfathered when its evidence shows a compound boundary. Read and apply the selected [boundary_matrix_v3_1 prompt](references/secondary-capability-boundary-matrix-v3.1.md).
+
+1. Build atomic evidence cards for every current inventory row and every uncovered entrypoint. Record actor, trigger, business object, authoritative state change, visible result, permission/data scope, transaction/compensation/governance boundary and exact evidence ID.
+2. Run the selected outcome-first partition independently of document generation. Every evidence ID appears exactly once. Record `must_split`, `must_merge`, the proposed secondary capability, cohesion reason and legacy `business_id` disposition.
+3. Split different independently governable results, lifecycles, authorities, compensation/arbitration boundaries or independently evolving behavior. Keep technical steps, aliases, inverse state operations, owner-scoped object lifecycle operations and query/analysis variants together when they serve one business result under the same authority and data scope.
+4. Run separate under-merge and over-split reviews. Reject enumeration-style aggregates such as “下单、履约、退款与售后”; also reject one-method-one-capability partitions that lack an independent business outcome.
+5. Record `secondary_granularity_gate=locked`, `secondary_granularity_prompt=boundary_matrix_v3_1`, the audited inventory revision, evidence count, resulting capability count and legacy dispositions. Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked.
 
 For reader-facing brevity, document status, revision, stable IDs, coverage controls, gap IDs, confidence and source commit live in hidden authoring metadata rather than the visible introduction. Reader-facing evidence shows only the file basename, line range and symbol; the complete repository-relative `path:begin-end#symbol` remains in an `axis-evidence` HTML comment for capture and audit. Keep only fields that affect a business decision, permission/data scope, state, amount/quantity/time, sensitive handling, user-visible result or failure semantics; omit generic response wrappers, pagination boilerplate, trace fields and infrastructure-only DTO fields from reader-facing tables.
 
@@ -140,7 +165,7 @@ When an interface reads or writes persisted data, record the actual mapper/repos
 1. Establish source baseline and language.
 2. Write `architecture/technical.md` using [project-technical-architecture-template.md](references/project-technical-architecture-template.md).
 3. Write `architecture/business.md` using [project-business-architecture-template.md](references/project-business-architecture-template.md).
-4. Build `business/inventory.yaml` with stable, unique `level1_capability_id` values; each item contains `level1_capability_name` and a complete, granularity-reviewed `secondary_capabilities` array, and each secondary item contains its `business_ids` mapping. Split independent outcomes even when they share one Controller or aggregate legacy `business_id`; record the legacy aggregate as history rather than mapping it ambiguously to many current children.
+4. Run the project-wide granularity gate with the selected [boundary_matrix_v3_1 prompt](references/secondary-capability-boundary-matrix-v3.1.md), lock the boundary inventory, then write `business/inventory.yaml` with stable, unique `level1_capability_id` values; each item contains `level1_capability_name` and a complete, granularity-reviewed `secondary_capabilities` array, and each secondary item contains its `business_ids` mapping. Split independent outcomes even when they share one Controller or aggregate legacy `business_id`; record the legacy aggregate as history rather than mapping it ambiguously to many current children.
 5. Create `business/level1-capability-dependency-graph.yaml` in pending state from [level1-capability-dependency-graph-template.yaml](references/level1-capability-dependency-graph-template.yaml), with the complete node set, no edges and one graph gap.
 6. Write one compact `business/capabilities/{level1_capability_id}/detailed-design.md` per unique level-1 capability using [business-capability-detailed-design-template.md](references/business-capability-detailed-design-template.md). It links every secondary capability, derives one `3.N` per actual external business capability, uses business-only atomic diagrams, exposes only business-relevant data summaries, and keeps journey/table/dependency IDs plus exact traces hidden. Until the graph gate passes, its dependency projection stays `not_derived`.
 7. Write one compact six-section `business/capabilities/{level1_capability_id}/secondary-capabilities/{secondary_capability_id}/detailed-design.md` using [secondary-capability-detailed-design-template.md](references/secondary-capability-detailed-design-template.md) for every inventory secondary capability. Do not select `strict_full` without complete evidence and an explicit reader need.
@@ -152,13 +177,14 @@ Do not generate feature documents, task records or version records in this pass.
 
 ## scan_and_reconcile
 
-1. Classify existing design documents as current, stale, conflicting, duplicated, orphaned or reusable evidence.
-2. Resolve every usable design to exactly one `level1_capability_id`; then map its features and evidence to one or more `secondary_capability_id` values and their `business_ids`. Stop on `zero_matches` or `multiple_matches` instead of guessing.
-3. Archive affected canonical documents before changing them.
-4. Reconcile the compact level-1 overview and each affected compact secondary document. The overview retains every secondary link, one independent section per external business capability, atomic business diagrams, short method locations, professional terminology and business-data summaries. Each child exposes only its six reader sections while hidden machine comments retain complete interface-local flows, objects, call chains, data effects, quality evidence and the same parent `journey_id` and `table_id` values.
-5. If any graph input or capability relationship changed, archive the current graph and every overview whose projection will change, return them to pending, then run one global model synthesis only after the complete parent/child gate passes. Update the graph first and all overview projections as one batch.
-6. Create reviewed global revisions only when capability changes alter shared boundaries, value streams, system structure or cross-cutting principles.
-7. Preserve superseded documents and record disposition, revision links, metadata, inventory refs and gaps.
+1. Audit the complete current inventory and uncovered entrypoints with the project-wide granularity gate; do not limit this boundary pass to the requested or code-changed level-1 capability.
+2. Lock the resulting secondary-capability inventory and legacy dispositions before classifying documents as current, stale, conflicting, duplicated, orphaned or reusable evidence.
+3. Resolve every usable design to exactly one `level1_capability_id`; then map its features and evidence to one or more locked `secondary_capability_id` values and their `business_ids`. Stop on `zero_matches` or `multiple_matches` instead of guessing.
+4. Archive affected canonical documents before changing them.
+5. Reconcile the compact level-1 overview and each affected compact secondary document. The overview retains every secondary link, one independent section per external business capability, atomic business diagrams, short method locations, professional terminology and business-data summaries. Each child exposes only its six reader sections while hidden machine comments retain complete interface-local flows, objects, call chains, data effects, quality evidence and the same parent `journey_id` and `table_id` values.
+6. If any graph input or capability relationship changed, archive the current graph and every overview whose projection will change, return them to pending, then run one global model synthesis only after the complete parent/child gate passes. Update the graph first and all overview projections as one batch.
+7. Create reviewed global revisions only when capability changes alter shared boundaries, value streams, system structure or cross-cutting principles.
+8. Preserve superseded documents and record disposition, revision links, metadata, inventory refs and gaps.
 
 ## requirement_design
 
@@ -217,6 +243,7 @@ Verify:
 - `business/level1-capability-dependency-graph.yaml` exists, its node set exactly equals inventory, pending state has no edges and one tracked gap, and derived state is allowed only after every level-1 and secondary design is complete;
 - every level-1 overview has one dependency control line and one upstream/downstream projection sourced from the graph; pending uses `not_derived`, while derived upstream/downstream exactly equal the graph's direct incoming/outgoing sets and use `[]` only for a confirmed empty direct set;
 - inventory secondary-capability count equals `secondary_capability_detailed_design` document count;
+- `secondary_granularity_gate=locked` and `secondary_granularity_prompt=boundary_matrix_v3_1` exist for the audited inventory revision; every evidence ID is assigned exactly once, every legacy aggregate has a disposition, and the under-merge and over-split reviews pass before any detail document is generated;
 - every secondary capability satisfies the granularity contract: one independently reviewable business outcome with cohesive actors, state ownership and lifecycle; enumerated independent outcomes are split and technical layers are not treated as capabilities;
 - select the validation profile first: explicit `compact` uses compact checks, explicit `strict_full` uses full checks, and a historical strict document without `reader_profile` is grandfathered under the previous full contract;
 - every compact level-1 and secondary document has exactly six visible chapters, real HTTP/EVENT/TOPIC/JOB/COMMAND entries, short `FileName:begin-end#symbol` locations bound to exact hidden repository paths, atomic single-layer diagrams, explicit actionable gaps and complete parent/adjacent navigation; no visible lifecycle, coverage, stable-ID or full-path panels remain;
@@ -233,13 +260,13 @@ Verify:
 - reader-facing metadata is hidden, evidence labels use only file basename plus line range and symbol, and every diagram uses one semantic layer with atomic business or method nodes; every method node is exactly one concrete method call;
 - every reader-facing horizontal Markdown table has at most six columns; records with long code paths, evidence or prose are vertical or split by a stable ID rather than compressed into narrow columns;
 - no credentials, private URLs, raw logs, account identifiers or customer data are exposed;
-- local validation completes before optional project-knowledge capture or OSS dry-run;
-- OSS synchronization occurs only with explicit authorization.
+- local validation completes before the OSS Upload Confirmation Gate;
+- when `oss_upload_readiness=ready`, the skill asks exactly once and waits; OSS synchronization occurs only after `oss_upload_decision=approved` for the exact run and target;
 - after an authorized OSS synchronization, the latest published `_sync/manifest.json` defines the current document structure; manually refresh Dashboard and verify legacy paths are absent from the current list while their archived revisions remain traceable.
 
 ## Handoff
 
-Report mode, generated/revised paths, affected `level1_capability_id`, `secondary_capability_id`, and `business_id` values, user-journey and table-design coverage states and gap IDs, inventory and architecture revisions, archive records, evidence coverage, confidence boundaries, gaps, validation commands and residual risk. Use `$axis-doc-drift-capture` after implementation or PR completion for task/version records and remaining drift classification.
+Report mode, generated/revised paths, affected `level1_capability_id`, `secondary_capability_id`, and `business_id` values, user-journey and table-design coverage states and gap IDs, inventory and architecture revisions, archive records, evidence coverage, confidence boundaries, gaps, validation commands, `oss_upload_readiness`, `oss_upload_decision` and residual risk. Use `$axis-doc-drift-capture` after implementation or PR completion for task/version records and remaining drift classification.
 
 ## After Use Deposition
 

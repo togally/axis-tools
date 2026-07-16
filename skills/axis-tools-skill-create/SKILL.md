@@ -1,17 +1,17 @@
 ---
-name: axis-skill-create
+name: axis-tools-skill-create
 description: Use when the user asks to scan, create, review, or refactor a reusable Axis or Orbit/Codex skill. / 用于扫描、创建、审查或重构可复用的 Axis 或 Orbit/Codex 技能。
 ---
 
-# Axis Create Skill
+# Axis Tools Skill Create
 
-Use this skill as the single entrypoint for reusable-skill discovery, creation, review, and refactoring. It scans the current work for repeatable behavior and decides whether a workflow is stable enough to become a skill, selects its namespace and target repository, then creates and validates the package.
+Use this skill as the single creation entrypoint for reusable-skill discovery, creation, review, and refactoring. It scans the current work for repeatable behavior and decides whether a workflow is stable enough to become a skill, selects its namespace and target repository, then creates and validates the package.
 
 ## Unified Skill Creation
 
 Use one creation standard for both repositories; do not configure or invoke a separate Orbit skill creator.
 
-- Cross-project engineering, architecture, testing, API performance, database/schema, deployment, and platform operations belong in `axis-tools` and use `axis-{category}-xxx` names.
+- Cross-project engineering, architecture, testing, API performance, database/schema, deployment, platform operations, meta-tooling, and public-safe investment workflow governance belong in `axis-tools` and use the taxonomy below.
 - Personal AI information-matrix, content lifecycle, article-title, publishing, and resource-delivery skills belong in the Orbit repository and use `orbit-xxx` names.
 - Private, customer-specific, credential-bearing, or closed-repository workflows stay private/local; do not publish them to either repository.
 - Do not recreate `axis-pulse-*` or `axis-article-title` compatibility aliases. Their retained presence would make one request trigger competing workflows.
@@ -25,13 +25,20 @@ New public Axis skills must use `axis-{category}-{action}`. Choose the category 
 | Document | `axis-doc-xxx` | Architecture, design, data/database design, project initialization/migration, knowledge bootstrap, document dashboards, document generation, document drift and traceability. |
 | Code | `axis-code-xxx` | Implementation, bugfix, refactor, performance tuning, and coding-result capture. |
 | Test | `axis-test-xxx` | TDD, real-side-effect testing, benchmarks, and test-result capture. |
-| Skill | `axis-skill-xxx` | Skill creation, refactoring, packaging, installation, and updates. |
+| Tools | `axis-tools-xxx` | Skill lifecycle, prompt creation and evaluation, packaging, installation, and updates. |
 | Operations | `axis-ops-xxx` | Publishing, observability dashboards, delivery, and operational controls. |
 | Integration | `axis-integration-xxx` | Named third-party platform, repository, or service integrations. |
+| Trade | `axis-trade-xxx` | Public-safe trading-system governance, portfolio ledgers, investment risk research, plan gates, and evidence-backed monitoring. Never package personal holdings, account identifiers, credentials, or private financial data. |
 
-Examples: `axis-doc-project-init`, `axis-doc-project-knowledge`, `axis-doc-development`, `axis-doc-dashbord`, `axis-code-bugfix`, `axis-test-benchmark`, `axis-ops-oss-publish`, and `axis-integration-source-control`.
+Examples: `axis-doc-project-init`, `axis-doc-project-knowledge`, `axis-code-bugfix`, `axis-test-benchmark`, `axis-tools-skill-create`, `axis-tools-prompt-create`, `axis-ops-oss-publish`, `axis-integration-source-control`, and `axis-trade-plan-gate`.
 
-Every public Axis skill must use this taxonomy; the creation and deposit helpers reject the old generic `axis-xxx` shape. Do not invent a category for an ambiguous workflow: ask the user whether its primary outcome is document, code, test, skill, operations, or integration.
+Every public Axis skill must use this taxonomy; the creation and deposit helpers reject the old generic `axis-xxx` shape and the retired `axis-skill-xxx` prefix. Do not invent a category for an ambiguous workflow: ask the user whether its primary outcome is document, code, test, tools, operations, integration, or public-safe trade governance.
+
+## Prompt Creation Handoff
+
+When a reusable skill depends on a non-trivial generative prompt, or correctness varies by source kind or model tier, use `$axis-tools-prompt-create` after the trigger-overlap audit and before freezing the prompt in `SKILL.md` or `references/`.
+
+`axis-tools-prompt-create` owns the prompt contract, candidates, public-safe evaluation corpus, blind model matrix, scoring, holdout integrity, and selection evidence. This skill retains ownership of reusable-workflow discovery, namespace and repository selection, trigger overlap, bundle structure, `agents/openai.yaml`, manifest, installation, commit, and push. The handoff returns evidence here; it must not create a second skill-packaging entrypoint or a circular invocation.
 
 ## Workflow
 
@@ -51,7 +58,7 @@ node scripts/axis-skill-create.mjs \
   --source-root ~/.codex/skills \
   --name axis-code-example-skill \
   --description "Use when ... / 用于..." \
-  --body-file /tmp/axis-skill-example.md \
+  --body-file /tmp/axis-tools-skill-example.md \
   --deposit --commit --push --branch main
 ```
 
@@ -109,7 +116,7 @@ Rules:
 - The line must start with `Use when` so Codex trigger semantics remain predictable.
 - The same line must contain Chinese text; do not put the Chinese explanation only in the body.
 - Keep `agents/openai.yaml` `short_description` bilingual too.
-- For packaged skills, `agents/openai.yaml` `display_name` must equal the skill name, such as `axis-skill-example`; do not use a marketing label or custom title there.
+- For packaged skills, `agents/openai.yaml` `display_name` must equal the skill name, such as `axis-tools-skill-example`; do not use a marketing label or custom title there.
 - Keep both languages concise and public-safe.
 - The create and deposit helper scripts reject skills whose description is English-only or Chinese-only.
 
@@ -142,7 +149,7 @@ Keep this light adversarial behavior to no more than 30% of the interaction. Use
 
 ## After Use Deposition
 
-After using this skill, check whether this scan found a reusable improvement to the skill-creation process itself. If yes, update `axis-skill-create`, validate it, refresh the local install, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
+After using this skill, check whether this scan found a reusable improvement to the skill-creation process itself. If yes, update `axis-tools-skill-create`, validate it, refresh the local install, and push to the remote repository when permissions allow. If no reusable change exists, say that no skill update is needed.
 
 ## Checks
 
@@ -157,6 +164,6 @@ After using this skill, check whether this scan found a reusable improvement to 
 - After deposit, run the repo's available test suite when present (for example `npm test`) and update any packaged-skill manifest or explicit skill-list tests that must include the new skill.
 - Commit and push only the skill bundle, manifest, docs, and tests related to the skill change.
 - Public skills must not be named for a private product or contain private hostnames, credentials, customer names, or closed-repo-only workflows.
-- Select the target repository and prefix before creating a skill: `axis-{category}-xxx` for new Axis skills, `orbit-xxx` for Orbit, never `axis-pulse-*` compatibility aliases. Use only `doc`, `code`, `test`, `skill`, `ops`, or `integration` as the Axis category. Project initialization, migration, knowledge bootstrap, and document dashboards belong to `doc`.
+- Select the target repository and prefix before creating a skill: `axis-{category}-xxx` for outcome skills, `axis-tools-xxx` for meta-tools, `orbit-xxx` for Orbit, never `axis-pulse-*` compatibility aliases. Use only `doc`, `code`, `test`, `tools`, `ops`, `integration`, or `trade` as the Axis category. Project initialization, migration, knowledge bootstrap, and document dashboards belong to `doc`; reusable investment-system governance belongs to `trade`, while personal holdings and account data remain outside public bundles.
 - A refactor must prove retired top-level skills are absent from the manifest, packaged directory list, public inventory, and installed refresh result.
 - Review trigger overlap, evidence overlap, output overlap, and circular handoffs before retaining multiple top-level skills; move deep internal guidance to `references/` when one front door is sufficient.

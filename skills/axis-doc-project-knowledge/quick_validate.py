@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -74,6 +75,13 @@ REQUIRED_TERMS = {
         "Section 5 is grouped by contract",
         "Secondary Capability Granularity Contract",
         "one independently reviewable business outcome",
+        "secondary-capability-boundary-matrix-v3.1.md",
+        "Run the project-wide inventory granularity gate before selecting affected documents",
+        "Do not generate or reconcile detailed-design documents until the secondary-capability boundary inventory is locked",
+        "secondary_granularity_gate=locked",
+        "secondary_granularity_prompt=boundary_matrix_v3_1",
+        "must_split",
+        "must_merge",
         "hidden authoring metadata",
         "file basename, line range and symbol",
         "One diagram uses one semantic layer",
@@ -84,6 +92,16 @@ REQUIRED_TERMS = {
         "安全、测试与验收",
         "5.2.8",
         "not_applicable",
+        "OSS Upload Confirmation Gate",
+        "oss_upload_readiness=unavailable|ready",
+        "oss_upload_decision=pending|approved|declined",
+        "axis validate-config --repo <repo>",
+        "axis project-knowledge-capture --repo <repo>",
+        "axis oss-publish --repo <repo> --run-id <run_id> --dry-run",
+        "axis-ops-oss-publish",
+        "Do not upload in the same turn that asks for confirmation",
+        "Silence, timeout, ambiguity, or authorization from an older run is not consent",
+        "Never test write permission by creating, overwriting or deleting an OSS object before confirmation",
         "After Use Deposition",
     ],
 }
@@ -516,6 +534,76 @@ def validate(skill_dir: Path) -> int:
             return fail(readability_error)
 
     if skill_name == "axis-doc-project-knowledge":
+        candidate_manifest_path = (
+            skill_dir
+            / "references"
+            / "secondary-capability-prompt-candidates.json"
+        )
+        eval_cases_path = (
+            skill_dir / "references" / "secondary-capability-eval-cases.json"
+        )
+        evaluator_path = (
+            skill_dir / "scripts" / "evaluate_secondary_capability_prompts.mjs"
+        )
+        for required_path, label in [
+            (candidate_manifest_path, "granularity prompt candidate manifest"),
+            (eval_cases_path, "granularity prompt evaluation cases"),
+            (evaluator_path, "granularity prompt evaluator"),
+        ]:
+            if not required_path.exists():
+                return fail(f"{label} not found")
+        try:
+            candidate_manifest = json.loads(
+                candidate_manifest_path.read_text(encoding="utf-8")
+            )
+            eval_cases = json.loads(eval_cases_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            return fail(f"granularity evaluation JSON is invalid: {exc}")
+        selected_prompt_id = candidate_manifest.get("selected_prompt_id")
+        if selected_prompt_id != "boundary_matrix_v3_1":
+            return fail("selected granularity prompt id must be boundary_matrix_v3_1")
+        candidates = candidate_manifest.get("candidates", [])
+        selected_candidate = next(
+            (
+                candidate
+                for candidate in candidates
+                if candidate.get("prompt_id") == selected_prompt_id
+            ),
+            None,
+        )
+        if not selected_candidate or not selected_candidate.get("prompt_file"):
+            return fail("selected granularity prompt manifest entry is missing")
+        references_dir = (skill_dir / "references").resolve()
+        selected_prompt_path = (
+            references_dir / selected_candidate["prompt_file"]
+        ).resolve()
+        if references_dir not in selected_prompt_path.parents:
+            return fail("selected granularity prompt escapes references directory")
+        if not selected_prompt_path.exists():
+            return fail("selected granularity prompt not found")
+        selected_prompt = selected_prompt_path.read_text(encoding="utf-8")
+        for term in [
+            "Atomic evidence census",
+            "must_split",
+            "must_merge",
+            "exactly once",
+            "one acceptance sentence",
+            "independent reverse audit",
+        ]:
+            if term not in selected_prompt:
+                return fail(f"selected granularity prompt missing: {term}")
+        if len(candidates) < 6:
+            return fail("granularity prompt evaluation requires six candidates")
+        cases = eval_cases.get("cases", [])
+        if len(cases) < 12:
+            return fail("granularity prompt evaluation requires twelve cases")
+        if len([case for case in cases if case.get("evaluation_stage") == "sealed"]) < 3:
+            return fail("granularity prompt evaluation requires three sealed cases")
+        if len(
+            [case for case in cases if case.get("evaluation_stage") == "final_holdout"]
+        ) < 3:
+            return fail("granularity prompt evaluation requires three final holdout cases")
+
         level1_overview_template_path = (
             skill_dir / "references" / "business-capability-detailed-design-template.md"
         )

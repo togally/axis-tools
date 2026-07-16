@@ -583,7 +583,7 @@ async function writeRecoveryJournal(repo, state, entries, transactionId = 'test-
         gitignore: rendered.gitignore,
       }),
     }), rendered);
-    assert.equal(rendered.gitignore, '# existing\n.axis/outbox/\n.axis/config.local.yml\n');
+    assert.equal(rendered.gitignore, '# existing\n.axis/outbox/\n.axis/config.local.yml\n.axis/docs/\n');
   });
 }
 

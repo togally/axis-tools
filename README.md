@@ -61,7 +61,7 @@ scripts/                 # 可选：可复用校验或执行脚本
 
 ### 当前提供的 skills
 
-合并与命名规则见 [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md)：当前所有 packaged skills 均使用 `axis-{category}-xxx` 命名，按职责家族整合，暂不做目录级合并。
+合并与命名规则见 [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md)：结果型 packaged skills 使用 `axis-{category}-xxx`，元工具统一使用 `axis-tools-xxx`，按职责家族整合。
 
 | 类别 | Skill | 使用场景 |
 | --- | --- | --- |
@@ -80,8 +80,9 @@ scripts/                 # 可选：可复用校验或执行脚本
 | 文档设计 | `axis-doc-project-init` | 通过一次汇总确认配置或迁移 Axis v0.2 的组织、项目、OSS、发布、目录和语言设置。 |
 | 留档与发布 | `axis-code-capture` | 将编码、重构、缺陷修复或架构工作采集为执行报告和经验卡片。 |
 | 留档与发布 | `axis-ops-oss-publish` | 校验、脱敏、dry-run、同步 v0.2 项目文档或上传项目内不可变包。 |
-| Skill 生命周期 | `axis-skill-create` | 扫描对话中的可复用技能机会，并判断是否适合创建公开安全的 Axis/Codex skill。 |
-| Skill 生命周期 | `axis-skill-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
+| 元工具 | `axis-tools-prompt-create` | 通过多数据源、不同模型等级的盲测创建、改进并选择稳健提示词。 |
+| 元工具 | `axis-tools-skill-create` | 作为唯一 skill 创建入口，扫描、创建、审查或重构公开安全的 Axis/Orbit skill。 |
+| 元工具 | `axis-tools-skill-update` | 从 `axis-tools` 更新、刷新、重装或修复本地 Axis packaged skills。 |
 | 代码平台 | `axis-integration-yunxiao-codeup` | 通过云效 Codeup OpenAPI 查询代码库、创建合并请求或接入 Git 评审操作。 |
 
 ### 准备事项
@@ -149,6 +150,8 @@ axis install --agent codex --force
 
 安装会复制完整 skill bundle，包括 `SKILL.md`、`agents/`、`references/` 和 `scripts/` 等目录。
 
+从旧的 `axis-create-skill`、`axis-skill-create` 或 `axis-skill-update` 迁移时，先用 `--dry-run --force` 预览，再执行 `--force`。安装器会先备份旧目录再将其退役；不带 `--force` 时会阻止删除本地旧内容。
+
 ### 刷新 skills
 
 从仓库拉取最新版本、安装到本机并校验：
@@ -189,6 +192,8 @@ axis project-init --repo /path/to/project --answers-file /tmp/project-init-answe
 .axis/config.yml
 .gitignore
 ```
+
+`.gitignore` 会固定包含 `.axis/config.local.yml`、`.axis/docs/` 和 `.axis/outbox/`，因此生成的项目文档与发布包只保留在本地，不进入 Git；skill 自身的提示词、模板、公开安全评测源数据和校验脚本仍作为源码维护。
 
 v0.2 项目使用 organization registry 解析 OSS profile。项目配置只声明 `organization.id`、`project.slug` 和 `oss.profile`；`metadata.json` / `manifest.json` 中的 organization、project、OSS、repo/run 字段由工具生成快照，不需要也不允许人工二次配置。
 
@@ -288,17 +293,17 @@ node scripts/axis-skill-create.mjs --scan-conversation /tmp/conversation.txt --j
 node scripts/axis-skill-create.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
-  --name axis-skill-example \
-  --description "Use when API evidence should become a reusable public-safe workflow." \
-  --body-file /tmp/axis-skill-example.md \
+  --name axis-tools-skill-example \
+  --description "Use when API evidence should become a reusable public-safe workflow. / 用于将 API 证据沉淀为可复用的公开安全工作流。" \
+  --body-file /tmp/axis-tools-skill-example.md \
   --deposit --commit --push --branch main
 ```
 
 把已有本地 Codex skill 沉淀到本仓库：
 
 ```bash
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example --commit --push --branch main
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example --commit --push --branch main
 ```
 
 沉淀脚本会复制完整 bundle，使用 Codex `quick_validate.py` 校验，并更新 `skills/manifest.json`。
@@ -323,6 +328,7 @@ npm test
 npm run test:cli
 npm run test:local-outbox
 npm run test:skill-deposit
+npm run test:tools-skill-namespace
 npm run test:axis-skills
 npm run test:public-governance
 ```
@@ -330,7 +336,7 @@ npm run test:public-governance
 直接校验某个 skill bundle：
 
 ```bash
-python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-skill-create
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-tools-skill-create
 ```
 
 提交 skill 变更前，至少运行：
@@ -407,7 +413,7 @@ scripts/                 # Optional reusable validators or runners
 
 ### Available Skills
 
-See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md) for consolidation and naming rules. All packaged skills use the `axis-{category}-xxx` naming format and are integrated by capability family instead of directory-level merges.
+See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-audit.md) for consolidation and naming rules. Outcome-oriented packaged skills use `axis-{category}-xxx`; meta-tools use `axis-tools-xxx`.
 
 | Category | Skill | When to use it |
 | --- | --- | --- |
@@ -426,8 +432,9 @@ See [`docs/axis-skill-consolidation-audit.md`](docs/axis-skill-consolidation-aud
 | Documentation and design | `axis-doc-project-init` | Configure or migrate Axis v0.2 organization, project, OSS, release, directory, and language settings with one consolidated confirmation. |
 | Deposition and release | `axis-code-capture` | Capture coding, refactor, bugfix, or architecture work as execution reports and experience cards. |
 | Deposition and release | `axis-ops-oss-publish` | Validate, redact, dry-run, synchronize v0.2 project documents, or upload immutable packages inside a project. |
-| Skill lifecycle | `axis-skill-create` | Scan conversations for reusable skill opportunities and decide whether to create a public-safe Axis/Codex skill. |
-| Skill lifecycle | `axis-skill-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
+| Meta-tools | `axis-tools-prompt-create` | Create, refine, and select robust prompts through blind evaluation across source kinds and model tiers. |
+| Meta-tools | `axis-tools-skill-create` | Act as the single skill-creation entrypoint for scanning, creating, reviewing, or refactoring public-safe Axis/Orbit skills. |
+| Meta-tools | `axis-tools-skill-update` | Update, refresh, reinstall, or repair local Axis packaged skills from `axis-tools`. |
 | Code platform | `axis-integration-yunxiao-codeup` | Query Codeup repositories, create merge requests, or support Git review through Yunxiao Codeup OpenAPI. |
 
 ### Prerequisites
@@ -495,6 +502,8 @@ axis install --agent codex --force
 
 Installation copies the full bundle, including `SKILL.md`, `agents/`, `references/`, and `scripts/` where present.
 
+When migrating from `axis-create-skill`, `axis-skill-create`, or `axis-skill-update`, preview with `--dry-run --force`, then run with `--force`. The installer backs up and retires the old directories; without `--force` it refuses to remove local legacy content.
+
 ### Refresh Skills
 
 Pull the latest repository version, install locally, and validate:
@@ -535,6 +544,8 @@ The apply flow creates or updates:
 .axis/config.yml
 .gitignore
 ```
+
+`.gitignore` always includes `.axis/config.local.yml`, `.axis/docs/`, and `.axis/outbox/`, so generated project documents and publication packages remain local and outside Git. Prompt sources, templates, public-safe evaluation cases, and validators inside skill bundles remain maintained source assets.
 
 Axis v0.2 projects resolve OSS profiles through an organization registry. Project config only declares `organization.id`, `project.slug`, and `oss.profile`; organization, project, OSS, and repo/run fields in `metadata.json` and `manifest.json` are generated snapshots, not manually duplicated configuration.
 
@@ -634,17 +645,17 @@ Create a confirmed public-safe skill and deposit it into the repo:
 node scripts/axis-skill-create.mjs \
   --repo ~/axis-tools \
   --source-root ~/.codex/skills \
-  --name axis-skill-example \
-  --description "Use when API evidence should become a reusable public-safe workflow." \
-  --body-file /tmp/axis-skill-example.md \
+  --name axis-tools-skill-example \
+  --description "Use when API evidence should become a reusable public-safe workflow. / 用于将 API 证据沉淀为可复用的公开安全工作流。" \
+  --body-file /tmp/axis-tools-skill-example.md \
   --deposit --commit --push --branch main
 ```
 
 Deposit an existing local Codex skill into this repository:
 
 ```bash
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example
-node scripts/axis-skill-deposit.mjs --skill axis-skill-example --commit --push --branch main
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example
+node scripts/axis-skill-deposit.mjs --skill axis-tools-skill-example --commit --push --branch main
 ```
 
 The deposit script copies the full bundle, validates it with Codex `quick_validate.py`, and updates `skills/manifest.json`.
@@ -669,6 +680,7 @@ Focused tests:
 npm run test:cli
 npm run test:local-outbox
 npm run test:skill-deposit
+npm run test:tools-skill-namespace
 npm run test:axis-skills
 npm run test:public-governance
 ```
@@ -676,7 +688,7 @@ npm run test:public-governance
 Validate one skill bundle directly:
 
 ```bash
-python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-skill-create
+python3 ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py skills/axis-tools-skill-create
 ```
 
 Before committing skill changes, run at least:

@@ -95,7 +95,16 @@
         "references/level1-capability-dependency-graph-template.yaml",
         "references/project-business-architecture-template.md",
         "references/project-technical-architecture-template.md",
-        "references/secondary-capability-detailed-design-template.md"
+        "references/secondary-capability-boundary-matrix-v3.1.md",
+        "references/secondary-capability-decomposition-prompt.md",
+        "references/secondary-capability-detailed-design-template.md",
+        "references/secondary-capability-eval-cases.json",
+        "references/secondary-capability-prompt-algorithmic.md",
+        "references/secondary-capability-prompt-baseline.md",
+        "references/secondary-capability-prompt-candidates.json",
+        "references/secondary-capability-prompt-v2.3.md",
+        "references/secondary-capability-prompt-v2.4.md",
+        "scripts/evaluate_secondary_capability_prompts.mjs"
       ]
     },
     {
@@ -131,18 +140,29 @@
       ]
     },
     {
-      "name": "axis-skill-create",
-      "description": "Use when the user asks to scan the conversation for reusable skill opportunities or decide whether a public Axis/Codex skill should be created. / 用于扫描对话中的可复用技能机会并判断是否应创建公开安全的 Axis/Codex 技能。",
-      "path": "skills/axis-skill-create",
+      "name": "axis-tools-prompt-create",
+      "description": "Use when a prompt must be created, refined, or selected through blind evaluation across multiple public-safe data sources and model tiers. / 用于通过多种公开安全数据源和不同级别模型的盲测来创建、改进或选出稳健提示词。",
+      "path": "skills/axis-tools-prompt-create",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/prompt-evaluation-contract.md",
+        "scripts/rank_prompt_results.mjs"
+      ]
+    },
+    {
+      "name": "axis-tools-skill-create",
+      "description": "Use when the user asks to scan, create, review, or refactor a reusable Axis or Orbit/Codex skill. / 用于扫描、创建、审查或重构可复用的 Axis 或 Orbit/Codex 技能。",
+      "path": "skills/axis-tools-skill-create",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"
       ]
     },
     {
-      "name": "axis-skill-update",
+      "name": "axis-tools-skill-update",
       "description": "Use when the user asks to update, refresh, reinstall, or repair local Axis/Codex packaged skills from axis-tools. / 用于从 axis-tools 更新、刷新、重装或修复本地 Axis/Codex 打包技能。",
-      "path": "skills/axis-skill-update",
+      "path": "skills/axis-tools-skill-update",
       "files": [
         "SKILL.md",
         "agents/openai.yaml"

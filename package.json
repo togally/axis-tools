@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "node --loader ts-node/esm src/cli.ts",
-    "test": "npm run test:cli && npm run test:install-script && npm run test:protocol-migrations && npm run test:project-init && npm run test:project-init-transaction && npm run test:local-outbox && npm run test:doc-dashbord-skill && npm run test:doc-development-consolidation && npm run test:skill-deposit && npm run test:axis-skills && npm run test:public-governance",
+    "test": "npm run test:cli && npm run test:install-script && npm run test:protocol-migrations && npm run test:project-init && npm run test:project-init-transaction && npm run test:local-outbox && npm run test:doc-dashbord-skill && npm run test:doc-development-consolidation && npm run test:skill-deposit && npm run test:secondary-capability-prompt-eval && npm run test:tools-skill-namespace && npm run test:axis-skills && npm run test:public-governance",
     "test:cli": "npm run build && node tests/cli-install.test.mjs",
     "test:install-script": "node tests/install-script.test.mjs",
     "test:local-outbox": "npm run build && node tests/local-outbox.test.mjs",
@@ -20,6 +20,8 @@
     "test:project-init": "npm run build && node tests/project-init-v02.test.mjs",
     "test:project-init-transaction": "npm run build && node tests/project-init-transaction.test.mjs",
     "test:skill-deposit": "node tests/skill-deposit.test.mjs",
+    "test:secondary-capability-prompt-eval": "node tests/secondary-capability-prompt-eval.test.mjs",
+    "test:tools-skill-namespace": "node tests/tools-skill-namespace.test.mjs",
     "test:axis-skills": "node tests/axis-skills.test.mjs",
     "test:public-governance": "node tests/public-governance.test.mjs"
   },

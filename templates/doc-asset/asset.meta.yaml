@@ -7,7 +7,7 @@ source:
   kind: redacted-example
   public_ref: null
 related_skills:
-  - skill.example.axis-skill-example
+  - skill.example.axis-tools-skill-example
 related_repos: []
 reuse:
   audience:

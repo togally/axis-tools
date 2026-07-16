@@ -10,10 +10,15 @@ import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { parse as parseYaml } from 'yaml';
-const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|test|tools|trade)-[a-z0-9][a-z0-9-]*$/;
+const retiredPackagedSkills = new Map([
+    ['axis-create-skill', 'axis-tools-skill-create'],
+    ['axis-skill-create', 'axis-tools-skill-create'],
+    ['axis-skill-update', 'axis-tools-skill-update'],
+]);
 const execFileAsync = promisify(execFile);
 const defaultOutboxDir = '.axis/outbox';
-const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/outbox/'];
+const ignoredLocalPaths = ['.axis/config.local.yml', '.axis/docs/', '.axis/outbox/'];
 const requiredEnvFields = ['endpoint_env', 'region_env', 'access_key_id_env', 'access_key_secret_env'];
 const skillNames = {
     projectInit: 'axis-doc-project-init',
@@ -4587,6 +4592,32 @@ async function inventorySkillBundle(skillName, agent, sourceDir, targetDir, forc
         ...(reason ? { reason } : {}),
     };
 }
+async function inventoryRetiredSkillBundle(retiredName, replacementName, agent, force) {
+    const targetDir = agentSkillDir(agent, retiredName);
+    const targetStats = await lstatIfExists(targetDir);
+    if (!targetStats)
+        return null;
+    const sourceDir = path.join(skillsRoot(), replacementName);
+    const targetSha256 = !targetStats.isSymbolicLink() && targetStats.isDirectory()
+        ? await directoryFingerprint(targetDir)
+        : null;
+    return {
+        skill: retiredName,
+        agent,
+        source: sourceDir,
+        target: targetDir,
+        target_root: agentSkillRoot(agent),
+        exists: true,
+        identical: false,
+        action: force ? 'retire' : 'block',
+        source_sha256: await directoryFingerprint(sourceDir),
+        target_sha256: targetSha256,
+        renamed_to: replacementName,
+        reason: force
+            ? `retired skill will be backed up and removed; use ${replacementName}`
+            : `retired skill exists; re-run with --force to back it up and remove it, then use ${replacementName}`,
+    };
+}
 function timestampForPath(date = new Date()) {
     return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z');
 }
@@ -4677,7 +4708,7 @@ async function copySkillBundle(skillName, sourceDir, targetDir, inventory, backu
     }
     const tempTarget = path.join(path.dirname(targetDir), `.axis-install-${path.basename(targetDir)}-${randomBytes(4).toString('hex')}`);
     try {
-        if (inventory.action === 'replace') {
+        if (inventory.action === 'copy' || inventory.action === 'replace') {
             await backupExistingTarget(targetDir, backupSession);
             if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === skillName) {
                 throw new Error(`Simulated install failure after backup for ${skillName}`);
@@ -4693,6 +4724,21 @@ async function copySkillBundle(skillName, sourceDir, targetDir, inventory, backu
     }
     return 'copied';
 }
+async function retireSkillBundle(inventory, backupSession) {
+    if (inventory.action === 'block') {
+        throw new Error(`Refusing to remove retired skill directory at ${inventory.target}. ` +
+            `Re-run with --force to back it up and retire it; use ${inventory.renamed_to}.`);
+    }
+    if (inventory.action !== 'retire') {
+        throw new Error(`Invalid retired skill action for ${inventory.skill}: ${inventory.action}`);
+    }
+    await backupExistingTarget(inventory.target, backupSession);
+    if (process.env.AXIS_INSTALL_FAIL_AFTER_BACKUP === inventory.skill) {
+        throw new Error(`Simulated install failure after backup for ${inventory.skill}`);
+    }
+    await rm(inventory.target, { recursive: true, force: true });
+    return 'retired';
+}
 async function buildInstallInventory(agent, force, requestedSkills = []) {
     const packagedNames = await packagedSkillNames();
     if (packagedNames.length === 0) {
@@ -4700,6 +4746,10 @@ async function buildInstallInventory(agent, force, requestedSkills = []) {
     }
     const requestedNames = [...new Set(requestedSkills)];
     for (const requestedName of requestedNames) {
+        const replacement = retiredPackagedSkills.get(requestedName);
+        if (replacement) {
+            throw new Error(`Packaged skill ${requestedName} was renamed to ${replacement}; request the new name explicitly.`);
+        }
         if (!packagedNames.includes(requestedName)) {
             throw new Error(`Unknown packaged skill: ${requestedName}`);
         }
@@ -4713,6 +4763,15 @@ async function buildInstallInventory(agent, force, requestedSkills = []) {
             inventory.push(await inventorySkillBundle(skillName, selectedAgent, source, target, force));
         }
     }
+    for (const [retiredName, replacementName] of retiredPackagedSkills) {
+        if (!names.includes(replacementName))
+            continue;
+        for (const selectedAgent of selectedAgents(agent)) {
+            const retired = await inventoryRetiredSkillBundle(retiredName, replacementName, selectedAgent, force);
+            if (retired)
+                inventory.push(retired);
+        }
+    }
     return inventory;
 }
 function dryRunStatusFor(action) {
@@ -4720,6 +4779,8 @@ function dryRunStatusFor(action) {
         return 'identical';
     if (action === 'replace')
         return 'would_replace';
+    if (action === 'retire')
+        return 'would_retire';
     if (action === 'block')
         return 'blocked';
     return 'would_copy';
@@ -4738,15 +4799,26 @@ async function installPackagedSkills(agent, force, dryRun, requestedSkills = [])
             backup_dir: null,
         };
     }
+    const blocked = inventory.find((item) => item.action === 'block');
+    if (blocked) {
+        if (blocked.renamed_to) {
+            throw new Error(`Refusing to remove retired skill directory at ${blocked.target}. ` +
+                `Re-run with --force to back it up and retire it; use ${blocked.renamed_to}.`);
+        }
+        throw new Error(`Refusing to overwrite modified skill directory at ${blocked.target}. Re-run with --force to replace it.`);
+    }
     const backupSession = createBackupSession();
     const installed = [];
     try {
         for (const item of inventory) {
+            const status = item.action === 'retire'
+                ? await retireSkillBundle(item, backupSession)
+                : await copySkillBundle(item.skill, item.source, item.target, item, backupSession);
             installed.push({
                 skill: item.skill,
                 agent: item.agent,
                 target: item.target,
-                status: await copySkillBundle(item.skill, item.source, item.target, item, backupSession),
+                status,
             });
         }
     }

@@ -1,8 +1,8 @@
 schema_version: 1
 description: Public-safe skill catalog index. Entries point to runnable skill bundles or templates without copying their full content.
 skills:
-  - id: skill.example.axis-skill-example
-    name: axis-skill-example
+  - id: skill.example.axis-tools-skill-example
+    name: axis-tools-skill-example
     path: templates/skill
     status: draft
     visibility: public

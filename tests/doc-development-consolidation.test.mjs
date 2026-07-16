@@ -258,7 +258,16 @@ assert.deepEqual(projectKnowledge.files.sort(), [
   'references/level1-capability-dependency-graph-template.yaml',
   'references/project-business-architecture-template.md',
   'references/project-technical-architecture-template.md',
+  'references/secondary-capability-boundary-matrix-v3.1.md',
+  'references/secondary-capability-decomposition-prompt.md',
   'references/secondary-capability-detailed-design-template.md',
+  'references/secondary-capability-eval-cases.json',
+  'references/secondary-capability-prompt-algorithmic.md',
+  'references/secondary-capability-prompt-baseline.md',
+  'references/secondary-capability-prompt-candidates.json',
+  'references/secondary-capability-prompt-v2.3.md',
+  'references/secondary-capability-prompt-v2.4.md',
+  'scripts/evaluate_secondary_capability_prompts.mjs',
 ]);
 const projectKnowledgeBody = await readFile(path.join(repoRoot, projectKnowledge.path, 'SKILL.md'), 'utf8');
 for (const requiredText of [
