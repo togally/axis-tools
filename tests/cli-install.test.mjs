@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -251,6 +251,8 @@ await withTempDir(async (home) => {
   const codexHome = path.join(home, '.codex');
   const dashboard = path.join(codexHome, 'skills', 'axis-ops-ali-dashboard');
   await execFileAsync('git', ['clone', repoRoot, cleanRepo], { maxBuffer: 10 * 1024 * 1024 });
+  await symlink(path.join(repoRoot, 'node_modules'), path.join(cleanRepo, 'node_modules'), 'dir');
+  await writeFile(path.join(cleanRepo, '.git', 'info', 'exclude'), 'node_modules\n', 'utf8');
   await mkdir(dashboard, { recursive: true });
   await writeFile(path.join(dashboard, 'SKILL.md'), '# local edit\n', 'utf8');
 

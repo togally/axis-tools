@@ -16,6 +16,7 @@ const axisSkillCategories = [
   'skill',
   'ops',
   'integration',
+  'trade',
 ];
 const axisCategorizedSkillPattern = new RegExp(
   `^axis-(?:${axisSkillCategories.join('|')})-[a-z0-9][a-z0-9-]*$`,

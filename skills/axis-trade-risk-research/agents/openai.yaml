@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-trade-risk-research"
+  short_description: "Research investment risks with current sources / 用当前来源调研投资风险"
+  default_prompt: "Use $axis-trade-risk-research to produce a current source-backed risk review for this precisely identified investment candidate."
+
+policy:
+  allow_implicit_invocation: true

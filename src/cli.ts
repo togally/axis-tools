@@ -23,7 +23,7 @@ type PublishStatus = 'local_ready' | 'uploading' | 'published' | 'failed';
 type PublishMode = 'dry_run' | 'local_only' | 'upload';
 type ContractVersion = '0.2';
 
-const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test)-[a-z0-9][a-z0-9-]*$/;
+const packagedSkillNamePattern = /^axis-(?:code|doc|integration|ops|skill|test|trade)-[a-z0-9][a-z0-9-]*$/;
 
 interface InstalledSkill {
   skill: string;

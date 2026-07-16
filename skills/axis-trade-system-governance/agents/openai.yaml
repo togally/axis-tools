@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-trade-system-governance"
+  short_description: "Govern trading-system changes safely / 安全治理交易系统变更"
+  default_prompt: "Use $axis-trade-system-governance to evaluate a trading-system change and stop for explicit approval before mutating active parameters."
+
+policy:
+  allow_implicit_invocation: true

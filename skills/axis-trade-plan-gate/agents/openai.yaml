@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-trade-plan-gate"
+  short_description: "Gate investment plans before activation / 投资计划激活前门禁审查"
+  default_prompt: "Use $axis-trade-plan-gate to evaluate this investment plan against the approved system, current research, and portfolio capacity."
+
+policy:
+  allow_implicit_invocation: true
