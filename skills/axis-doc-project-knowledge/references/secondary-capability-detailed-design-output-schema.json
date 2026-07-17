@@ -2,10 +2,33 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["case_id", "secondary_capability_id", "participants", "flows", "interfaces"],
+  "required": [
+    "case_id",
+    "secondary_capability_id",
+    "render_status",
+    "blocking_gap_codes",
+    "participants",
+    "flows",
+    "interfaces"
+  ],
   "properties": {
     "case_id": { "type": "string" },
     "secondary_capability_id": { "type": "string" },
+    "render_status": { "type": "string", "enum": ["ready", "blocked"] },
+    "blocking_gap_codes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "missing_concrete_contract",
+          "synthetic_internal_contract",
+          "generic_participant_responsibility",
+          "generic_flow_semantics",
+          "incomplete_interface_evidence",
+          "unbound_evidence"
+        ]
+      }
+    },
     "participants": {
       "type": "array",
       "items": {

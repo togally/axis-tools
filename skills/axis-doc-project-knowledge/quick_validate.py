@@ -42,7 +42,7 @@ REQUIRED_TERMS = {
         "$axis-tools-prompt-create",
         "domain bundle retains its public-safe gold cases",
         "secondary-capability-detailed-design-output-schema.json",
-        "secondary-capability-detailed-design-prompt-baseline.md",
+        "secondary-capability-detailed-design-prompt-evidence-gated.md",
         "secondary-capability-detailed-design-prompt-selection.json",
         "artifact hashes, diagnostic matrix, frozen holdout",
         "OSS Upload Confirmation Gate",
@@ -144,6 +144,9 @@ DETAILED_DESIGN_CANDIDATE_PROMPT_FILES = {
     ),
     "detailed-design-closure-first-v1": (
         "secondary-capability-detailed-design-prompt-closure-first.md"
+    ),
+    "detailed-design-evidence-gated-v2": (
+        "secondary-capability-detailed-design-prompt-evidence-gated.md"
     ),
 }
 
@@ -1031,6 +1034,8 @@ def validate(skill_dir: Path) -> int:
         if set(detailed_design_output_schema.get("required", [])) != {
             "case_id",
             "secondary_capability_id",
+            "render_status",
+            "blocking_gap_codes",
             "participants",
             "flows",
             "interfaces",

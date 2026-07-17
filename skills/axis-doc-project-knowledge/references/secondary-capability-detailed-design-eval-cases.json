@@ -78,8 +78,8 @@
           { "id": "Q-P01", "statement": "The authenticated buyer is the business participant for both query routes." },
           { "id": "Q-F01", "statement": "The list route returns only orders visible to the current buyer." },
           { "id": "Q-F02", "statement": "The detail route checks buyer ownership before returning one order." },
-          { "id": "Q-I01", "statement": "GET /trade/orders is one independently callable HTTP contract." },
-          { "id": "Q-I02", "statement": "GET /trade/orders/{orderId} is a second independently callable HTTP contract." }
+          { "id": "Q-I01", "statement": "GET /trade/orders is called by the authenticated buyer to list that buyer's visible orders and returns a buyer-scoped order list." },
+          { "id": "Q-I02", "statement": "GET /trade/orders/{orderId} is called by the authenticated buyer to view one owned order and returns that detail or a business rejection." }
         ]
       },
       "oracle": {
@@ -203,9 +203,9 @@
           { "id": "R-F01", "statement": "The accepted case is the prerequisite for supplying return logistics." },
           { "id": "R-F02", "statement": "Recorded logistics is the prerequisite for merchant receipt confirmation." },
           { "id": "R-F03", "statement": "Merchant receipt confirmation produces the return-received result." },
-          { "id": "R-I01", "statement": "The application route is an independent HTTP contract." },
-          { "id": "R-I02", "statement": "The return-logistics route is an independent HTTP contract." },
-          { "id": "R-I03", "statement": "The merchant confirmation route is an independent HTTP contract." }
+          { "id": "R-I01", "statement": "POST /trade/after-sales is called by the buyer to open an eligible return-and-refund case and returns acceptance or business rejection." },
+          { "id": "R-I02", "statement": "POST /trade/after-sales/{caseId}/return-logistics is called by the buyer to record return carrier and tracking data and returns the recorded shipment result." },
+          { "id": "R-I03", "statement": "POST /merchant/after-sales/{caseId}/confirm-return is called by the merchant to confirm receipt and makes the case eligible for refund continuation." }
         ]
       },
       "oracle": {
@@ -231,7 +231,7 @@
     },
     {
       "case_id": "commerce_shipment_document",
-      "evaluation_stage": "final_holdout",
+      "evaluation_stage": "diagnostic",
       "source_kind": "workflow_and_contract_inventory",
       "model_input": {
         "locked_secondary_capability": {
@@ -298,8 +298,8 @@
           { "id": "S-P01", "statement": "The merchant fulfillment operator performs both shipment actions." },
           { "id": "S-F01", "statement": "Delivery data must be recorded before shipment is confirmed." },
           { "id": "S-F02", "statement": "Shipment confirmation is the terminal result of this flow." },
-          { "id": "S-I01", "statement": "The delivery-data route is an independent HTTP contract." },
-          { "id": "S-I02", "statement": "The package-shipment route is another independent HTTP contract." }
+          { "id": "S-I01", "statement": "POST /merchant/orders/{orderId}/delivery is called by the merchant to record carrier and tracking data and returns the recorded delivery result." },
+          { "id": "S-I02", "statement": "POST /merchant/orders/{orderId}/packages/{packageId}/ship is called by the merchant to confirm shipment and returns the package-shipped result." }
         ]
       },
       "oracle": {
@@ -397,8 +397,8 @@
           { "id": "H-P02", "statement": "The clinic scheduling capability owns the reservation move and change event." },
           { "id": "H-F01", "statement": "The replacement slot must be available before the reservation is moved." },
           { "id": "H-F02", "statement": "A confirmed move publishes one schedule-change event." },
-          { "id": "H-I01", "statement": "The reschedule route is one independently callable HTTP contract." },
-          { "id": "H-I02", "statement": "The schedule-change event is one independent downstream contract." }
+          { "id": "H-I01", "statement": "POST /patient/appointments/{appointmentId}/reschedule is called by the patient to move an owned future appointment and returns the confirmed replacement or rejection." },
+          { "id": "H-I02", "statement": "EVENT appointment.rescheduled is produced by clinic scheduling to publish the confirmed replacement schedule to notification consumers." }
         ]
       },
       "oracle": {
@@ -422,7 +422,7 @@
     },
     {
       "case_id": "asset_retirement_approval_document",
-      "evaluation_stage": "final_holdout",
+      "evaluation_stage": "diagnostic",
       "source_kind": "approval_branch_and_authority_policy",
       "model_input": {
         "locked_secondary_capability": {
@@ -515,9 +515,9 @@
           { "id": "A-F01", "statement": "Submission creates a pending request that requires one terminal decision." },
           { "id": "A-F02", "statement": "Approval is a terminal governed result." },
           { "id": "A-F03", "statement": "Rejection is a terminal governed result and requires a reason." },
-          { "id": "A-I01", "statement": "Submission is one independent HTTP contract." },
-          { "id": "A-I02", "statement": "Approval is one independent HTTP contract." },
-          { "id": "A-I03", "statement": "Rejection is one independent HTTP contract." }
+          { "id": "A-I01", "statement": "POST /assets/{assetId}/retirement-requests is called by the asset manager to submit one governed request and returns a pending request or rejection." },
+          { "id": "A-I02", "statement": "POST /retirement-requests/{requestId}/approve is called by the compliance approver to approve one pending request and returns the approved result." },
+          { "id": "A-I03", "statement": "POST /retirement-requests/{requestId}/reject is called by the compliance approver to reject one pending request and returns the rejected result with a reason." }
         ]
       },
       "oracle": {
@@ -539,6 +539,308 @@
           { "api_id": "RETIREMENT_APPROVE", "contract": "POST /retirement-requests/{requestId}/approve", "actor_ids": ["compliance_approver"] },
           { "api_id": "RETIREMENT_REJECT", "contract": "POST /retirement-requests/{requestId}/reject", "actor_ids": ["compliance_approver"] }
         ]
+      }
+    },
+    {
+      "case_id": "membership_registration_internal_method_only",
+      "evaluation_stage": "diagnostic",
+      "source_kind": "representative_internal_service_method",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "membership_registration",
+          "name": "Membership registration",
+          "business_outcome": "A new membership record is created for an eligible visitor."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "visitor",
+            "role": "Visitor",
+            "responsibility": "Supplies registration data and receives the registration decision.",
+            "evidence_ids": ["M-P01"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "membership_registration",
+            "start_step_ids": ["submit_registration"],
+            "terminal_step_ids": ["submit_registration"],
+            "steps": [
+              {
+                "step_id": "submit_registration",
+                "actor_id": "visitor",
+                "action": "Submit registration data",
+                "api_id": "MEMBERSHIP_REGISTER",
+                "input_state": "Unregistered visitor with candidate membership data",
+                "output_state": "Membership registration accepted or rejected",
+                "next_step_ids": [],
+                "evidence_ids": ["M-F01"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "MEMBERSHIP_REGISTER",
+            "contract": "COMMAND internal:MembershipServiceImpl.register",
+            "actor_ids": ["visitor"],
+            "business_purpose": "Create one membership record.",
+            "visible_result": "Registration accepted or rejected.",
+            "evidence_ids": ["M-I01"]
+          }
+        ],
+        "evidence": [
+          { "id": "M-P01", "statement": "A representative service method is named register; no caller or authorization boundary was supplied." },
+          { "id": "M-F01", "statement": "The same internal method is the only available implementation locator; no business-flow trace was supplied." },
+          { "id": "M-I01", "statement": "MembershipServiceImpl.register is an internal method name, not an HTTP, event, topic, job, or named business-command contract." }
+        ]
+      },
+      "oracle": {
+        "expected_render_status": "blocked",
+        "expected_blocking_gap_codes": [
+          "synthetic_internal_contract"
+        ],
+        "allowed_blocking_gap_codes": [
+          "missing_concrete_contract",
+          "synthetic_internal_contract",
+          "generic_participant_responsibility",
+          "generic_flow_semantics",
+          "incomplete_interface_evidence",
+          "unbound_evidence"
+        ],
+        "required_actor_ids": [],
+        "expected_flows": [],
+        "expected_interfaces": []
+      }
+    },
+    {
+      "case_id": "sales_reconciliation_scheduler_class_only",
+      "evaluation_stage": "diagnostic",
+      "source_kind": "scheduled_task_implementation_label",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "sales_reconciliation",
+          "name": "Sales reconciliation",
+          "business_outcome": "Recorded sold counts are reconciled with completed trade quantities."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "reconciliation_task",
+            "role": "Automatic task",
+            "responsibility": "Compares recorded and completed sold counts and records the reconciliation result.",
+            "evidence_ids": ["J-P01"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "sales_reconciliation",
+            "start_step_ids": ["reconcile_sold_counts"],
+            "terminal_step_ids": ["reconcile_sold_counts"],
+            "steps": [
+              {
+                "step_id": "reconcile_sold_counts",
+                "actor_id": "reconciliation_task",
+                "action": "Compare recorded sold counts with completed trade quantities",
+                "api_id": "SALES_RECONCILE",
+                "input_state": "Recorded sold counts and completed trade quantities are available",
+                "output_state": "A reconciliation result is recorded",
+                "next_step_ids": [],
+                "evidence_ids": ["J-F01"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "SALES_RECONCILE",
+            "contract": "JOB SoldCountReconcileJob.reconcile",
+            "actor_ids": ["reconciliation_task"],
+            "business_purpose": "Reconcile recorded sold counts with completed trade quantities.",
+            "visible_result": "A reconciliation result is recorded.",
+            "evidence_ids": ["J-I01"]
+          }
+        ],
+        "evidence": [
+          { "id": "J-P01", "statement": "A scheduler class exists, but no named observable job boundary or trigger identifier was supplied." },
+          { "id": "J-F01", "statement": "The implementation method compares sold counts; the triggering job contract was not supplied." },
+          { "id": "J-I01", "statement": "SoldCountReconcileJob.reconcile is a Java class-and-method locator, not a named scheduled-job contract." }
+        ]
+      },
+      "oracle": {
+        "expected_render_status": "blocked",
+        "expected_blocking_gap_codes": [
+          "synthetic_internal_contract"
+        ],
+        "allowed_blocking_gap_codes": [
+          "missing_concrete_contract",
+          "synthetic_internal_contract",
+          "generic_participant_responsibility",
+          "generic_flow_semantics",
+          "incomplete_interface_evidence",
+          "unbound_evidence"
+        ],
+        "required_actor_ids": [],
+        "expected_flows": [],
+        "expected_interfaces": []
+      }
+    },
+    {
+      "case_id": "generic_governance_scaffold_document",
+      "evaluation_stage": "diagnostic",
+      "source_kind": "generic_reader_scaffold",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "governed_record_update",
+          "name": "Governed record update",
+          "business_outcome": "One governed record reaches an accepted or rejected update result."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "requester",
+            "role": "Requester",
+            "responsibility": "Initiates an evidence-supported contract and receives a visible business result.",
+            "evidence_ids": ["G-P01"]
+          },
+          {
+            "actor_id": "governance_capability",
+            "role": "Internal business capability",
+            "responsibility": "Reviews authority and prerequisites, then forms or rejects the independent result.",
+            "evidence_ids": ["G-P02"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "governed_record_update",
+            "start_step_ids": ["review_authority"],
+            "terminal_step_ids": ["form_result", "return_rejection"],
+            "steps": [
+              {
+                "step_id": "review_authority",
+                "actor_id": "governance_capability",
+                "action": "Review caller authority, target scope, and business prerequisites",
+                "api_id": "GOVERNED_RECORD_UPDATE",
+                "input_state": "At least one request has arrived",
+                "output_state": "Authority accepted or rejected",
+                "next_step_ids": ["form_result", "return_rejection"],
+                "evidence_ids": ["G-F01"]
+              },
+              {
+                "step_id": "form_result",
+                "actor_id": "governance_capability",
+                "action": "Form and return the locked business result",
+                "api_id": "not_applicable",
+                "input_state": "Authority and prerequisites accepted",
+                "output_state": "Locked business result formed",
+                "next_step_ids": [],
+                "evidence_ids": ["G-F02"]
+              },
+              {
+                "step_id": "return_rejection",
+                "actor_id": "governance_capability",
+                "action": "Return the authority or prerequisite rejection result",
+                "api_id": "not_applicable",
+                "input_state": "Authority or prerequisite rejected",
+                "output_state": "Business result not formed",
+                "next_step_ids": [],
+                "evidence_ids": ["G-F03"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [
+          {
+            "api_id": "GOVERNED_RECORD_UPDATE",
+            "contract": "POST /records/{recordId}/update",
+            "actor_ids": ["requester", "governance_capability"],
+            "business_purpose": "Process the business operation.",
+            "visible_result": "Return the result.",
+            "evidence_ids": ["G-I01"]
+          }
+        ],
+        "evidence": [
+          { "id": "G-P01", "statement": "The source labels a requester but provides no concrete responsibility or authorization evidence." },
+          { "id": "G-P02", "statement": "The source labels an internal capability but provides no concrete business responsibility." },
+          { "id": "G-F01", "statement": "This is a generic authority-check scaffold, not an observed business action." },
+          { "id": "G-F02", "statement": "This is a generic success scaffold, not an observed state transition." },
+          { "id": "G-F03", "statement": "This is a generic rejection scaffold, not an observed rejection rule." },
+          { "id": "G-I01", "statement": "A route string exists, but its request, result, permission, and implementation-chain evidence were not supplied." }
+        ]
+      },
+      "oracle": {
+        "expected_render_status": "blocked",
+        "expected_blocking_gap_codes": [
+          "generic_participant_responsibility",
+          "generic_flow_semantics",
+          "incomplete_interface_evidence"
+        ],
+        "allowed_blocking_gap_codes": [
+          "generic_participant_responsibility",
+          "generic_flow_semantics",
+          "incomplete_interface_evidence",
+          "unbound_evidence"
+        ],
+        "required_actor_ids": [],
+        "expected_flows": [],
+        "expected_interfaces": []
+      }
+    },
+    {
+      "case_id": "warehouse_reconciliation_representative_storage_method",
+      "evaluation_stage": "final_holdout",
+      "source_kind": "representative_storage_method_without_boundary",
+      "model_input": {
+        "locked_secondary_capability": {
+          "secondary_capability_id": "warehouse_stock_reconciliation",
+          "name": "Warehouse stock reconciliation",
+          "business_outcome": "A warehouse stock discrepancy receives a traceable reconciliation result."
+        },
+        "participant_inventory": [
+          {
+            "actor_id": "warehouse_operator",
+            "role": "Warehouse operator",
+            "responsibility": "Reviews a discrepancy and receives a reconciliation result.",
+            "evidence_ids": ["W-P01"]
+          }
+        ],
+        "flow_inventory": [
+          {
+            "flow_id": "warehouse_stock_reconciliation",
+            "start_step_ids": ["compare_stock_snapshots"],
+            "terminal_step_ids": ["compare_stock_snapshots"],
+            "steps": [
+              {
+                "step_id": "compare_stock_snapshots",
+                "actor_id": "warehouse_operator",
+                "action": "Compare recorded and observed stock",
+                "api_id": "not_applicable",
+                "input_state": "Potential stock discrepancy",
+                "output_state": "Reconciliation result recorded",
+                "next_step_ids": [],
+                "evidence_ids": ["W-F01"]
+              }
+            ]
+          }
+        ],
+        "interface_inventory": [],
+        "evidence": [
+          { "id": "W-P01", "statement": "Only StockRecordMapper.compareSnapshot was supplied; it does not identify the calling role or authorization boundary." },
+          { "id": "W-F01", "statement": "The representative storage method does not prove the trigger, business steps, state decision, or observable result." }
+        ]
+      },
+      "oracle": {
+        "expected_render_status": "blocked",
+        "expected_blocking_gap_codes": [
+          "missing_concrete_contract"
+        ],
+        "allowed_blocking_gap_codes": [
+          "missing_concrete_contract",
+          "generic_participant_responsibility",
+          "generic_flow_semantics",
+          "incomplete_interface_evidence",
+          "unbound_evidence"
+        ],
+        "required_actor_ids": [],
+        "expected_flows": [],
+        "expected_interfaces": []
       }
     }
   ]

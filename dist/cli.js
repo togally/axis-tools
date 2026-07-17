@@ -1407,6 +1407,8 @@ function assertCompactSingleLayerDiagrams(body, scope) {
 }
 const compactConcreteContractPattern = /^(?:(?:GET|POST|PUT|PATCH|DELETE)\s+\/[A-Za-z0-9_{}?&=./:\-]+|(?:EVENT|TOPIC|JOB|COMMAND)\s+[A-Za-z0-9_.:/\-]+)$/;
 const compactGenericFlowTextPattern = /^(?:发起(?:能力)?请求|校验(?:主体与)?权威边界|形成(?:可验收)?业务结果|执行(?:业务)?操作|处理请求|返回结果|完成流程)$/;
+const compactGenericReaderScaffoldPattern = /(?:发起有证据支持的契约，并接收可见业务结果|复核权威和业务前置状态，形成或拒绝该独立业务结果|复核调用权威、目标对象范围和业务前置状态|形成并返回已锁定的业务结果|返回不满足权威或业务前置状态的拒绝结果|目标业务对象标识及该契约声明的业务字段|只声明锁定证据中的验收结果|当前主体、租户与目标业务对象范围|仅处理本能力边界内的对象与状态|至少一个入口请求已到达|不把缺失证据推断成授权或状态规则|深层事务或补偿未取证时保留当前状态并记录缺口)/;
+const compactSyntheticInternalContractPattern = /^(?:COMMAND|JOB)\s+(?:internal:(?:[A-Za-z_$][A-Za-z0-9_$]*\.)+[A-Za-z_$][A-Za-z0-9_$]*|(?:[a-z_$][A-Za-z0-9_$]*\.)*[A-Z][A-Za-z0-9_$]*\.[A-Za-z_$][A-Za-z0-9_$]*|[A-Z][A-Za-z0-9_$]*(?:Job|Task|Runner)(?:\s+.+)?)$/;
 const compactPlaceholderEvidencePattern = /(?:\bmissing_evidence\b|\bTODO\b|\bTBD\b)/i;
 function compactCanonicalContract(value) {
     return normalizeMarkdownCell(value).replace(/\s+/g, ' ');
@@ -1604,6 +1606,9 @@ function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityI
     }
     if (currentCompactProfile) {
         assertCompactCodeLocatorAtomicity(body, scope);
+        if (compactGenericReaderScaffoldPattern.test(visibleMarkdownBody(body))) {
+            throw new Error(`project knowledge compact secondary capability reader-facing scaffold is not evidence-backed: ${scope}`);
+        }
         const visibleParticipantTable = markdownTables(sections.get(2) ?? '').find((table) => {
             const headers = table.headers.map(normalizeMarkdownCell);
             return headers.length === 5
@@ -1779,8 +1784,13 @@ function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityI
                 throw new Error(`project knowledge compact secondary capability access matrix references unknown participant: ${scope}/${participant || 'unknown'}`);
             }
             if (!projectKnowledgeTraceIdentifierPattern.test(apiId)
-                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)
-                || !compactConcreteContractPattern.test(contract)) {
+                || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)) {
+                throw new Error(`project knowledge compact secondary capability access matrix aggregates or omits a concrete interface: ${scope}/${apiId || 'unknown'}`);
+            }
+            if (compactSyntheticInternalContractPattern.test(contract)) {
+                throw new Error(`project knowledge compact secondary capability derives a contract from an internal method: ${scope}/${apiId}`);
+            }
+            if (!compactConcreteContractPattern.test(contract)) {
                 throw new Error(`project knowledge compact secondary capability access matrix aggregates or omits a concrete interface: ${scope}/${apiId || 'unknown'}`);
             }
             const previousContract = accessContractByApi.get(apiId);
@@ -1934,9 +1944,15 @@ function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityI
                 throw new Error(`project knowledge compact secondary capability interface summary does not match fixed schema: ${scope}/5.${group.index}`);
             }
             const fields = exactVerticalMarkdownTableFields(matchingTables[0], interfaceFields, `${scope}/5.${group.index}`);
+            const summaryContract = compactCanonicalContract(fields.get('接口/触发') ?? '');
             if (interfaceFields.some((field) => !normalizeMarkdownCell(fields.get(field) ?? ''))
-                || interfaceFields.some((field) => compactPlaceholderEvidencePattern.test(normalizeMarkdownCell(fields.get(field) ?? '')))
-                || !compactConcreteContractPattern.test(normalizeMarkdownCell(fields.get('接口/触发') ?? ''))) {
+                || interfaceFields.some((field) => compactPlaceholderEvidencePattern.test(normalizeMarkdownCell(fields.get(field) ?? '')))) {
+                throw new Error(`project knowledge compact secondary capability interface summary aggregates or omits a concrete contract: ${scope}/5.${group.index}`);
+            }
+            if (compactSyntheticInternalContractPattern.test(summaryContract)) {
+                throw new Error(`project knowledge compact secondary capability derives a contract from an internal method: ${scope}/5.${group.index}`);
+            }
+            if (!compactConcreteContractPattern.test(summaryContract)) {
                 throw new Error(`project knowledge compact secondary capability interface summary aggregates or omits a concrete contract: ${scope}/5.${group.index}`);
             }
             const interfaceMachines = axisNamedCommentBodies(group.body, 'axis-interface-machine-table')
@@ -2007,6 +2023,7 @@ function assertCompactPartialSecondaryCapabilityDetailedDesign(body, capabilityI
                 || invalidProjectKnowledgeTraceIdentifierPattern.test(apiId)
                 || interfaceApiIds.has(apiId)
                 || !compactConcreteContractPattern.test(contract)
+                || compactSyntheticInternalContractPattern.test(contract)
                 || contract !== compactCanonicalContract(summary.get('接口/触发') ?? '')
                 || !compactContractMatchesType(contract, contractType)
                 || contractRelations.size === 0

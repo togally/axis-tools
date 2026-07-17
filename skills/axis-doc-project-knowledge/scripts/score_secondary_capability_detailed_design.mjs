@@ -358,7 +358,7 @@ export function buildDetailedDesignModelInput(promptBody, testCase) {
     String(promptBody ?? ''),
     '',
     'The secondary-capability boundary is locked. Do not split or merge it.',
-    'Render every supplied participant, flow step, and interface contract exactly once.',
+    'Assess and render the supplied evidence only as directed by the candidate prompt.',
     'Return only the requested structured detailed-design schema. Do not use outside knowledge or tools.',
     '',
     'INPUT CASE:',
@@ -368,9 +368,24 @@ export function buildDetailedDesignModelInput(promptBody, testCase) {
 
 export function referenceDetailedDesign(testCase) {
   const input = modelInputCase(testCase);
+  const renderStatus = testCase?.oracle?.expected_render_status ?? 'ready';
+  const blockingGapCodes = clone(testCase?.oracle?.expected_blocking_gap_codes ?? []);
+  if (renderStatus === 'blocked') {
+    return {
+      case_id: testCase.case_id,
+      secondary_capability_id: input.locked_secondary_capability.secondary_capability_id,
+      render_status: 'blocked',
+      blocking_gap_codes: blockingGapCodes,
+      participants: [],
+      flows: [],
+      interfaces: [],
+    };
+  }
   return {
     case_id: testCase.case_id,
     secondary_capability_id: input.locked_secondary_capability.secondary_capability_id,
+    render_status: 'ready',
+    blocking_gap_codes: [],
     participants: clone(input.participant_inventory),
     flows: clone(input.flow_inventory),
     interfaces: input.interface_inventory.map((item, index) => ({
@@ -402,6 +417,57 @@ export function scoreDetailedDesign(testCase, prediction) {
   const expectedSecondaryId = testCase.model_input.locked_secondary_capability.secondary_capability_id;
   if (prediction.secondary_capability_id !== expectedSecondaryId) {
     addFailure(failures, 'secondary_capability_identity_mismatch');
+  }
+
+  const expectedRenderStatus = testCase.oracle.expected_render_status ?? 'ready';
+  const expectedBlockingGapCodes = normalizedSet(
+    testCase.oracle.expected_blocking_gap_codes ?? [],
+  );
+  const allowedBlockingGapCodes = normalizedSet(
+    testCase.oracle.allowed_blocking_gap_codes
+      ?? testCase.oracle.expected_blocking_gap_codes
+      ?? [],
+  );
+  const actualBlockingGapCodes = normalizedSet(prediction.blocking_gap_codes);
+  if (!/^(?:ready|blocked)$/.test(String(prediction.render_status ?? ''))) {
+    addFailure(failures, 'invalid_render_status');
+  } else if (prediction.render_status !== expectedRenderStatus) {
+    addFailure(failures, 'render_status_mismatch');
+  }
+  if (!Array.isArray(prediction.blocking_gap_codes)) {
+    addFailure(failures, 'invalid_blocking_gap_codes');
+  }
+  for (const duplicate of duplicateStrings(prediction.blocking_gap_codes)) {
+    addFailure(failures, 'duplicate_blocking_gap_code', duplicate);
+  }
+  if (difference(expectedBlockingGapCodes, actualBlockingGapCodes).length > 0
+    || difference(actualBlockingGapCodes, allowedBlockingGapCodes).length > 0) {
+    addFailure(failures, 'blocking_gap_codes_mismatch');
+  }
+
+  if (expectedRenderStatus === 'blocked') {
+    if (values(prediction.participants).length > 0
+      || values(prediction.flows).length > 0
+      || values(prediction.interfaces).length > 0) {
+      addFailure(failures, 'blocked_output_contains_detailed_design');
+    }
+    const hardFail = failures.size > 0;
+    return {
+      score: hardFail ? 0 : 1,
+      raw_score: hardFail ? 0 : 1,
+      hard_fail: hardFail,
+      failure_kinds: [...failures.keys()].sort(),
+      failure_details: Object.fromEntries(
+        [...failures.entries()].sort(([left], [right]) => left.localeCompare(right)),
+      ),
+      participant_score: hardFail ? 0 : 1,
+      flow_score: hardFail ? 0 : 1,
+      interface_score: hardFail ? 0 : 1,
+      expected_actor_count: 0,
+      expected_flow_count: 0,
+      expected_step_count: 0,
+      expected_interface_count: 0,
+    };
   }
 
   const expectedActors = normalizedSet(testCase.oracle.required_actor_ids);
