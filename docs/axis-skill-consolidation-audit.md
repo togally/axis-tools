@@ -16,9 +16,9 @@ Retired top-level bundles are `axis-doc-tech-design`, `axis-doc-db-design`, `axi
 
 ## Whole-Inventory Refactor
 
-The current packaged inventory contains 25 canonical skills: the 19 outcome owners established by the whole-inventory refactor plus six non-overlapping additions from `origin/main` (`axis-doc-contract-review` and five `axis-trade-*` skills). All 25 remain because each owns a distinct primary result; no additional merge is justified after comparing trigger, output, evidence and risk boundaries.
+The current packaged inventory contains 26 canonical skills: the 19 outcome owners established by the whole-inventory refactor plus seven non-overlapping additions (`axis-doc-contract-review`, `axis-integration-doudian-merchandising`, and five `axis-trade-*` skills). All 26 remain because each owns a distinct primary result; no additional merge is justified after comparing trigger, output, evidence and risk boundaries.
 
-The original 19-skill refactor cohort has explicit `When to Use`, `Do Not Use`, `Inputs`, `Outputs`, `Safety and Boundaries`, `Checks`, and `After Use Deposition` sections. Coding, design and external-action workflows also retain a task-specific three-step contract and light adversarial review capped at 30%. Deep schemas, templates and playbooks live in `references/`; each front door stays below 180 lines. The six newer skills keep their own domain-specific gates while participating in the same canonical naming, manifest and routing inventory.
+The original 19-skill refactor cohort has explicit `When to Use`, `Do Not Use`, `Inputs`, `Outputs`, `Safety and Boundaries`, `Checks`, and `After Use Deposition` sections. Coding, design and external-action workflows also retain a task-specific three-step contract and light adversarial review capped at 30%. Deep schemas, templates and playbooks live in `references/`; each front door stays below 180 lines. The seven newer skills keep their own domain-specific gates while participating in the same canonical naming, manifest and routing inventory.
 
 `skills/routing.json` is the executable overlap registry. It assigns one unique primary outcome to every skill and permits only acyclic one-way handoffs. Important boundaries are:
 
@@ -28,6 +28,7 @@ The original 19-skill refactor cohort has explicit `When to Use`, `Do Not Use`, 
 - feature development emits a development set plus a project-knowledge change set; project knowledge alone edits the canonical project-wide set;
 - project knowledge may request prompt R&D or an exact-run OSS publication, but neither handoff runs implicitly;
 - skill creation owns packaging; prompt creation owns blind prompt evaluation; skill update owns local installation and migration.
+- Doudian merchandising owns explicitly invoked, App-driven same-category opportunity selection, market/copy/pricing review, supplier/profit-gated automatic publication, and post-action verification; it does not overlap source-control, operations, or generic prompt packaging outcomes.
 
 Runtime safety was tightened with the same refactor: benchmark defaults to public GET without login or packaged credentials, side-effect tests require exact impact and cleanup authorization, Codeup rejects untrusted/non-HTTPS token destinations and redirects, and OSS consent is bound to one `run_id + target_prefix` pair.
 

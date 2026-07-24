@@ -61,6 +61,35 @@ const codeupBody = await readFile(codeupScript, 'utf8');
 assert.match(codeupBody, /HTTPRedirectHandler|redirect/i);
 assert.match(codeupBody, /x-yunxiao-token/);
 
+const doudianSkillRoot = path.join(repoRoot, 'skills', 'axis-integration-doudian-merchandising');
+const doudianSkillBody = await readFile(path.join(doudianSkillRoot, 'SKILL.md'), 'utf8');
+const doudianOpenAiYaml = await readFile(path.join(doudianSkillRoot, 'agents', 'openai.yaml'), 'utf8');
+const doudianJudgmentContract = await readFile(
+  path.join(doudianSkillRoot, 'references', 'merchandising-judgment-contract.md'),
+  'utf8',
+);
+const doudianMarketContract = await readFile(
+  path.join(doudianSkillRoot, 'references', 'market-and-pricing-evidence.md'),
+  'utf8',
+);
+assert.match(doudianSkillBody, /\$computer-use:computer-use/);
+assert.match(doudianSkillBody, /automatically discover.+operated categories|自动.+经营类目/i);
+assert.match(doudianSkillBody, /商机中心[\s\S]+追抖音热词[\s\S]+跟潜力爆品[\s\S]+找货源/);
+assert.match(doudianSkillBody, /商品管理[\s\S]+发布潜力商品[\s\S]+找货源/);
+assert.match(doudianSkillBody, /源头好货[\s\S]+抖音爆款榜[\s\S]+热搜商机/);
+assert.doesNotMatch(doudianSkillBody, /逗你爆款榜/);
+assert.match(doudianSkillBody, /No user confirmation is required/);
+assert.match(doudianSkillBody, /Publish automatically only when[\s\S]+supplier gate[\s\S]+profit buffer/);
+assert.match(doudianSkillBody, /re-read the page[\s\S]+product ID\/status/);
+assert.match(doudianOpenAiYaml, /allow_implicit_invocation: false/);
+assert.match(doudianJudgmentContract, /`model`: `gpt-5\.6-sol`/);
+assert.match(doudianJudgmentContract, /`reasoning_effort`: `xhigh`/);
+assert.match(doudianJudgmentContract, /fallback: forbidden/);
+assert.match(doudianMarketContract, /Unknown required cost[\s\S]+not silently set to zero/);
+assert.match(doudianMarketContract, /minimum stress-case buffer[\s\S]+CNY 3[\s\S]+10%/);
+assert.match(doudianMarketContract, /Source merchant gate/);
+assert.match(doudianMarketContract, /lowest displayed price[\s\S]+in-stock[\s\S]+complete/);
+
 const { evaluatePromptResults, rankPromptResults } = await import(
   new URL('../skills/axis-tools-prompt-create/scripts/rank_prompt_results.mjs', import.meta.url)
 );

@@ -1,0 +1,7 @@
+interface:
+  display_name: "axis-integration-doudian-merchandising"
+  short_description: "Source and list Doudian products / 抖店选品优化并上架"
+  default_prompt: "Use $axis-integration-doudian-merchandising with computer-use to fully automate my Doudian run across 商机中心 追抖音热词/跟潜力爆品, 商品管理 发布潜力商品, and 源头好货 抖音爆款榜/热搜商机; use 找货源 where shown, delegate every judgment to gpt-5.6-sol with xhigh reasoning, and automatically publish only supplier-safe conservatively profitable products."
+
+policy:
+  allow_implicit_invocation: false

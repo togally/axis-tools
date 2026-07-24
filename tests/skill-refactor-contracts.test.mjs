@@ -24,6 +24,7 @@ const adversarialRequired = new Set([
   'axis-doc-development',
   'axis-doc-project-init',
   'axis-doc-project-knowledge',
+  'axis-integration-doudian-merchandising',
   'axis-integration-yunxiao-codeup',
   'axis-ops-ali-dashboard',
   'axis-test-benchmark',
@@ -136,6 +137,7 @@ for (const [from, to] of [
   ['axis-doc-development', 'axis-doc-project-knowledge'],
   ['axis-doc-project-knowledge', 'axis-tools-prompt-create'],
   ['axis-doc-project-knowledge', 'axis-ops-oss-publish'],
+  ['axis-integration-doudian-merchandising', 'axis-tools-prompt-create'],
   ['axis-tools-skill-create', 'axis-tools-prompt-create'],
   ['axis-tools-skill-create', 'axis-tools-skill-update'],
 ]) {

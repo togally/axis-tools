@@ -294,6 +294,7 @@ const packagedSkillNames = [
   'axis-doc-drift-capture',
   'axis-doc-project-init',
   'axis-doc-project-knowledge',
+  'axis-integration-doudian-merchandising',
   'axis-integration-yunxiao-codeup',
   'axis-ops-ali-dashboard',
   'axis-ops-oss-publish',
@@ -391,6 +392,92 @@ for (const requiredText of [
 }
 assert.equal(manifest.skills.some((skill) => /petmall/i.test(skill.name) || /PetMall/i.test(skill.description)), false);
 assert.deepEqual(manifest.skills.map((skill) => skill.name).sort(), packagedSkillNames);
+
+const doudianMerchandising = manifest.skills.find((skill) => skill.name === 'axis-integration-doudian-merchandising');
+assert.ok(doudianMerchandising, 'axis-integration-doudian-merchandising should be packaged');
+assert.deepEqual(doudianMerchandising.files.sort(), [
+  'SKILL.md',
+  'agents/openai.yaml',
+  'references/market-and-pricing-evidence.md',
+  'references/merchandising-evaluation-cases.json',
+  'references/merchandising-judgment-contract.md',
+]);
+const doudianMerchandisingDir = path.join(repoRoot, 'skills', 'axis-integration-doudian-merchandising');
+const doudianMerchandisingBody = await readFile(path.join(doudianMerchandisingDir, 'SKILL.md'), 'utf8');
+const doudianJudgmentContract = await readFile(
+  path.join(doudianMerchandisingDir, 'references', 'merchandising-judgment-contract.md'),
+  'utf8',
+);
+const doudianMarketPricing = await readFile(
+  path.join(doudianMerchandisingDir, 'references', 'market-and-pricing-evidence.md'),
+  'utf8',
+);
+const doudianEvaluationCases = JSON.parse(await readFile(
+  path.join(doudianMerchandisingDir, 'references', 'merchandising-evaluation-cases.json'),
+  'utf8',
+));
+for (const requiredText of [
+  '$computer-use:computer-use',
+  'gpt-5.6-sol',
+  'reasoning_effort: xhigh',
+  'delegation_ledger',
+  'selection',
+  'keyword',
+  'copy',
+  'pricing',
+  'market evidence',
+  'Automatic publication gate',
+  'publish automatically',
+  'No user confirmation is required',
+  '商机中心',
+  '追抖音热词',
+  '跟潜力爆品',
+  '商品管理',
+  '发布潜力商品',
+  '找货源',
+  '抖音爆款榜',
+  '热搜商机',
+  '流量扶持',
+]) {
+  assert.match(doudianMerchandisingBody, new RegExp(requiredText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'));
+}
+assert.match(doudianMerchandisingBody, /source goods|源头好货/i);
+assert.match(doudianMerchandisingBody, /商机中心[\s\S]+追抖音热词[\s\S]+跟潜力爆品[\s\S]+找货源/);
+assert.match(doudianMerchandisingBody, /商品管理[\s\S]+发布潜力商品[\s\S]+找货源/);
+assert.match(doudianMerchandisingBody, /源头好货[\s\S]+抖音爆款榜[\s\S]+热搜商机/);
+assert.doesNotMatch(doudianMerchandisingBody, /逗你爆款榜/);
+assert.match(doudianMerchandisingBody, /automatically discover.+operated categories|自动.+经营类目/i);
+assert.match(doudianMerchandisingBody, /exhaustive processing|全部优化上架/i);
+assert.match(doudianMerchandisingBody, /stop.+gpt-5\.6-sol|gpt-5\.6-sol.+unavailable.+stop/i);
+const doudianOpenAiYaml = await readFile(path.join(doudianMerchandisingDir, 'agents', 'openai.yaml'), 'utf8');
+assert.match(doudianOpenAiYaml, /allow_implicit_invocation: false/);
+assert.match(doudianJudgmentContract, /assortment_decision/);
+assert.match(doudianJudgmentContract, /keyword_analysis/);
+assert.match(doudianJudgmentContract, /listing_copy/);
+assert.match(doudianJudgmentContract, /pricing_decision/);
+assert.match(doudianJudgmentContract, /publication_gate/);
+assert.match(doudianJudgmentContract, /auto_publish/);
+assert.match(doudianJudgmentContract, /追抖音热词/);
+assert.match(doudianJudgmentContract, /跟潜力爆品/);
+assert.match(doudianJudgmentContract, /发布潜力商品/);
+assert.match(doudianJudgmentContract, /抖音爆款榜/);
+assert.doesNotMatch(doudianJudgmentContract, /逗你爆款榜/);
+assert.match(doudianJudgmentContract, /evidence_refs/);
+assert.match(doudianJudgmentContract, /hard_failures/);
+assert.match(doudianMarketPricing, /landed_cost/);
+assert.match(doudianMarketPricing, /expected_after_sale_loss/);
+assert.match(doudianMarketPricing, /minimum stress-case buffer/);
+assert.match(doudianMarketPricing, /Source merchant gate/);
+assert.match(doudianMarketPricing, /low-price SKU|低价 SKU/i);
+assert.match(doudianMarketPricing, /accessed_at/);
+assert.ok(Array.isArray(doudianEvaluationCases.cases));
+assert.ok(doudianEvaluationCases.cases.length >= 4);
+assert.equal(doudianEvaluationCases.selected_prompt_id, 'challenger-a-gate-first');
+for (const testCase of doudianEvaluationCases.cases) {
+  assert.ok(testCase.model_input);
+  assert.ok(testCase.oracle);
+  assert.equal(JSON.stringify(testCase.model_input).includes('ORACLE_ONLY_SENTINEL'), false);
+}
 
 const v01CaptureSkills = [
   'axis-code-capture',

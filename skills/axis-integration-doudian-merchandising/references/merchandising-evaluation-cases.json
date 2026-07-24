@@ -1,0 +1,244 @@
+{
+  "schema_version": 1,
+  "purpose": "Public-safe diagnostic cases for the Doudian merchandising judgment contract",
+  "target_model": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "xhigh",
+    "fallback_allowed": false
+  },
+  "prompt_candidates": [
+    "baseline",
+    "challenger-a-gate-first",
+    "challenger-b-adversarial"
+  ],
+  "selected_prompt_id": "challenger-a-gate-first",
+  "cases": [
+    {
+      "case_id": "clean_shop_fit",
+      "source_kind": "synthetic_public_safe",
+      "evaluation_stage": "diagnostic",
+      "model_input": {
+        "task": "selection",
+        "shop_profile": {
+          "category_discovery": {
+            "verified_categories": ["cat toys"],
+            "qualification_evidence_refs": ["app-category-a1"],
+            "captured_at": "2026-07-24T09:55:00+08:00"
+          },
+          "positioning": ["unbranded cat enrichment supplies"],
+          "allowed_categories": ["cat toys"],
+          "blocked_categories": ["food", "medical goods"]
+        },
+        "opportunity_ledger": [
+          {
+            "opportunity_id": "opportunity-a",
+            "entry_route": "merchant_center",
+            "app_section": "追抖音热词",
+            "category": "cat toys",
+            "evidence_refs": ["app-opportunity-a1"]
+          }
+        ],
+        "candidate_offers": [
+          {
+            "offer_id": "offer-a",
+            "category": "cat toys",
+            "brand_status": "unbranded",
+            "stock": 850,
+            "return_rate": 0.018,
+            "on_time_dispatch_rate": 0.97,
+            "supplier_identity": "supplier-a",
+            "supplier_platform_status": "normal",
+            "shipping_terms": "freight included",
+            "restricted_regions": [],
+            "after_sales": "platform standard",
+            "qualifications": ["category verified"],
+            "opportunity_id": "opportunity-a",
+            "source_action": "找货源",
+            "evidence_refs": ["app-a1", "app-a2"]
+          },
+          {
+            "offer_id": "offer-b",
+            "category": "dog medicine",
+            "stock": 120,
+            "evidence_refs": ["app-b1"]
+          }
+        ],
+        "market_snapshot": {
+          "captured_at": "2026-07-24T10:00:00+08:00",
+          "evidence": [
+            {"evidence_id": "market-a1", "supported_facts": ["comparable unbranded cat toys are actively listed"]}
+          ]
+        }
+      },
+      "oracle": {
+        "sentinel": "ORACLE_ONLY_SENTINEL_CLEAN_FIT",
+        "expected_status": "pass",
+        "selected_offer_id": "offer-a",
+        "required_rejection": "offer-b is outside the allowed category",
+        "required_source_mapping": "商机中心 追抖音热词 opportunity-a through 找货源 to offer-a",
+        "expected_publication_gate": "not_evaluated"
+      }
+    },
+    {
+      "case_id": "unsupported_claims",
+      "source_kind": "synthetic_public_safe",
+      "evaluation_stage": "diagnostic",
+      "model_input": {
+        "task": "copy",
+        "shop_profile": {
+          "category_discovery": {
+            "verified_categories": ["pet toys"],
+            "qualification_evidence_refs": ["app-category-c1"],
+            "captured_at": "2026-07-24T09:55:00+08:00"
+          },
+          "allowed_categories": ["pet toys"]
+        },
+        "candidate_offers": [
+          {
+            "offer_id": "offer-c",
+            "verified_facts": ["rubber appearance", "blue color", "ball shape"],
+            "supplier_terms": ["indestructible", "cleans teeth", "vet recommended"],
+            "qualifications": [],
+            "evidence_refs": ["app-c1"]
+          }
+        ],
+        "market_snapshot": {
+          "captured_at": "2026-07-24T10:00:00+08:00",
+          "evidence": [{"evidence_id": "market-c1", "supported_facts": ["buyers use the generic term pet ball"]}]
+        }
+      },
+      "oracle": {
+        "sentinel": "ORACLE_ONLY_SENTINEL_CLAIMS",
+        "expected_status": "pass",
+        "must_remove": ["indestructible", "cleans teeth", "vet recommended", "耐咬", "洁齿"],
+        "must_preserve_only_evidenced_facts": true,
+        "expected_publication_gate": "not_evaluated"
+      }
+    },
+    {
+      "case_id": "zero_stock_bait_sku",
+      "source_kind": "synthetic_public_safe",
+      "evaluation_stage": "diagnostic",
+      "model_input": {
+        "task": "pricing",
+        "candidate_offers": [
+          {
+            "offer_id": "offer-d",
+            "skus": [
+              {"sku_id": "sample-zero", "identity": "sample", "stock": 0, "supply_price": 0.5},
+              {"sku_id": "complete-blue", "identity": "complete product", "stock": 90, "supply_price": 9.0}
+            ],
+            "evidence_refs": ["app-d1"]
+          }
+        ],
+        "unit_economics": {
+          "currency": "CNY",
+          "skus": [
+            {
+              "sku_id": "complete-blue",
+              "supply_price": 9.0,
+              "freight": 1.0,
+              "packaging": 0.5,
+              "other_fixed_fulfillment": 0.5,
+              "expected_after_sale_loss": 0.0,
+              "variable_rate": 0.15,
+              "minimum_absolute_contribution": 5.0,
+              "minimum_margin_rate": 0.1
+            }
+          ]
+        },
+        "market_snapshot": {
+          "captured_at": "2026-07-24T10:00:00+08:00",
+          "evidence": [{"evidence_id": "market-d1", "supported_facts": ["comparable complete products list from CNY 18 to CNY 26"]}]
+        }
+      },
+      "oracle": {
+        "sentinel": "ORACLE_ONLY_SENTINEL_ZERO_STOCK",
+        "expected_status": "pass",
+        "required_exclusion": "sample-zero",
+        "complete_product_floor": 18.8235294118,
+        "must_not_use_excluded_sku_as_lowest_price": true,
+        "expected_publication_gate": "not_evaluated"
+      }
+    },
+    {
+      "case_id": "missing_cost_boundary",
+      "source_kind": "synthetic_public_safe",
+      "evaluation_stage": "diagnostic",
+      "model_input": {
+        "task": "pricing",
+        "candidate_offers": [
+          {
+            "offer_id": "offer-e",
+            "skus": [{"sku_id": "sku-e1", "stock": 200, "supply_price": 7.0}],
+            "evidence_refs": ["app-e1"]
+          }
+        ],
+        "unit_economics": {
+          "currency": "CNY",
+          "skus": [
+            {
+              "sku_id": "sku-e1",
+              "supply_price": 7.0,
+              "freight": null,
+              "packaging": 0.5,
+              "other_fixed_fulfillment": 0.0,
+              "return_probability": null,
+              "nonrecoverable_loss_per_return": null,
+              "variable_rate": 0.25,
+              "minimum_absolute_contribution": 4.0,
+              "minimum_margin_rate": 0.1
+            }
+          ]
+        },
+        "market_snapshot": {
+          "captured_at": "2026-07-24T10:00:00+08:00",
+          "evidence": [{"evidence_id": "market-e1", "supported_facts": ["sampled comparable price band is CNY 16 to CNY 24"]}]
+        }
+      },
+      "oracle": {
+        "sentinel": "ORACLE_ONLY_SENTINEL_MISSING_COST",
+        "expected_status": "needs_more_data",
+        "required_missing_inputs": ["freight", "return probability or bounded after-sale loss"],
+        "must_not_recommend_price": true,
+        "expected_publication_gate": "not_evaluated"
+      }
+    },
+    {
+      "case_id": "stale_market_and_supplier_risk",
+      "source_kind": "synthetic_public_safe",
+      "evaluation_stage": "diagnostic",
+      "model_input": {
+        "task": "final_review",
+        "candidate_offers": [
+          {
+            "offer_id": "offer-f",
+            "stock": 40,
+            "on_time_dispatch_rate": 0.61,
+            "return_rate": 0.19,
+            "dispatch_promise_days": 7,
+            "evidence_refs": ["app-f1"]
+          }
+        ],
+        "market_snapshot": {
+          "captured_at": "2026-06-01T10:00:00+08:00",
+          "reviewed_at": "2026-07-24T10:00:00+08:00",
+          "evidence": [{"evidence_id": "market-f1", "supported_facts": ["old sampled competitor price"]}]
+        },
+        "upstream_outputs": [
+          {"task": "selection", "status": "pass"},
+          {"task": "keyword", "status": "pass"},
+          {"task": "copy", "status": "pass"},
+          {"task": "pricing", "status": "pass"}
+        ]
+      },
+      "oracle": {
+        "sentinel": "ORACLE_ONLY_SENTINEL_STALE_RISK",
+        "expected_status": "needs_more_data",
+        "required_hard_failures": ["stale market evidence"],
+        "required_warning": "supplier fulfillment and return risk must be resolved before publication",
+        "expected_publication_gate": "block"
+      }
+    }
+  ]
+}

@@ -130,6 +130,18 @@
       ]
     },
     {
+      "name": "axis-integration-doudian-merchandising",
+      "description": "Use when a Doudian shop needs fully automated App-driven opportunity sourcing, market analysis, listing optimization, conservative profitable pricing, and gate-controlled publication. / 用于抖店店铺需要通过 App 全自动挖掘机会、分析市场、优化商品信息、保守定价并在门槛通过后自动上架时。",
+      "path": "skills/axis-integration-doudian-merchandising",
+      "files": [
+        "SKILL.md",
+        "agents/openai.yaml",
+        "references/market-and-pricing-evidence.md",
+        "references/merchandising-evaluation-cases.json",
+        "references/merchandising-judgment-contract.md"
+      ]
+    },
+    {
       "name": "axis-integration-yunxiao-codeup",
       "description": "Use when Yunxiao Codeup repositories must be queried or a merge request must be created through OpenAPI with an environment token. / 用于通过环境变量令牌调用云效 Codeup OpenAPI 查询代码库或创建合并请求。",
       "path": "skills/axis-integration-yunxiao-codeup",
