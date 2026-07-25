@@ -58,6 +58,16 @@ For a fully automatic run with no user-supplied profit target, use a default min
 
 Build the stress case from current upper-bound or adverse-but-evidenced freight, platform/payment/affiliate/promotion fees, discounts, tax, return probability, and nonrecoverable after-sale loss. Every required cost must be known or conservatively bounded. Because future demand, refunds, rule changes, and operations cannot be guaranteed, describe this as a conservative positive-profit gate, never as an absolute guarantee of no loss.
 
+## Explicit manual traffic-price exception
+
+The automatic unit-economics gate is unchanged. If the user explicitly authorizes a traffic-first experiment for the current source after being told that freight and/or after-sales costs are omitted, the root may publish only under the manual exception in `SKILL.md`; `pricing` and `final_review` must still preserve the missing inputs and return `block`, not `auto_publish`.
+
+This exception requires current evidence that category/qualification, supplier/product gate, shipping, restricted regions, after-sales terms, stock, source cost, source-synchronized locks, supported copy, and `填写检查` are all resolved. It does not permit guessing any missing cost, fee, return loss, market-price band, or product fact.
+
+For every included in-stock SKU, record `supply_price`, `proposed_price`, `nominal_spread = proposed_price - supply_price`, the user-approved formula, and any omitted inputs. Require `proposed_price >= supply_price` and `nominal_spread > 0`; call this a nominal spread only, never profit, contribution, margin, or proof that the price is market-reasonable. Disable zero/unknown-stock SKUs and do not use them to set the visible minimum price.
+
+Immediately before the one-source publication, present the user with the omitted cost classes, market-band verification status, all included/excluded SKUs, and their nominal spreads. Only explicit approval after that warning applies, and it expires once that source’s App result is read back. Capture the approval wording/time and App result in the run ledger.
+
 ## Source merchant gate
 
 Before pricing or publishing, reconcile the source merchant and offer using current App evidence:
@@ -82,7 +92,7 @@ For every source SKU, retain:
 - include/exclude decision and reason;
 - sensitivity at the high fee/high return and low market-price boundaries.
 
-Exclude a SKU from publication when stock is zero or unknown, identity conflicts with the product, it is only an accessory/sample/deposit, it depends on an unsupported claim, or its required price is outside a viable evidenced market band.
+Exclude a SKU from publication when stock is zero or unknown, identity conflicts with the product, it is only an accessory/sample/deposit, it depends on an unsupported claim, or its required price is outside a viable evidenced market band. A current-turn manual traffic-price exception can waive only the last market-band condition; it cannot waive stock, identity, claim, or source-cost checks.
 
 ## Low-price SKU integrity
 

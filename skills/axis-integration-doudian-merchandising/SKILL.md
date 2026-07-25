@@ -76,6 +76,13 @@ Read [merchandising-judgment-contract.md](references/merchandising-judgment-cont
 7. Treat “全部优化上架” as exhaustive processing of the current eligible opportunity ledger: automatically publish every verified-category item that passes evidence, compliance, stock, supplier, claim, and conservative profit gates. Record an explicit rejection reason for every item not advanced; never publish a failing item merely to make the batch complete.
 8. Apply deterministic hard stops before delegation: wrong/blocked category, unresolved qualification, unauthorized brand, all stock zero, known platform warning, or an offer whose identity cannot be reconciled across title, images, category, and SKUs.
 
+### 2a. Execute every source as a closed sequential loop
+
+1. When the user supplies source filters, capture the literal thresholds, required options, sort order, and source-count range as run constraints. For each candidate, apply those filters in the exact user-specified order; after every filter, wait for the App to update and re-read the active selection before applying the next one.
+2. After all required filters are active, sort the qualifying source results by the requested field (for example, sales descending), capture the visible proof, and select only the requested number/range of qualifying sources. A generic category search, a card badge, or filters applied to an earlier source never satisfies this step for the next source.
+3. For one selected source only, complete supplier/product evidence, all five delegated judgments, listing draft, `填写检查`, publication decision, and post-action status read-back before opening or preparing the next source. Repeat the same loop from its first filter for every later source.
+4. If a source has source-synchronized or disabled attributes, preserve them. Change only fields that the App proves editable and only when the reviewed listing plan requires it; do not work around a lock by substituting an unsupported value.
+
 ### 3. Gather current market evidence
 
 1. Research current demand, competitor price band, query language, seasonality, and platform rules during this run. Do not rely on memory for volatile claims.
@@ -97,7 +104,7 @@ Every output must cite `evidence_refs`, list `hard_failures`, identify assumptio
 
 ### 5. Prepare the listing draft in the App
 
-1. Open `立即铺货` and create a new product only for a selected offer that passed final review.
+1. Open `立即铺货` and create a new product only for a selected offer that passed final review, or for the narrow manual traffic-price exception below after all of its prerequisites are met.
 2. Fill the reviewed title, guide short title, introduction or detail text, editable attributes, included SKUs, per-SKU prices, inventory policy, shipping, restrictions, and after-sales. Do not alter source-synchronized facts to make the offer look better.
 3. Exclude or disable zero-stock, unrelated, misleading accessory, deposit, sample, or low-value bait SKUs. The lowest visible price must belong to a representative in-stock complete product.
 4. Use only claims supported by source facts or qualifications. Remove absolute, medical, health, durability, brand, or efficacy claims that lack evidence; a supplier keyword is not proof.
@@ -111,18 +118,29 @@ Publish automatically only when `selection`, `keyword`, `copy`, `pricing`, and `
 
 Immediately before clicking `发布商品`, re-read source cost, stock, supplier, fulfillment, SKU, and price fields. Any material drift invalidates the review and requires recalculation. Then publish automatically, re-read the page, and record the product ID/status. A button click or loading indicator alone is not proof of publication.
 
+### 7. Explicit manual traffic-price exception
+
+This is not part of automatic publication. Use it only when the user explicitly authorizes a traffic-first experiment for the current run and specifically accepts that freight and/or after-sales costs are not being evaluated. An initial full-auto invocation, a desire for more listings, or a generic request to “铺货” is not that authorization.
+
+1. Keep `pricing` and `final_review` truthful: missing freight, after-sales loss, fees, or an unverified market band remain warnings/hard failures and the contract’s `publication_gate` remains `block`. Do not relabel a nominal spread as profit, contribution, margin, or a reasonable market price.
+2. Before asking for the one-source authorization, complete the exact sequential source-filter loop; verify the supplier/product gate, category/qualification, shipping/restrictions/after-sales facts, editable-versus-locked attributes, supported copy, in-stock SKU identity, and a clean `填写检查`.
+3. For every included SKU, record source cost, proposed price, `nominal_spread = proposed_price - supply_price`, stock, and the user-approved formula. The proposed price must be at least the source cost and have a positive nominal spread. Disable zero/unknown-stock SKUs and never use them to create the displayed low price.
+4. Give the user a compact final warning that names: the omitted cost classes, whether the comparable market price is verified, the per-SKU nominal spread (not profit), all excluded SKUs, and the fact that Doudian approval may still be pending. Only an explicit current-turn approval after that warning authorizes clicking `发布商品` for this one source.
+5. Record `manual_traffic_price_exception` with the approval wording/time, omitted inputs, formula, SKU table, warnings, and App result. Repeat the full source-filter-and-authorization loop for the next source; never carry an exception forward as batch permission.
+
 ## Safety and Boundaries
 
 - Never enter or expose passwords, verification codes, cookies, tokens, customer information, or private account data. Hand off authentication, CAPTCHA, password, legal-agreement, or security-warning steps according to Computer Use policy.
 - Never buy goods, fund advertising, change settlement, accept a contract, or change account/security settings under this skill.
 - Never invent market data, fees, margin, qualifications, stock, product attributes, or supplier performance.
-- Never publish when market evidence is stale or untraceable, required costs are missing/unbounded, conservative stress contribution fails its buffer, supplier trust is unresolved, a published SKU has zero/unknown stock, the listing contains an unsupported claim, or App validation still reports an error.
+- Never publish when market evidence is stale or untraceable, required costs are missing/unbounded, conservative stress contribution fails its buffer, supplier trust is unresolved, a published SKU has zero/unknown stock, the listing contains an unsupported claim, or App validation still reports an error—except for the narrowly documented manual traffic-price exception above. That exception never relaxes category/qualification, supplier, stock, copy, restrictions, or App-validation gates.
 - Preserve the user's draft and unrelated App state. Do not delete or overwrite an existing product to avoid a conflict.
 
 ## Checks
 
 - Current App evidence verifies operated categories and qualifications; pagination/scroll coverage proves the ledger exhausts `商机中心` (`追抖音热词`, `跟潜力爆品`), `商品管理` (`发布潜力商品`), and `源头好货` (`抖音爆款榜`, `热搜商机`) for each applicable category.
 - Every Route A/B candidate is mapped through `找货源`; every Route C candidate carries a directly evidenced source offer. Cross-route duplicates retain all discovery references but publish at most once.
+- User-specified source filters are re-applied in literal order for every source; the captured active-filter state and requested sales sort precede each source selection, and one source reaches App-status read-back before the next begins.
 - Shop/category fit and source identity are evidenced, not inferred from a generic bestseller badge.
 - Candidate comparison covers at least five offers or records why fewer were available, including same-product supplier alternatives when present.
 - Market evidence contains direct references, query/access times, and supported facts; current claims are cited.
@@ -131,6 +149,7 @@ Immediately before clicking `发布商品`, re-read source cost, stock, supplier
 - Title, guide short title, introduction, attributes, media, shipping, restrictions, and after-sales match verified facts and platform limits.
 - Doudian `填写检查` has no error; a quality score is supporting evidence, not a substitute for the ledger.
 - All five Sol/xhigh gates passed after the last material input change, the App published automatically, and publication status was read back from the App.
+- Any manual traffic-price exception retains the contract `block` result, current-turn user approval after its final warning, cost/price/nominal-spread data for every included SKU, and a one-source-only authorization record.
 
 ## Light Adversarial Review
 
