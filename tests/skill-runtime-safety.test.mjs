@@ -88,6 +88,7 @@ assert.match(doudianSkillBody, /metric-capable/);
 assert.match(doudianSkillBody, /Do not paginate that route merely to establish the absence/);
 assert.match(doudianSkillBody, /User-authorized automatic traffic-price exception/);
 assert.match(doudianSkillBody, /nominal_spread = proposed_price - supply_price/);
+assert.match(doudianSkillBody, /traffic_default_formula[\s\S]+ceil\(supply_price × 1\.20 × 10\) \/ 10/);
 assert.match(doudianSkillBody, /current-run explicit automatic-publication authorization/);
 assert.match(doudianSkillBody, /do not ask again per source/);
 assert.doesNotMatch(doudianSkillBody, /current-turn user approval after its final warning/);
@@ -102,6 +103,7 @@ assert.match(doudianMarketContract, /lowest displayed price[\s\S]+in-stock[\s\S]
 assert.match(doudianMarketContract, /automatic unit-economics gate is unchanged/);
 assert.match(doudianMarketContract, /return `block`, not `auto_publish`/);
 assert.match(doudianJudgmentContract, /automatic traffic-price exception[\s\S]+`block`[\s\S]+no per-source confirmation/);
+assert.match(doudianJudgmentContract, /traffic_default_formula[\s\S]+ceil\(supply_price × 1\.20 × 10\) \/ 10/);
 assert.match(doudianJudgmentContract, /ineligible_by_metric_unavailable/);
 assert.match(doudianJudgmentContract, /metric-capable/);
 

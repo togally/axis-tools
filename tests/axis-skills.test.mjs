@@ -468,6 +468,7 @@ assert.match(doudianJudgmentContract, /evidence_refs/);
 assert.match(doudianJudgmentContract, /hard_failures/);
 assert.match(doudianJudgmentContract, /ineligible_by_metric_unavailable/);
 assert.match(doudianJudgmentContract, /metric-capable/);
+assert.match(doudianJudgmentContract, /traffic_default_formula[\s\S]+ceil\(supply_price × 1\.20 × 10\) \/ 10/);
 assert.match(doudianMarketPricing, /landed_cost/);
 assert.match(doudianMarketPricing, /expected_after_sale_loss/);
 assert.match(doudianMarketPricing, /minimum stress-case buffer/);
