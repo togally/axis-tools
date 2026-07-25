@@ -83,8 +83,11 @@ assert.match(doudianSkillBody, /Publish automatically only when[\s\S]+supplier g
 assert.match(doudianSkillBody, /re-read the page[\s\S]+product ID\/status/);
 assert.match(doudianSkillBody, /filters[\s\S]+exact user-specified order[\s\S]+re-read the active selection/);
 assert.match(doudianSkillBody, /complete[\s\S]+post-action status read-back[\s\S]+before opening or preparing the next source/);
-assert.match(doudianSkillBody, /Explicit manual traffic-price exception/);
+assert.match(doudianSkillBody, /User-authorized automatic traffic-price exception/);
 assert.match(doudianSkillBody, /nominal_spread = proposed_price - supply_price/);
+assert.match(doudianSkillBody, /current-run explicit automatic-publication authorization/);
+assert.match(doudianSkillBody, /do not ask again per source/);
+assert.doesNotMatch(doudianSkillBody, /current-turn user approval after its final warning/);
 assert.match(doudianOpenAiYaml, /allow_implicit_invocation: false/);
 assert.match(doudianJudgmentContract, /`model`: `gpt-5\.6-sol`/);
 assert.match(doudianJudgmentContract, /`reasoning_effort`: `xhigh`/);
@@ -95,7 +98,7 @@ assert.match(doudianMarketContract, /Source merchant gate/);
 assert.match(doudianMarketContract, /lowest displayed price[\s\S]+in-stock[\s\S]+complete/);
 assert.match(doudianMarketContract, /automatic unit-economics gate is unchanged/);
 assert.match(doudianMarketContract, /return `block`, not `auto_publish`/);
-assert.match(doudianJudgmentContract, /manual traffic-price exception[\s\S]+`block`/);
+assert.match(doudianJudgmentContract, /automatic traffic-price exception[\s\S]+`block`[\s\S]+no per-source confirmation/);
 
 const { evaluatePromptResults, rankPromptResults } = await import(
   new URL('../skills/axis-tools-prompt-create/scripts/rank_prompt_results.mjs', import.meta.url)

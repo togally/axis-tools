@@ -118,15 +118,15 @@ Publish automatically only when `selection`, `keyword`, `copy`, `pricing`, and `
 
 Immediately before clicking `发布商品`, re-read source cost, stock, supplier, fulfillment, SKU, and price fields. Any material drift invalidates the review and requires recalculation. Then publish automatically, re-read the page, and record the product ID/status. A button click or loading indicator alone is not proof of publication.
 
-### 7. Explicit manual traffic-price exception
+### 7. User-authorized automatic traffic-price exception
 
-This is not part of automatic publication. Use it only when the user explicitly authorizes a traffic-first experiment for the current run and specifically accepts that freight and/or after-sales costs are not being evaluated. An initial full-auto invocation, a desire for more listings, or a generic request to “铺货” is not that authorization.
+This is a narrowly scoped automatic-publication override. Use it only when the user explicitly authorizes traffic-first automatic publication for the current run and specifically accepts that freight and/or after-sales costs are not being evaluated. An initial full-auto invocation, a desire for more listings, or a generic request to “铺货” is not that authorization.
 
 1. Keep `pricing` and `final_review` truthful: missing freight, after-sales loss, fees, or an unverified market band remain warnings/hard failures and the contract’s `publication_gate` remains `block`. Do not relabel a nominal spread as profit, contribution, margin, or a reasonable market price.
-2. Before asking for the one-source authorization, complete the exact sequential source-filter loop; verify the supplier/product gate, category/qualification, shipping/restrictions/after-sales facts, editable-versus-locked attributes, supported copy, in-stock SKU identity, and a clean `填写检查`.
+2. Before automatic publication, complete the exact sequential source-filter loop; verify the supplier/product gate, category/qualification, shipping/restrictions/after-sales facts, editable-versus-locked attributes, supported copy, in-stock SKU identity, and a clean `填写检查`.
 3. For every included SKU, record source cost, proposed price, `nominal_spread = proposed_price - supply_price`, stock, and the user-approved formula. The proposed price must be at least the source cost and have a positive nominal spread. Disable zero/unknown-stock SKUs and never use them to create the displayed low price.
-4. Give the user a compact final warning that names: the omitted cost classes, whether the comparable market price is verified, the per-SKU nominal spread (not profit), all excluded SKUs, and the fact that Doudian approval may still be pending. Only an explicit current-turn approval after that warning authorizes clicking `发布商品` for this one source.
-5. Record `manual_traffic_price_exception` with the approval wording/time, omitted inputs, formula, SKU table, warnings, and App result. Repeat the full source-filter-and-authorization loop for the next source; never carry an exception forward as batch permission.
+4. Before the first automatic publication in the run, present one compact run-level warning that names: the omitted cost classes, whether the comparable market price is verified, the nominal-spread convention (not profit), SKU exclusions, and the fact that Doudian approval may still be pending. A current-run explicit authorization to automatically publish eligible traffic-first sources after clean validation applies to the requested run scope; do not ask again per source.
+5. Record `manual_traffic_price_exception` with the run-level authorization wording/time, scope, omitted inputs, formula, per-source SKU table, warnings, and each App result. Repeat the full source-filter loop and all validations for every source; the run-level authorization never waives category/qualification, supplier/product, stock, copy, restriction, or App-validation gates.
 
 ## Safety and Boundaries
 
@@ -149,7 +149,7 @@ This is not part of automatic publication. Use it only when the user explicitly 
 - Title, guide short title, introduction, attributes, media, shipping, restrictions, and after-sales match verified facts and platform limits.
 - Doudian `填写检查` has no error; a quality score is supporting evidence, not a substitute for the ledger.
 - All five Sol/xhigh gates passed after the last material input change, the App published automatically, and publication status was read back from the App.
-- Any manual traffic-price exception retains the contract `block` result, current-turn user approval after its final warning, cost/price/nominal-spread data for every included SKU, and a one-source-only authorization record.
+- Any manual traffic-price exception retains the contract `block` result, a current-run explicit automatic-publication authorization after its run-level warning, cost/price/nominal-spread data for every included SKU, and a per-source App-result record.
 
 ## Light Adversarial Review
 
