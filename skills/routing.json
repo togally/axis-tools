@@ -74,8 +74,8 @@
     },
     {
       "name": "axis-integration-doudian-merchandising",
-      "primary_outcome": "Automatically exhaust current same-category Doudian opportunities and publish every supplier-safe conservatively profitable product",
-      "use_when": "Use for an explicitly invoked full-auto Doudian run across 商机中心 追抖音热词/跟潜力爆品, 商品管理 发布潜力商品, and 源头好货 抖音爆款榜/热搜商机, with supplier-safe conservatively profitable automatic listings. / 用于明确调用全自动抖店任务，遍历商机中心追抖音热词/跟潜力爆品、商品管理发布潜力商品及源头好货抖音爆款榜/热搜商机，并对货源安全且保守盈利的商品自动上架时。",
+      "primary_outcome": "Inspect current same-category Doudian opportunities, exhaust every criterion-capable route, and publish every supplier-safe conservatively profitable product",
+      "use_when": "Use for an explicitly invoked full-auto Doudian run across 商机中心 追抖音热词/跟潜力爆品, 商品管理 发布潜力商品, and 源头好货 抖音爆款榜/热搜商机, with every user-required metric checked before exhaustive traversal and supplier-safe conservatively profitable automatic listings. / 用于明确调用全自动抖店任务，检查商机中心追抖音热词/跟潜力爆品、商品管理发布潜力商品及源头好货抖音爆款榜/热搜商机，在逐路核验用户所需指标后遍历可满足指标的入口，并对货源安全且保守盈利的商品自动上架时。",
       "do_not_use_when": "Do not use implicitly, for another marketplace, for financial transactions, or for blind bulk publishing without current evidence and conservative profit validation. / 不可隐式调用，也不用于其他平台、资金操作或缺少当前证据与保守利润验证的盲目批量上架。",
       "handoffs": ["axis-tools-prompt-create"]
     },

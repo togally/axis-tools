@@ -83,6 +83,9 @@ assert.match(doudianSkillBody, /Publish automatically only when[\s\S]+supplier g
 assert.match(doudianSkillBody, /re-read the page[\s\S]+product ID\/status/);
 assert.match(doudianSkillBody, /filters[\s\S]+exact user-specified order[\s\S]+re-read the active selection/);
 assert.match(doudianSkillBody, /source_batch[\s\S]+post-action status read-back[\s\S]+before opening or preparing the next selected source/);
+assert.match(doudianSkillBody, /ineligible_by_metric_unavailable/);
+assert.match(doudianSkillBody, /metric-capable/);
+assert.match(doudianSkillBody, /Do not paginate that route merely to establish the absence/);
 assert.match(doudianSkillBody, /User-authorized automatic traffic-price exception/);
 assert.match(doudianSkillBody, /nominal_spread = proposed_price - supply_price/);
 assert.match(doudianSkillBody, /current-run explicit automatic-publication authorization/);
@@ -99,6 +102,8 @@ assert.match(doudianMarketContract, /lowest displayed price[\s\S]+in-stock[\s\S]
 assert.match(doudianMarketContract, /automatic unit-economics gate is unchanged/);
 assert.match(doudianMarketContract, /return `block`, not `auto_publish`/);
 assert.match(doudianJudgmentContract, /automatic traffic-price exception[\s\S]+`block`[\s\S]+no per-source confirmation/);
+assert.match(doudianJudgmentContract, /ineligible_by_metric_unavailable/);
+assert.match(doudianJudgmentContract, /metric-capable/);
 
 const { evaluatePromptResults, rankPromptResults } = await import(
   new URL('../skills/axis-tools-prompt-create/scripts/rank_prompt_results.mjs', import.meta.url)

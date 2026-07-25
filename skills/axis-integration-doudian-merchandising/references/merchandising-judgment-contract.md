@@ -40,6 +40,10 @@ Send one JSON object named `model_input`. Use stable IDs and public-safe summari
     {
       "entry_route": "merchant_center | product_management | source_goods",
       "section_label": "literal App label",
+      "route_status": "metric_capable | ineligible_by_metric_unavailable | unavailable_in_current_app",
+      "metric_availability": {
+        "required_metric": "displayed | missing"
+      },
       "discovery_refs": [],
       "source_offer_refs": []
     }
@@ -93,7 +97,7 @@ Return strict JSON only. `status` describes the requested task, not whole-run pu
 Task payload requirements:
 
 - `assortment_decision`: ranked candidate IDs, selection/rejection, shop-fit rationale, supplier/product quality, fulfillment, return risk, economics feasibility, and compliance gate results.
-- `assortment_decision` must account for all three independent entry routes: `商机中心` tabs `追抖音热词` and `跟潜力爆品`; `商品管理` area `发布潜力商品`; and `源头好货` sections `抖音爆款榜` and `热搜商机`. Route A/B candidates require a `找货源` mapping; Route C candidates require directly evidenced supplier/offer facts.
+- `assortment_decision` must account for all three independent entry routes: `商机中心` tabs `追抖音热词` and `跟潜力爆品`; `商品管理` area `发布潜力商品`; and `源头好货` sections `抖音爆款榜` and `热搜商机`. Each named route records `route_status`, metric availability for every user-required opportunity predicate, and evidence. A route may be `ineligible_by_metric_unavailable` only after category/card inspection plus one representative detail when needed proves that a required predicate is structurally absent; it creates no candidate, source offer, or listing. `unavailable_in_current_app` requires an invoked entry plus re-read evidence that no separately navigable result surface exists. Route A/B candidates from metric-capable routes require a `找货源` mapping; Route C candidates from metric-capable routes require directly evidenced supplier/offer facts.
 - `keyword_analysis`: core, attribute, scenario, long-tail, excluded, risky, and unsupported terms; each retained term includes evidence references and intended placement.
 - `listing_copy`: title, guide short title, introduction, factual bullet points, attribute/media recommendations, removed claims, character checks, and evidence mapping for every substantive claim.
 - `pricing_decision`: per-SKU identity, stock, landed cost, expected after-sale loss, variable rate, base/stress floors, market band, proposed price, base/stress contribution and margin, promotion room, sensitivity cases, and exclusions.
@@ -105,7 +109,7 @@ Task payload requirements:
 Evaluate all hard gates before ranking, copywriting, or price recommendation. Return task-local `reject` or `needs_more_data` with a non-empty `hard_failures` list when any of these apply. A removable claim or excludable SKU may be cured for the remaining product only when the output records the removal/exclusion and no product-level hard failure remains.
 
 - category or qualification cannot be verified from current App evidence, category mismatch, restricted good, unresolved qualification, unauthorized brand, counterfeit risk, or source identity conflict;
-- an applicable entry route or section is not exhausted, an eligible same-category product is silently omitted, a Route A/B candidate lacks a `找货源` mapping, or a Route C candidate from `抖音爆款榜`/`热搜商机` lacks directly evidenced supplier/offer facts;
+- a metric-capable applicable entry route or section is not exhausted, a named route lacks either metric-capable coverage or an evidenced `ineligible_by_metric_unavailable` / `unavailable_in_current_app` terminal, an eligible same-category product is silently omitted, a Route A/B candidate lacks a `找货源` mapping, or a Route C candidate from `抖音爆款榜`/`热搜商机` lacks directly evidenced supplier/offer facts;
 - required evidence is missing, untraceable, stale under the run policy, or a market claim cannot be bound to a reference; absent a stricter run policy, use 24 hours for price/stock/opportunity/supplier signals and 7 days for official rules whose page shows no newer revision;
 - all relevant stock is zero/unknown, or a proposed included SKU is unrelated, zero-stock, sample-only, deposit-only, accessory-only, or misleading;
 - the lowest displayed price does not represent an in-stock complete product or appears designed only to create a low-price range;

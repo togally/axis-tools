@@ -448,6 +448,8 @@ assert.match(doudianMerchandisingBody, /源头好货[\s\S]+抖音爆款榜[\s\S]
 assert.doesNotMatch(doudianMerchandisingBody, /逗你爆款榜/);
 assert.match(doudianMerchandisingBody, /automatically discover.+operated categories|自动.+经营类目/i);
 assert.match(doudianMerchandisingBody, /exhaustive processing|全部优化上架/i);
+assert.match(doudianMerchandisingBody, /ineligible_by_metric_unavailable/);
+assert.match(doudianMerchandisingBody, /metric-capable/);
 assert.match(doudianMerchandisingBody, /stop.+gpt-5\.6-sol|gpt-5\.6-sol.+unavailable.+stop/i);
 const doudianOpenAiYaml = await readFile(path.join(doudianMerchandisingDir, 'agents', 'openai.yaml'), 'utf8');
 assert.match(doudianOpenAiYaml, /allow_implicit_invocation: false/);
@@ -464,6 +466,8 @@ assert.match(doudianJudgmentContract, /抖音爆款榜/);
 assert.doesNotMatch(doudianJudgmentContract, /逗你爆款榜/);
 assert.match(doudianJudgmentContract, /evidence_refs/);
 assert.match(doudianJudgmentContract, /hard_failures/);
+assert.match(doudianJudgmentContract, /ineligible_by_metric_unavailable/);
+assert.match(doudianJudgmentContract, /metric-capable/);
 assert.match(doudianMarketPricing, /landed_cost/);
 assert.match(doudianMarketPricing, /expected_after_sale_loss/);
 assert.match(doudianMarketPricing, /minimum stress-case buffer/);
