@@ -82,7 +82,7 @@ assert.match(doudianSkillBody, /No user confirmation is required/);
 assert.match(doudianSkillBody, /Publish automatically only when[\s\S]+supplier gate[\s\S]+profit buffer/);
 assert.match(doudianSkillBody, /re-read the page[\s\S]+product ID\/status/);
 assert.match(doudianSkillBody, /filters[\s\S]+exact user-specified order[\s\S]+re-read the active selection/);
-assert.match(doudianSkillBody, /complete[\s\S]+post-action status read-back[\s\S]+before opening or preparing the next source/);
+assert.match(doudianSkillBody, /source_batch[\s\S]+post-action status read-back[\s\S]+before opening or preparing the next selected source/);
 assert.match(doudianSkillBody, /User-authorized automatic traffic-price exception/);
 assert.match(doudianSkillBody, /nominal_spread = proposed_price - supply_price/);
 assert.match(doudianSkillBody, /current-run explicit automatic-publication authorization/);
